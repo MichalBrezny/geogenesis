@@ -18,6 +18,26 @@ export interface Plate {
   eulerPole: [number, number, number];
   /** Rotation rate in radians per year (surface speed = rate × radius × sin(angle to pole)). */
   angularSpeed: number;
+  /**
+   * Total rotation of the plate since its crust was anchored, as a row-major 3×3
+   * matrix mapping reference positions to current positions.
+   */
+  rotation: number[];
+  /**
+   * The plate's crust in its own reference frame, on a grid identical to the
+   * planet's. Moving the plate only changes `rotation`; the planet fields are
+   * re-composed from these rasters, so plate shapes never degrade from repeated
+   * resampling.
+   */
+  crust: PlateCrust;
+}
+
+export interface PlateCrust {
+  /** 1 where the plate has crust at this reference cell. */
+  owned: Uint8Array;
+  elevation: Float32Array;
+  /** Same meaning as the crustType field. */
+  type: Uint8Array;
 }
 
 /** Complete simulation state. Must stay plain data so it can be serialized and sent to a worker. */

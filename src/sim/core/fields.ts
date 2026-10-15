@@ -17,6 +17,8 @@ export const FIELD_SPECS = {
   elevation: { type: 'f32', unit: 'm' },
   /** Surface air temperature. */
   airTemperature: { type: 'f32', unit: '°C' },
+  /** Crust type: 1 = continental (buoyant, never subducts), 0 = oceanic. */
+  crustType: { type: 'i32', unit: '' },
   /** Tectonic plate the cell belongs to. */
   plateId: { type: 'i32', unit: '' },
   /** Tectonic uplift rate (negative = subsidence). */

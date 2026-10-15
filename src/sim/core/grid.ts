@@ -106,6 +106,16 @@ export function neighbors4(
   return out;
 }
 
+/** Index of the cell containing the point with the given unit vector on the sphere. */
+export function cellAt(grid: Grid, x: number, y: number, z: number): number {
+  const lat = Math.asin(Math.max(-1, Math.min(1, z)));
+  let lon = Math.atan2(y, x);
+  if (lon < 0) lon += 2 * Math.PI;
+  const col = Math.min(grid.width - 1, Math.floor((lon / (2 * Math.PI)) * grid.width));
+  const row = Math.min(grid.height - 1, Math.floor((0.5 - lat / Math.PI) * grid.height));
+  return row * grid.width + col;
+}
+
 /** Neighbour directions used by `Topology`, clockwise from north. */
 export const DIRECTIONS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] as const;
 export const NEIGHBOR_COUNT = DIRECTIONS.length;

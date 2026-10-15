@@ -25,7 +25,7 @@ const S = 4;
  * clamp does not create or destroy material.
  */
 export function createLinearDiffuser(options: DiffusionOptions = {}): SimComponent {
-  const D = options.diffusivity ?? 2e3;
+  const D = options.diffusivity ?? 100;
   return {
     name: 'linearDiffuser',
     inputs: ['elevation'],

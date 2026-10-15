@@ -1,8 +1,9 @@
 import type { SimComponent } from '../../core/component';
 import { getTopology, NEIGHBOR_COUNT } from '../../core/grid';
-import { createValueNoise3D, fractalNoise } from '../../core/noise';
+import { createValueNoise3D, fractalNoise, type Noise3D } from '../../core/noise';
 import type { PlanetState, Plate } from '../../core/planet';
 import { createRng, type Rng } from '../../core/rng';
+import { anchorPlates, randomPlate, randomUnitVector } from './plates';
 
 export interface TectonicsOptions {
   plateCount?: number;
@@ -10,25 +11,23 @@ export interface TectonicsOptions {
   oceanFraction?: number;
   /** Probability that a plate carries a large continent. */
   continentalPlateChance?: number;
-  /** Typical width of mountain belts and trenches, in metres. */
-  beltWidth?: number;
   /** Uplift rate at the most active convergent boundaries, in m/yr. */
   maxUpliftRate?: number;
 }
+
+export const DEFAULT_MAX_UPLIFT_RATE = 3e-5;
 
 const DEFAULTS: Required<TectonicsOptions> = {
   plateCount: 14,
   oceanFraction: 0.7,
   continentalPlateChance: 0.4,
-  beltWidth: 700_000,
-  maxUpliftRate: 3e-5,
+  maxUpliftRate: DEFAULT_MAX_UPLIFT_RATE,
 };
 
-/** Plate surface speeds are drawn from this range (m/yr), similar to Earth's plates. */
-const MIN_PLATE_SPEED = 0.01;
-const MAX_PLATE_SPEED = 0.08;
 /** Convergence speed (m/yr) that produces the full boundary relief below. */
 const REFERENCE_CONVERGENCE = 0.06;
+/** Typical width of mountain belts, in metres. */
+const BELT_WIDTH = 700_000;
 
 /** Boundary relief at REFERENCE_CONVERGENCE, in metres. */
 const MOUNTAIN_HEIGHT = 4000;
@@ -39,14 +38,14 @@ const ISLAND_ARC_COVERAGE = 0.25;
 const RIDGE_HEIGHT = 2000;
 const RIFT_DEPTH = 1200;
 
+/** Depth of old (abyssal) ocean floor, in metres. Trenches are measured from here. */
+export const ABYSSAL_DEPTH = -4500;
+
 /**
  * Generates plates, continental crust and initial elevation, and sets the
  * tectonic uplift field. Plates are a noise-warped Voronoi partition of the
  * sphere; relief along plate boundaries depends on whether the plates
  * converge or diverge and on the crust type on each side.
- *
- * Plates do not move yet (continental drift is a later step), but their
- * velocities drive the boundary relief and the uplift rate.
  */
 export function generateTectonicPlanet(state: PlanetState, options: TectonicsOptions = {}): void {
   const opts = { ...DEFAULTS, ...options };
@@ -54,14 +53,13 @@ export function generateTectonicPlanet(state: PlanetState, options: TectonicsOpt
   const rng = createRng(state.seed ^ 0x9e3779b9);
   const pos = grid.cellPosition;
 
-  const plates = createPlates(rng, opts.plateCount, grid.radius);
-  state.plates = plates;
-  const plateCentres = randomUnitVectors(rng, opts.plateCount);
-  const plateId = state.fields.plateId;
+  state.plates = Array.from({ length: opts.plateCount }, (_, id) => randomPlate(rng, id, grid));
+  const plateCentres = Array.from({ length: opts.plateCount }, () => randomUnitVector(rng));
+  const { plateId, crustType, elevation } = state.fields;
   assignPlates(state, plateCentres, rng);
 
   // Continental crust: per-plate bias plus noise, thresholded to the target land fraction.
-  const continental = plates.map(() => rng.next() < opts.continentalPlateChance);
+  const continental = state.plates.map(() => rng.next() < opts.continentalPlateChance);
   if (!continental.some(Boolean)) continental[0] = true;
   const crustNoise = createValueNoise3D(rng);
   const crust = new Float32Array(grid.cellCount);
@@ -73,83 +71,38 @@ export function generateTectonicPlanet(state: PlanetState, options: TectonicsOpt
   const shoreline = percentile(crust, opts.oceanFraction);
 
   // Base elevation from crust: continental interiors rise gently, oceans deepen away from the shelf.
-  const elevation = state.fields.elevation;
-  const isContinental = new Uint8Array(grid.cellCount);
   for (let i = 0; i < grid.cellCount; i++) {
     const c = crust[i]! - shoreline;
-    if (c >= 0) {
-      isContinental[i] = 1;
-      elevation[i] = 150 + Math.min(1500, 1200 * c);
-    } else {
-      elevation[i] = -150 - 4300 * (1 - Math.exp(6 * c));
-    }
+    crustType[i] = c >= 0 ? 1 : 0;
+    elevation[i] =
+      c >= 0
+        ? 150 + Math.min(1500, 1200 * c)
+        : -150 + (ABYSSAL_DEPTH + 150) * (1 - Math.exp(6 * c));
   }
 
-  const { relief, collision } = boundaryRelief(state, plates, isContinental);
-
-  // Break ocean-ocean island arcs into separate island groups; between them the arc
-  // stays a submarine ridge that does not keep rising.
-  const arcNoise = createValueNoise3D(rng);
-  for (let i = 0; i < grid.cellCount; i++) {
-    if (isContinental[i] || collision[i]! <= 0) continue;
-    const p = i * 3;
-    if (fractalNoise(arcNoise, pos[p]!, pos[p + 1]!, pos[p + 2]!, 3, 6) < ISLAND_ARC_COVERAGE) {
-      relief[i] = collision[i]! * 0.4;
-      collision[i] = 0;
-    }
-  }
-  // Island arcs stay narrow chains on the boundary itself; only mountain belts are widened.
-  const arcs = Float32Array.from(collision);
-  spreadFromBoundaries(state, relief, opts.beltWidth);
-  spreadFromBoundaries(state, collision, opts.beltWidth);
+  const { relief } = computeBoundaries(state);
+  spreadFromBoundaries(state, relief);
 
   // Small-scale detail so the surface is not smooth between features.
   const detailNoise = createValueNoise3D(rng);
-  const uplift = state.fields.upliftRate;
   for (let i = 0; i < grid.cellCount; i++) {
     const p = i * 3;
     const detail = fractalNoise(detailNoise, pos[p]!, pos[p + 1]!, pos[p + 2]!, 4, 6);
-    elevation[i] = elevation[i]! + relief[i]! + detail * (isContinental[i] ? 400 : 250);
-    // Only collision zones (mountain belts, island arcs) keep rising; erosion wears down the rest.
-    // Mid-ocean ridges are static relief: they sit below sea level where nothing erodes them.
-    const source = isContinental[i] ? collision[i]! : arcs[i]!;
-    uplift[i] = (source / MOUNTAIN_HEIGHT) * opts.maxUpliftRate;
+    elevation[i] = elevation[i]! + relief[i]! + detail * (crustType[i] ? 400 : 250);
   }
-}
-
-function createPlates(rng: Rng, count: number, radius: number): Plate[] {
-  const poles = randomUnitVectors(rng, count);
-  const plates: Plate[] = [];
-  for (let id = 0; id < count; id++) {
-    const speed = MIN_PLATE_SPEED + rng.next() * (MAX_PLATE_SPEED - MIN_PLATE_SPEED);
-    plates.push({
-      id,
-      eulerPole: [poles[id * 3]!, poles[id * 3 + 1]!, poles[id * 3 + 2]!],
-      angularSpeed: speed / radius,
-    });
-  }
-  return plates;
-}
-
-function randomUnitVectors(rng: Rng, count: number): Float64Array {
-  const out = new Float64Array(count * 3);
-  for (let i = 0; i < count; i++) {
-    const z = rng.next() * 2 - 1;
-    const lon = rng.next() * 2 * Math.PI;
-    const r = Math.sqrt(1 - z * z);
-    out[i * 3] = r * Math.cos(lon);
-    out[i * 3 + 1] = r * Math.sin(lon);
-    out[i * 3 + 2] = z;
-  }
-  return out;
+  anchorPlates(state);
+  updateUplift(state, opts.maxUpliftRate);
 }
 
 /** Nearest plate centre after warping each cell's position with noise, giving irregular plate shapes. */
-function assignPlates(state: PlanetState, centres: Float64Array, rng: Rng): void {
+function assignPlates(
+  state: PlanetState,
+  centres: readonly (readonly [number, number, number])[],
+  rng: Rng,
+): void {
   const { grid } = state;
   const pos = grid.cellPosition;
   const warp = [createValueNoise3D(rng), createValueNoise3D(rng), createValueNoise3D(rng)];
-  const plateCount = centres.length / 3;
   for (let i = 0; i < grid.cellCount; i++) {
     const p = i * 3;
     const x = pos[p]!;
@@ -160,8 +113,9 @@ function assignPlates(state: PlanetState, centres: Float64Array, rng: Rng): void
     const wz = z + 0.45 * fractalNoise(warp[2]!, x, y, z, 3, 2);
     let best = 0;
     let bestDot = -Infinity;
-    for (let k = 0; k < plateCount; k++) {
-      const dot = wx * centres[k * 3]! + wy * centres[k * 3 + 1]! + wz * centres[k * 3 + 2]!;
+    for (let k = 0; k < centres.length; k++) {
+      const [cx, cy, cz] = centres[k]!;
+      const dot = wx * cx + wy * cy + wz * cz;
       if (dot > bestDot) {
         bestDot = dot;
         best = k;
@@ -178,22 +132,24 @@ function plateVelocity(plate: Plate, x: number, y: number, z: number, radius: nu
   return [s * (ay * z - az * y), s * (az * x - ax * z), s * (ax * y - ay * x)] as const;
 }
 
+/** Noise that decides where island arcs break the surface. Fixed per planet so arcs stay put. */
+function arcNoise(state: PlanetState): Noise3D {
+  return createValueNoise3D(createRng(state.seed ^ 0x5bd1e995));
+}
+
 /**
  * Relief (m) on cells that touch another plate, plus the part of it caused by
  * collision (mountains, island arcs), which drives ongoing uplift.
  * Positive convergence means the neighbouring plate moves towards this cell.
  */
-function boundaryRelief(
-  state: PlanetState,
-  plates: readonly Plate[],
-  isContinental: Uint8Array,
-): { relief: Float32Array; collision: Float32Array } {
-  const { grid } = state;
+function computeBoundaries(state: PlanetState): { relief: Float32Array; collision: Float32Array } {
+  const { grid, plates } = state;
   const { neighbors } = getTopology(grid);
   const pos = grid.cellPosition;
-  const plateId = state.fields.plateId;
+  const { plateId, crustType } = state.fields;
   const relief = new Float32Array(grid.cellCount);
   const collision = new Float32Array(grid.cellCount);
+  const arcs = arcNoise(state);
 
   for (let i = 0; i < grid.cellCount; i++) {
     const plate = plates[plateId[i]!]!;
@@ -220,15 +176,23 @@ function boundaryRelief(
 
       let value: number;
       if (convergence > 0) {
-        if (isContinental[i]) value = MOUNTAIN_HEIGHT * strength;
-        else if (isContinental[n]) value = -TRENCH_DEPTH * strength;
-        // Ocean-ocean: the lower plate id subducts, the other side forms an island arc.
-        else
-          value =
-            plateId[i]! > plateId[n]! ? ISLAND_ARC_HEIGHT * strength : -TRENCH_DEPTH * strength;
-        strongestCollision = Math.max(strongestCollision, value);
+        if (crustType[i]) {
+          value = MOUNTAIN_HEIGHT * strength;
+          strongestCollision = Math.max(strongestCollision, value);
+        } else if (crustType[n] || plateId[i]! < plateId[n]!) {
+          // Oceanic crust subducts under continents; between two oceanic plates the lower id does.
+          value = -TRENCH_DEPTH * strength;
+        } else if (
+          fractalNoise(arcs, pos[p]!, pos[p + 1]!, pos[p + 2]!, 3, 6) >= ISLAND_ARC_COVERAGE
+        ) {
+          value = ISLAND_ARC_HEIGHT * strength;
+          strongestCollision = Math.max(strongestCollision, value);
+        } else {
+          // Between island groups the arc stays a submarine ridge that does not keep rising.
+          value = ISLAND_ARC_HEIGHT * strength * 0.4;
+        }
       } else {
-        value = isContinental[i] ? -RIFT_DEPTH * strength : RIDGE_HEIGHT * strength;
+        value = crustType[i] ? -RIFT_DEPTH * strength : RIDGE_HEIGHT * strength;
       }
       if (Math.abs(value) > Math.abs(strongest)) strongest = value;
     }
@@ -239,15 +203,34 @@ function boundaryRelief(
 }
 
 /**
+ * Recomputes tectonic uplift from the current plate boundaries and deepens
+ * subduction trenches. Called at generation and whenever plates move.
+ */
+export function updateUplift(state: PlanetState, maxUpliftRate: number): void {
+  const { relief, collision } = computeBoundaries(state);
+  const { crustType, elevation, upliftRate } = state.fields;
+  // Island arcs stay narrow chains on the boundary itself; only mountain belts are widened.
+  const arcs = Float32Array.from(collision);
+  spreadFromBoundaries(state, collision);
+  for (let i = 0; i < upliftRate.length; i++) {
+    const source = crustType[i] ? collision[i]! : arcs[i]!;
+    upliftRate[i] = (source / MOUNTAIN_HEIGHT) * maxUpliftRate;
+    if (!crustType[i] && relief[i]! < 0) {
+      elevation[i] = Math.min(elevation[i]!, ABYSSAL_DEPTH + relief[i]!);
+    }
+  }
+}
+
+/**
  * Widens boundary relief into belts: each pass lets a cell take a decayed copy of
  * its strongest neighbour, so features fall off with distance from the boundary.
  * The number of passes scales with grid resolution so belt width stays in metres.
  */
-function spreadFromBoundaries(state: PlanetState, relief: Float32Array, beltWidth: number): void {
+function spreadFromBoundaries(state: PlanetState, relief: Float32Array): void {
   const { grid } = state;
   const { neighbors } = getTopology(grid);
-  const passes = Math.max(1, Math.round(beltWidth / grid.dy));
-  const decay = Math.exp(-grid.dy / (beltWidth / 2));
+  const passes = Math.max(1, Math.round(BELT_WIDTH / grid.dy));
+  const decay = Math.exp(-grid.dy / (BELT_WIDTH / 2));
   const next = new Float32Array(relief.length);
   for (let pass = 0; pass < passes; pass++) {
     for (let i = 0; i < relief.length; i++) {
@@ -276,7 +259,8 @@ export const tectonicUplift: SimComponent = {
   outputs: ['elevation'],
   runOneStep(state, dtYears) {
     const { elevation, upliftRate } = state.fields;
-    for (let i = 0; i < elevation.length; i++)
+    for (let i = 0; i < elevation.length; i++) {
       elevation[i] = elevation[i]! + upliftRate[i]! * dtYears;
+    }
   },
 };
