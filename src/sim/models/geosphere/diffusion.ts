@@ -21,8 +21,8 @@ const S = 4;
  *
  * Near the poles the east-west cell spacing becomes tiny, which would force
  * very small time steps; the east-west conduction distance is therefore
- * clamped to half the north-south spacing. Fluxes stay symmetric, so the
- * clamp does not create or destroy material.
+ * widened so polar cells exchange no faster than north-south. Fluxes stay
+ * symmetric, so this does not create or destroy material.
  */
 export function createLinearDiffuser(options: DiffusionOptions = {}): SimComponent {
   const D = options.diffusivity ?? 100;
@@ -43,7 +43,10 @@ export function createLinearDiffuser(options: DiffusionOptions = {}): SimCompone
       const condS = new Float64Array(height);
       let maxRate = 0;
       for (let y = 0; y < height; y++) {
-        const dxEff = Math.max(grid.rowDx[y]!, dy / 2);
+        // Near the poles cells are very narrow east-west; widen the conduction distance so
+        // their east-west exchange is no faster than north-south (dxEff · dx >= dy²).
+        const dx = grid.rowDx[y]!;
+        const dxEff = Math.max(dx, (dy * dy) / dx);
         condEW[y] = (D * dy) / dxEff;
         condN[y] = (D * rowNorthEdge[y]!) / dy;
         condS[y] = (D * rowSouthEdge[y]!) / dy;

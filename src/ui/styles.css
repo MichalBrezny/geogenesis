@@ -35,3 +35,12 @@ body {
   image-rendering: pixelated;
   border: 1px solid #333;
 }
+
+.muted {
+  color: #8a949e;
+}
+
+.error {
+  color: #ff8a80;
+  margin: 0;
+}

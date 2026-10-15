@@ -1,6 +1,14 @@
-import type { PlanetState } from '../sim/core/planet';
+import type { Fields } from '../sim/core/fields';
+import type { Grid } from '../sim/core/grid';
 import { SEA_LEVEL } from '../sim/models/geosphere/flowRouting';
 import { elevationPalette, temperaturePalette, type Rgb } from './palettes';
+
+/** The fields the map needs; a PlanetState or a snapshot sent from the simulation worker. */
+export const RENDERED_FIELDS = ['elevation', 'plateId', 'drainageArea', 'airTemperature'] as const;
+export interface MapSource {
+  grid: Pick<Grid, 'width' | 'height' | 'cellCount'>;
+  fields: Pick<Fields, (typeof RENDERED_FIELDS)[number]>;
+}
 
 /** Map layers the player can switch between. */
 export const MAP_LAYERS = ['terrain', 'plates', 'airTemperature'] as const;
@@ -12,7 +20,7 @@ const RIVER_MIN_AREA = 1.5e12;
 const RIVER_FULL_AREA = 2e13;
 const RIVER_COLOR: Rgb = [40, 90, 200];
 
-type CellColor = (state: PlanetState, i: number) => Rgb;
+type CellColor = (state: MapSource, i: number) => Rgb;
 
 const layerColors: Record<MapLayer, CellColor> = {
   terrain(state, i) {
@@ -40,7 +48,7 @@ const layerColors: Record<MapLayer, CellColor> = {
  * Draws one layer at native grid resolution (1 pixel per cell) into the canvas.
  * The canvas is scaled up with CSS (`image-rendering: pixelated`).
  */
-export function renderLayer(canvas: HTMLCanvasElement, state: PlanetState, layer: MapLayer): void {
+export function renderLayer(canvas: HTMLCanvasElement, state: MapSource, layer: MapLayer): void {
   const { width, height, cellCount } = state.grid;
   if (canvas.width !== width) canvas.width = width;
   if (canvas.height !== height) canvas.height = height;

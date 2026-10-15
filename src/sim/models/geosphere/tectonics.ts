@@ -15,7 +15,7 @@ export interface TectonicsOptions {
   maxUpliftRate?: number;
 }
 
-export const DEFAULT_MAX_UPLIFT_RATE = 3e-5;
+export const DEFAULT_MAX_UPLIFT_RATE = 1e-4;
 
 const DEFAULTS: Required<TectonicsOptions> = {
   plateCount: 14,
@@ -152,6 +152,14 @@ function computeBoundaries(state: PlanetState): { relief: Float32Array; collisio
   const arcs = arcNoise(state);
 
   for (let i = 0; i < grid.cellCount; i++) {
+    // Most cells are plate interiors; skip them before doing any vector maths.
+    let onBoundary = false;
+    for (let d = 0; d < NEIGHBOR_COUNT && !onBoundary; d += 2) {
+      const n = neighbors[i * NEIGHBOR_COUNT + d]!;
+      onBoundary = n >= 0 && plateId[n] !== plateId[i];
+    }
+    if (!onBoundary) continue;
+
     const plate = plates[plateId[i]!]!;
     const p = i * 3;
     const [vx, vy, vz] = plateVelocity(plate, pos[p]!, pos[p + 1]!, pos[p + 2]!, grid.radius);
@@ -225,25 +233,42 @@ export function updateUplift(state: PlanetState, maxUpliftRate: number): void {
  * Widens boundary relief into belts: each pass lets a cell take a decayed copy of
  * its strongest neighbour, so features fall off with distance from the boundary.
  * The number of passes scales with grid resolution so belt width stays in metres.
+ *
+ * Only the front of cells that changed in the previous pass is propagated, so
+ * the cost scales with the belt area rather than the whole grid.
  */
-function spreadFromBoundaries(state: PlanetState, relief: Float32Array): void {
+export function spreadFromBoundaries(state: PlanetState, relief: Float32Array): void {
   const { grid } = state;
   const { neighbors } = getTopology(grid);
   const passes = Math.max(1, Math.round(BELT_WIDTH / grid.dy));
   const decay = Math.exp(-grid.dy / (BELT_WIDTH / 2));
-  const next = new Float32Array(relief.length);
-  for (let pass = 0; pass < passes; pass++) {
-    for (let i = 0; i < relief.length; i++) {
-      let best = relief[i]!;
+  let front: number[] = [];
+  for (let i = 0; i < relief.length; i++) if (relief[i] !== 0) front.push(i);
+
+  // Values proposed in this pass; applied together at the end, like a full-grid sweep.
+  const proposed = new Float32Array(relief.length);
+  const touched = new Uint8Array(relief.length);
+  for (let pass = 0; pass < passes && front.length > 0; pass++) {
+    const changed: number[] = [];
+    for (const c of front) {
+      const candidate = relief[c]! * decay;
       for (let d = 0; d < NEIGHBOR_COUNT; d += 2) {
-        const n = neighbors[i * NEIGHBOR_COUNT + d]!;
-        if (n < 0) continue;
-        const candidate = relief[n]! * decay;
-        if (Math.abs(candidate) > Math.abs(best)) best = candidate;
+        const n = neighbors[c * NEIGHBOR_COUNT + d]!;
+        if (n < 0 || Math.abs(candidate) <= Math.abs(relief[n]!)) continue;
+        if (!touched[n]) {
+          touched[n] = 1;
+          proposed[n] = candidate;
+          changed.push(n);
+        } else if (Math.abs(candidate) > Math.abs(proposed[n]!)) {
+          proposed[n] = candidate;
+        }
       }
-      next[i] = best;
     }
-    relief.set(next);
+    for (const n of changed) {
+      relief[n] = proposed[n]!;
+      touched[n] = 0;
+    }
+    front = changed;
   }
 }
 

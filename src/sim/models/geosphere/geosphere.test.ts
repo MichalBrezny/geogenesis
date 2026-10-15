@@ -5,7 +5,7 @@ import { createRng } from '../../core/rng';
 import { createLinearDiffuser } from './diffusion';
 import { flowRouting } from './flowRouting';
 import { createStreamPowerEroder } from './streamPower';
-import { generateTectonicPlanet } from './tectonics';
+import { generateTectonicPlanet, spreadFromBoundaries } from './tectonics';
 
 const rng = createRng(1);
 
@@ -163,5 +163,38 @@ describe('generateTectonicPlanet', () => {
       }
     }
     expect(uplifted).toBeGreaterThan(0);
+  });
+});
+
+describe('spreadFromBoundaries', () => {
+  it('matches a full-grid sweep', () => {
+    const planet = createPlanet({ width: 64, height: 32 });
+    const { neighbors } = getTopology(planet.grid);
+    const rand = createRng(3);
+    const input = new Float32Array(planet.grid.cellCount);
+    for (let i = 0; i < input.length; i++) {
+      if (rand.next() < 0.05) input[i] = (rand.next() * 2 - 1) * 4000;
+    }
+
+    // Reference: the straightforward sweep over every cell in every pass.
+    const expected = Float32Array.from(input);
+    const passes = Math.max(1, Math.round(700_000 / planet.grid.dy));
+    const decay = Math.exp(-planet.grid.dy / 350_000);
+    for (let pass = 0; pass < passes; pass++) {
+      const next = Float32Array.from(expected);
+      for (let i = 0; i < expected.length; i++) {
+        for (let d = 0; d < NEIGHBOR_COUNT; d += 2) {
+          const n = neighbors[i * NEIGHBOR_COUNT + d]!;
+          if (n < 0) continue;
+          const candidate = expected[n]! * decay;
+          if (Math.abs(candidate) > Math.abs(next[i]!)) next[i] = candidate;
+        }
+      }
+      expected.set(next);
+    }
+
+    const actual = Float32Array.from(input);
+    spreadFromBoundaries(planet, actual);
+    expect(actual).toEqual(expected);
   });
 });

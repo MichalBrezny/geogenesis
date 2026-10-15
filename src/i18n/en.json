@@ -5,9 +5,11 @@
   "controls.pause": "Pause",
   "controls.step": "Step",
   "controls.newPlanet": "New planet",
+  "controls.resolution": "Resolution",
   "layer.label": "Map layer",
   "layer.terrain": "Terrain and rivers",
   "layer.plates": "Tectonic plates",
   "layer.airTemperature": "Air temperature",
-  "stats.meanTemperature": "Mean temperature: {value} °C"
+  "stats.meanTemperature": "Mean temperature: {value} °C",
+  "stats.stepTime": "Step: {value} ms"
 }

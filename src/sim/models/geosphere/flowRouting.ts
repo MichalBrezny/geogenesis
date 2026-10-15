@@ -52,14 +52,27 @@ export function fillDepressions(
   const closed = new Uint8Array(n);
   const queue = new CellPriorityQueue(n);
 
+  // Ocean cells are outlets: they go first in the order, and only those touching
+  // land need to seed the flood (keeps the heap small, as most cells are ocean).
+  let visited = 0;
   for (let i = 0; i < n; i++) {
     if (elevation[i]! < SEA_LEVEL) {
       filled[i] = elevation[i]!;
       closed[i] = 1;
-      queue.push(i, filled[i]!);
+      order[visited++] = i;
     }
   }
-  if (queue.size === 0) {
+  for (let i = 0; i < n; i++) {
+    if (!closed[i]) continue;
+    for (let d = 0; d < NEIGHBOR_COUNT; d++) {
+      const nb = neighbors[i * NEIGHBOR_COUNT + d]!;
+      if (nb >= 0 && !closed[nb]) {
+        queue.push(i, filled[i]!);
+        break;
+      }
+    }
+  }
+  if (visited === 0) {
     // No ocean: drain everything towards the lowest cell.
     let lowest = 0;
     for (let i = 1; i < n; i++) if (elevation[i]! < elevation[lowest]!) lowest = i;
@@ -68,10 +81,10 @@ export function fillDepressions(
     queue.push(lowest, filled[lowest]!);
   }
 
-  let visited = 0;
   while (queue.size > 0) {
     const c = queue.pop();
-    order[visited++] = c;
+    // Ocean seeds are already in the order; land joins it as it is reached.
+    if (elevation[c]! >= SEA_LEVEL) order[visited++] = c;
     for (let d = 0; d < NEIGHBOR_COUNT; d++) {
       const nb = neighbors[c * NEIGHBOR_COUNT + d]!;
       if (nb < 0 || closed[nb]) continue;

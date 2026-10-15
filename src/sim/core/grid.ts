@@ -27,6 +27,18 @@ export interface Grid {
 
 export const EARTH_RADIUS = 6_371_000;
 
+/** Row height of the reference 128×64 grid on an Earth-sized planet, in metres (~313 km). */
+export const REFERENCE_CELL_SIZE = (Math.PI * EARTH_RADIUS) / 64;
+
+/**
+ * Cell size relative to the reference grid (0.5 for a 256×128 grid). Per-cell
+ * process constants that were tuned on the reference grid are multiplied by
+ * this so behaviour stays the same when the resolution changes.
+ */
+export function resolutionScale(grid: Grid): number {
+  return grid.dy / REFERENCE_CELL_SIZE;
+}
+
 export function createGrid(width: number, height: number, radius = EARTH_RADIUS): Grid {
   if (!Number.isInteger(width) || !Number.isInteger(height) || width < 2 || height < 2) {
     throw new Error(`Invalid grid size ${width}x${height}`);

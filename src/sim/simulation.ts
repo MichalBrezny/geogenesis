@@ -7,6 +7,8 @@ export interface Simulation {
   readonly components: readonly SimComponent[];
   /** Advance the planet by `dtYears`, running components in order. */
   step(state: PlanetState, dtYears: number): void;
+  /** Wall-clock milliseconds each component took in the last step (skipped components are absent). */
+  readonly timings: ReadonlyMap<string, number>;
 }
 
 /**
@@ -37,10 +39,13 @@ export function createSimulation(
   }
 
   const lastRunYear = new Map<string, number>();
+  const timings = new Map<string, number>();
 
   return {
     components,
+    timings,
     step(state, dtYears) {
+      timings.clear();
       const rng = createRng(state.rngState);
       const year = state.globals.year + dtYears;
       for (const component of components) {
@@ -49,7 +54,9 @@ export function createSimulation(
         const elapsed = last === undefined ? dtYears : year - last;
         // A component always runs on its first step so its outputs are initialized.
         if (last !== undefined && elapsed < interval) continue;
+        const start = performance.now();
         component.runOneStep(state, elapsed, rng);
+        timings.set(component.name, performance.now() - start);
         lastRunYear.set(component.name, year);
       }
       state.globals.year = year;
