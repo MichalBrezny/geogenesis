@@ -1,0 +1,12 @@
+{
+  "app.title": "Sim Earth",
+  "time.year": "Year {year}",
+  "controls.play": "Play",
+  "controls.pause": "Pause",
+  "controls.step": "Step",
+  "controls.newPlanet": "New planet",
+  "layer.label": "Map layer",
+  "layer.elevation": "Elevation",
+  "layer.airTemperature": "Air temperature",
+  "stats.meanTemperature": "Mean temperature: {value} °C"
+}

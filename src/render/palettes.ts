@@ -1,0 +1,47 @@
+export type Rgb = readonly [number, number, number];
+
+interface Stop {
+  value: number;
+  color: Rgb;
+}
+
+/** Returns a function mapping a value to a colour by linear interpolation between stops. */
+export function gradient(stops: readonly Stop[]): (value: number) => Rgb {
+  return (value) => {
+    const first = stops[0]!;
+    const last = stops[stops.length - 1]!;
+    if (value <= first.value) return first.color;
+    if (value >= last.value) return last.color;
+    for (let i = 1; i < stops.length; i++) {
+      const b = stops[i]!;
+      if (value <= b.value) {
+        const a = stops[i - 1]!;
+        const t = (value - a.value) / (b.value - a.value);
+        return [
+          Math.round(a.color[0] + (b.color[0] - a.color[0]) * t),
+          Math.round(a.color[1] + (b.color[1] - a.color[1]) * t),
+          Math.round(a.color[2] + (b.color[2] - a.color[2]) * t),
+        ];
+      }
+    }
+    return last.color;
+  };
+}
+
+export const elevationPalette = gradient([
+  { value: -8000, color: [8, 24, 68] },
+  { value: -200, color: [40, 100, 170] },
+  { value: 0, color: [90, 150, 200] },
+  { value: 1, color: [70, 130, 60] },
+  { value: 1000, color: [170, 160, 90] },
+  { value: 3000, color: [130, 100, 80] },
+  { value: 5000, color: [240, 240, 240] },
+]);
+
+export const temperaturePalette = gradient([
+  { value: -40, color: [60, 20, 140] },
+  { value: -10, color: [70, 130, 220] },
+  { value: 10, color: [120, 210, 140] },
+  { value: 25, color: [240, 200, 60] },
+  { value: 40, color: [200, 40, 30] },
+]);
