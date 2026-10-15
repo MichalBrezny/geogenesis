@@ -10,6 +10,7 @@
   "layer.terrain": "Terrain and rivers",
   "layer.plates": "Tectonic plates",
   "layer.airTemperature": "Air temperature",
+  "layer.precipitation": "Precipitation",
   "stats.meanTemperature": "Mean temperature: {value} °C",
   "stats.stepTime": "Step: {value} ms"
 }

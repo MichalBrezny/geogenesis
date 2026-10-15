@@ -1,7 +1,7 @@
 import type { Fields } from '../sim/core/fields';
 import type { Grid } from '../sim/core/grid';
 import { SEA_LEVEL } from '../sim/models/geosphere/flowRouting';
-import { elevationPalette, temperaturePalette, type Rgb } from './palettes';
+import { elevationPalette, precipitationPalette, temperaturePalette, type Rgb } from './palettes';
 
 /** The fields the map needs; a PlanetState or a snapshot sent from the simulation worker. */
 export const RENDERED_FIELDS = [
@@ -10,6 +10,7 @@ export const RENDERED_FIELDS = [
   'drainageArea',
   'airTemperature',
   'iceCover',
+  'precipitation',
 ] as const;
 export interface MapSource {
   grid: Pick<Grid, 'width' | 'height' | 'cellCount'>;
@@ -17,7 +18,7 @@ export interface MapSource {
 }
 
 /** Map layers the player can switch between. */
-export const MAP_LAYERS = ['terrain', 'plates', 'airTemperature'] as const;
+export const MAP_LAYERS = ['terrain', 'plates', 'airTemperature', 'precipitation'] as const;
 export type MapLayer = (typeof MAP_LAYERS)[number];
 
 /** Drainage area (m²) above which a land cell is drawn as a river. */
@@ -53,6 +54,10 @@ const layerColors: Record<MapLayer, CellColor> = {
   },
   airTemperature(state, i) {
     return temperaturePalette(state.fields.airTemperature[i]!);
+  },
+  precipitation(state, i) {
+    const color = precipitationPalette(state.fields.precipitation[i]!);
+    return state.fields.elevation[i]! < SEA_LEVEL ? mix(color, [10, 20, 40], 0.5) : color;
   },
 };
 

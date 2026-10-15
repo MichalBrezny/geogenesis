@@ -45,3 +45,12 @@ export const temperaturePalette = gradient([
   { value: 25, color: [240, 200, 60] },
   { value: 40, color: [200, 40, 30] },
 ]);
+
+export const precipitationPalette = gradient([
+  { value: 0, color: [150, 100, 50] },
+  { value: 250, color: [210, 180, 110] },
+  { value: 600, color: [190, 210, 120] },
+  { value: 1200, color: [80, 170, 90] },
+  { value: 2500, color: [40, 110, 170] },
+  { value: 4000, color: [30, 50, 140] },
+]);

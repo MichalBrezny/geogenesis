@@ -21,6 +21,8 @@ export const FIELD_SPECS = {
   iceCover: { type: 'f32', unit: '' },
   /** Planetary albedo of the cell (surface and clouds), 0..1. */
   albedo: { type: 'f32', unit: '' },
+  /** Annual precipitation. */
+  precipitation: { type: 'f32', unit: 'mm/yr' },
   /** Crust type: 1 = continental (buoyant, never subducts), 0 = oceanic. */
   crustType: { type: 'i32', unit: '' },
   /** Tectonic plate the cell belongs to. */

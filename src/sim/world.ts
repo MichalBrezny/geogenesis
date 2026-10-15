@@ -1,5 +1,6 @@
 import { createPlanet, type PlanetOptions, type PlanetState } from './core/planet';
 import { createClimate } from './models/atmosphere/climate';
+import { precipitationModel } from './models/atmosphere/precipitation';
 import { stellarEvolution } from './models/atmosphere/star';
 import { createLinearDiffuser } from './models/geosphere/diffusion';
 import { createPlateDrift } from './models/geosphere/drift';
@@ -32,6 +33,7 @@ export function createRandomWorld(options: WorldOptions = {}): World {
       createLinearDiffuser(),
       stellarEvolution,
       createClimate(),
+      precipitationModel,
     ],
     ['elevation', 'upliftRate', 'plateId', 'crustType'],
   );
