@@ -50,7 +50,12 @@ export function createDaisyworld(options: DaisyworldOptions = {}): World {
     components.push(createDaisies({ groundAlbedo: DAISYWORLD_GROUND_ALBEDO }));
   }
   components.push(recordHistory);
-  const simulation = createSimulation(components, ['elevation', 'daisyWhite', 'daisyBlack']);
+  const simulation = createSimulation(components, [
+    'elevation',
+    'daisyWhite',
+    'daisyBlack',
+    'biome',
+  ]);
   simulation.step(planet, 0);
   return { planet, simulation, yearsPerStep: 5e6 };
 }

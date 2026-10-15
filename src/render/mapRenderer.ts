@@ -1,5 +1,6 @@
 import type { Fields } from '../sim/core/fields';
 import type { Grid } from '../sim/core/grid';
+import { BIOMES, type Biome } from '../sim/data/biomes';
 import { SEA_LEVEL } from '../sim/models/geosphere/flowRouting';
 import { elevationPalette, precipitationPalette, temperaturePalette, type Rgb } from './palettes';
 
@@ -13,6 +14,7 @@ export const RENDERED_FIELDS = [
   'precipitation',
   'daisyWhite',
   'daisyBlack',
+  'biome',
 ] as const;
 export interface MapSource {
   grid: Pick<Grid, 'width' | 'height' | 'cellCount'>;
@@ -25,6 +27,7 @@ export const MAP_LAYERS = [
   'plates',
   'airTemperature',
   'precipitation',
+  'biomes',
   'daisies',
 ] as const;
 export type MapLayer = (typeof MAP_LAYERS)[number];
@@ -63,6 +66,9 @@ const layerColors: Record<MapLayer, CellColor> = {
   },
   airTemperature(state, i) {
     return temperaturePalette(state.fields.airTemperature[i]!);
+  },
+  biomes(state, i) {
+    return BIOMES[state.fields.biome[i] as Biome].color;
   },
   daisies(state, i) {
     const { daisyWhite, daisyBlack, elevation } = state.fields;

@@ -21,6 +21,8 @@ export const FIELD_SPECS = {
   iceCover: { type: 'f32', unit: '' },
   /** Albedo of the ice-free surface including typical clouds, 0..1 (set by surfaceAlbedo). */
   surfaceAlbedo: { type: 'f32', unit: '' },
+  /** Biome (see data/biomes.ts); 0 = ocean, also for land when no biome model runs. */
+  biome: { type: 'i32', unit: '' },
   /** Fraction of the cell covered by white daisies (Daisyworld), 0..1. */
   daisyWhite: { type: 'f32', unit: '' },
   /** Fraction of the cell covered by black daisies (Daisyworld), 0..1. */

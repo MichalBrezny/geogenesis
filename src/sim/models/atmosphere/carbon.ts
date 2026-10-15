@@ -1,5 +1,6 @@
 import type { SimComponent } from '../../core/component';
 import type { PlanetState } from '../../core/planet';
+import { Biome, BIOMES } from '../../data/biomes';
 import { SEA_LEVEL } from '../geosphere/flowRouting';
 
 export interface CarbonCycleOptions {
@@ -27,7 +28,7 @@ const MANTLE_COOLING_TIME = 2.5e9;
  * Raw weathering sum (see `rawWeathering`) that counts as the present-day carbon
  * flux. Calibrated so random planets at 4.5 Gyr settle at roughly 10–15 °C.
  */
-const REFERENCE_WEATHERING = 0.45;
+const REFERENCE_WEATHERING = 0.55;
 /**
  * Years for the atmosphere–ocean CO₂ reservoir to change by its own size under a
  * unit flux imbalance. Earth's exchangeable carbon responds over a few hundred
@@ -57,7 +58,7 @@ export function createCarbonCycle(options: CarbonCycleOptions = {}): SimComponen
   const volcanism = options.volcanism ?? 1;
   return {
     name: 'carbonCycle',
-    inputs: ['elevation', 'airTemperature', 'precipitation', 'iceCover', 'plateId'],
+    inputs: ['elevation', 'airTemperature', 'precipitation', 'iceCover', 'plateId', 'biome'],
     outputs: [],
     runOneStep(state, dtYears) {
       const plates = tectonicActivity(state);
@@ -104,7 +105,11 @@ export function mantleHeat(ageYears: number): number {
   return excess(ageYears) / excess(4.5e9);
 }
 
-/** Mean plate surface speed relative to Earth's, weighted by plate area. */
+/**
+ * Vigour of plate tectonics relative to Earth: the area-weighted mean of the
+ * plates' target speeds (what mantle convection drives), not their current
+ * speeds, so temporary stalls in collisions do not swing the climate.
+ */
 export function tectonicActivity(state: PlanetState): number {
   const { plates, grid } = state;
   if (plates.length === 0) return 1;
@@ -113,7 +118,7 @@ export function tectonicActivity(state: PlanetState): number {
   let speed = 0;
   for (const plate of plates) {
     // Average surface speed of a rotating cap is about π/4 of its maximum.
-    speed += cells[plate.id]! * plate.angularSpeed * grid.radius * (Math.PI / 4);
+    speed += cells[plate.id]! * plate.targetSpeed * grid.radius * (Math.PI / 4);
   }
   return speed / grid.cellCount / REFERENCE_PLATE_SPEED;
 }
@@ -125,7 +130,7 @@ export function tectonicActivity(state: PlanetState): number {
  */
 export function rawWeathering(state: PlanetState, co2: number, warming = 0): number {
   const { grid, fields } = state;
-  const { elevation, airTemperature, precipitation, iceCover } = fields;
+  const { elevation, airTemperature, precipitation, iceCover, biome } = fields;
   const co2Factor =
     (Math.pow(co2 / 280, WEATHERING_CO2_EXPONENT) *
       ((co2 / (co2 + WEATHERING_CO2_HALF_SATURATION)) * (280 + WEATHERING_CO2_HALF_SATURATION))) /
@@ -139,8 +144,11 @@ export function rawWeathering(state: PlanetState, co2: number, warming = 0): num
       const temperature = airTemperature[i]! + warming;
       const ice = Math.max(iceCover[i]!, temperature < -10 ? 1 : 0);
       const runoff = precipitation[i]! / 1000;
+      // Vegetation speeds weathering up; land without a biome counts as average.
+      const life = biome[i] === Biome.Ocean ? 1 : BIOMES[biome[i] as Biome].weathering;
       total +=
         weight *
+        life *
         (1 - ice) *
         runoff *
         Math.exp(WEATHERING_TEMPERATURE_SENSITIVITY * (temperature - 15));

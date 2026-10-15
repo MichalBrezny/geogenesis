@@ -6,6 +6,7 @@ import { createClimate } from './models/atmosphere/climate';
 import { precipitationModel } from './models/atmosphere/precipitation';
 import { stellarEvolution } from './models/atmosphere/star';
 import { createSurfaceAlbedo } from './models/atmosphere/surfaceAlbedo';
+import { biomeModel } from './models/biosphere/biomes';
 import { createLinearDiffuser } from './models/geosphere/diffusion';
 import { createPlateDrift } from './models/geosphere/drift';
 import { flowRouting } from './models/geosphere/flowRouting';
@@ -45,14 +46,15 @@ export function createRandomWorld(options: WorldOptions = {}): World {
       surfaceAlbedo,
       climate,
       precipitationModel,
+      biomeModel,
       carbonCycle,
       recordHistory,
     ],
-    ['elevation', 'upliftRate', 'plateId', 'crustType', 'daisyWhite', 'daisyBlack'],
+    ['elevation', 'upliftRate', 'plateId', 'crustType', 'daisyWhite', 'daisyBlack', 'biome'],
   );
   // Run once with dt = 0 so derived fields are valid before the first real step.
   simulation.step(planet, 0);
-  spinUpAtmosphere(planet, [surfaceAlbedo, climate, precipitationModel, carbonCycle]);
+  spinUpAtmosphere(planet, [surfaceAlbedo, climate, precipitationModel, biomeModel, carbonCycle]);
   recordHistory.runOneStep(planet, 0, createRng(0));
   return { planet, simulation, yearsPerStep: 1e6 };
 }

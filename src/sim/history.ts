@@ -1,4 +1,5 @@
 import type { SimComponent } from './core/component';
+import { Biome } from './data/biomes';
 import { areaWeightedMean } from './core/grid';
 import type { PlanetState } from './core/planet';
 import { SEA_LEVEL } from './models/geosphere/flowRouting';
@@ -13,6 +14,8 @@ export const HISTORY_SERIES = [
   'landFraction',
   'whiteDaisies',
   'blackDaisies',
+  'forestFraction',
+  'desertFraction',
 ] as const;
 export type HistorySeries = (typeof HISTORY_SERIES)[number];
 export type History = Record<HistorySeries, number[]>;
@@ -46,6 +49,8 @@ export const recordHistory: SimComponent = {
       landFraction: landFraction(state),
       whiteDaisies: areaWeightedMean(state.grid, state.fields.daisyWhite),
       blackDaisies: areaWeightedMean(state.grid, state.fields.daisyBlack),
+      forestFraction: biomeFraction(state, FOREST_BIOMES),
+      desertFraction: biomeFraction(state, [Biome.Desert]),
     };
     const last = history.year[history.year.length - 1];
     // A zero-length step (initialization) replaces the sample for the same year.
@@ -58,6 +63,21 @@ export const recordHistory: SimComponent = {
     }
   },
 };
+
+const FOREST_BIOMES: readonly Biome[] = [
+  Biome.BorealForest,
+  Biome.TemperateForest,
+  Biome.Jungle,
+  Biome.Swamp,
+];
+
+/** Fraction of the planet's surface covered by the given biomes. */
+function biomeFraction(state: PlanetState, biomes: readonly Biome[]): number {
+  const covered = Float32Array.from(state.fields.biome, (b) =>
+    biomes.includes(b as Biome) ? 1 : 0,
+  );
+  return areaWeightedMean(state.grid, covered);
+}
 
 function landFraction(state: PlanetState): number {
   const land = state.fields.elevation.map((h) => (h >= SEA_LEVEL ? 1 : 0));

@@ -5,6 +5,7 @@ import type { Frame, WorkerRequest, WorkerResponse } from '../worker/protocol';
 import { SCENARIO_IDS, type ScenarioId } from '../sim/scenarios';
 import { HistoryCharts, type ChartSeries } from './charts/HistoryCharts';
 import { formatPpm } from './format';
+import { MapLegend } from './MapLegend';
 
 /** Grid resolutions offered for a new planet, as [width, height]. */
 const RESOLUTIONS = [
@@ -16,7 +17,15 @@ const RESOLUTIONS = [
 /** Charts and the initial map layer that suit each scenario. */
 const SCENARIO_VIEW: Record<ScenarioId, { charts: ChartSeries[]; layer: MapLayer }> = {
   random: {
-    charts: ['meanTemperature', 'co2', 'iceFraction', 'landFraction', 'solarInput'],
+    charts: [
+      'meanTemperature',
+      'co2',
+      'iceFraction',
+      'forestFraction',
+      'desertFraction',
+      'landFraction',
+      'solarInput',
+    ],
     layer: 'terrain',
   },
   daisyworld: {
@@ -134,6 +143,7 @@ export function App() {
       </header>
       {error && <p className="error">{error}</p>}
       <canvas ref={canvasRef} className="map" />
+      <MapLegend layer={layer} />
       {frame && (
         <HistoryCharts history={frame.history} series={SCENARIO_VIEW[frame.scenario].charts} />
       )}

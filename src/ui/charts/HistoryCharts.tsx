@@ -21,6 +21,18 @@ const CHARTS: readonly ChartSpec[] = [
   { series: 'landFraction', title: 'chart.land', scale: 100, format: (v) => `${v.toFixed(1)}%` },
   { series: 'solarInput', title: 'chart.sun', scale: 100, format: (v) => `${v.toFixed(1)}%` },
   {
+    series: 'forestFraction',
+    title: 'chart.forest',
+    scale: 100,
+    format: (v) => `${v.toFixed(1)}%`,
+  },
+  {
+    series: 'desertFraction',
+    title: 'chart.desert',
+    scale: 100,
+    format: (v) => `${v.toFixed(1)}%`,
+  },
+  {
     series: 'whiteDaisies',
     title: 'chart.whiteDaisies',
     scale: 100,
@@ -91,9 +103,26 @@ function HistoryChart({ spec, history }: { spec: ChartSpec; history: Props['hist
           sync: { key: CURSOR_SYNC_KEY },
           points: { size: 8, fill: token('--series-1'), stroke: token('--surface-chart') },
         },
-        scales: { x: { time: false }, y: spec.log ? { distr: 3 } : {} },
+        scales: {
+          x: { time: false },
+          // With a single sample uPlot would pick an arbitrary range; pad around it instead.
+          y: spec.log
+            ? { distr: 3 }
+            : {
+                range: (_, min, max) =>
+                  min === max ? [min - 1, max + 1] : uPlot.rangeNum(min, max, 0.1, true),
+              },
+        },
         axes: [
-          { ...axis, values: (_, ticks) => ticks.map((v) => (v / 1e9).toFixed(2)) },
+          {
+            ...axis,
+            // Planet age in Gyr, with enough decimals to tell neighbouring ticks apart.
+            values: (u, ticks) => {
+              const span = ((u.scales.x!.max ?? 0) - (u.scales.x!.min ?? 0)) / 1e9;
+              const decimals = span < 0.05 ? 3 : 2;
+              return ticks.map((v) => (v / 1e9).toFixed(decimals));
+            },
+          },
           { ...axis, size: 56 },
         ],
         series: [{}, { stroke: token('--series-1'), width: 2, points: { show: false } }],
@@ -124,8 +153,12 @@ function HistoryChart({ spec, history }: { spec: ChartSpec; history: Props['hist
   }, [spec.log]);
 
   useEffect(() => {
+    const plot = plotRef.current;
+    if (!plot) return;
     const plotted = Array.from(values, (v) => v * scale);
-    plotRef.current?.setData([Array.from(years), plotted]);
+    plot.setData([Array.from(years), plotted]);
+    // uPlot does not pad the x range around a lone sample; give it a sensible window.
+    if (years.length === 1) plot.setScale('x', { min: years[0]! - 5e6, max: years[0]! + 5e6 });
   }, [years, values, scale]);
 
   const shown =
