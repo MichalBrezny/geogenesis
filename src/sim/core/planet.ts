@@ -1,12 +1,27 @@
 import { createFields, type Fields } from './fields';
 import { createGrid, type Grid } from './grid';
 
+/** Well-mixed atmospheric gases. */
+export interface Atmosphere {
+  /** Carbon dioxide, ppm by volume (280 before the industrial era). */
+  co2: number;
+  /** Methane, ppm by volume (0.7 before the industrial era). */
+  ch4: number;
+  /** Oxygen, fraction by volume (0.21 on modern Earth). */
+  o2: number;
+}
+
 /** Planet-wide (non-gridded) state. */
 export interface GlobalState {
-  /** Simulated years since the planet formed. */
+  /** Simulated years since the planet formed (the star is assumed to be the same age). */
   year: number;
-  /** Solar input relative to present-day Earth (1 = 1361 W/m²). */
+  /** Star luminosity relative to the present Sun (1 = 1361 W/m² at the planet). */
   solarInput: number;
+  atmosphere: Atmosphere;
+  /** Area-weighted mean surface air temperature, °C (written by the climate model). */
+  meanTemperature: number;
+  /** Fraction of the surface covered by ice, 0..1 (written by the climate model). */
+  iceFraction: number;
   /** Player energy budget (Ω). */
   energy: number;
 }
@@ -68,7 +83,14 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
   return {
     grid,
     fields: createFields(grid.cellCount),
-    globals: { year: 0, solarInput: 1, energy: 0 },
+    globals: {
+      year: 0,
+      solarInput: 1,
+      atmosphere: { co2: 280, ch4: 0.7, o2: 0.21 },
+      meanTemperature: 0,
+      iceFraction: 0,
+      energy: 0,
+    },
     plates: [],
     seed,
     rngState: seed,

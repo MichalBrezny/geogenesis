@@ -1,5 +1,4 @@
 import { RENDERED_FIELDS } from '../render/mapRenderer';
-import { areaWeightedMean } from '../sim/core/grid';
 import { createRandomWorld, type World } from '../sim/world';
 import type { Frame, WorkerRequest, WorkerResponse } from './protocol';
 
@@ -77,7 +76,7 @@ export class SimHost {
       grid: { width, height, cellCount },
       fields,
       year: planet.globals.year,
-      meanTemperature: areaWeightedMean(planet.grid, planet.fields.airTemperature),
+      meanTemperature: planet.globals.meanTemperature,
       timings: Object.fromEntries(simulation.timings),
     };
     this.post({ type: 'frame', frame }, transfer);

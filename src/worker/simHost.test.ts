@@ -28,7 +28,7 @@ describe('SimHost', () => {
     const { host, messages, transfers } = createHost();
     host.handle({ type: 'create', seed: 1, width: 32, height: 16 });
     const frame = lastFrame(messages);
-    expect(frame.year).toBe(0);
+    expect(frame.year).toBeGreaterThan(0);
     expect(frame.grid).toEqual({ width: 32, height: 16, cellCount: 512 });
     expect(frame.fields.elevation).toHaveLength(512);
     expect(transfers[0]).toHaveLength(Object.keys(frame.fields).length);
@@ -37,18 +37,19 @@ describe('SimHost', () => {
   it('steps once on request and keeps stepping while running', () => {
     const { host, messages, queue, runQueued } = createHost();
     host.handle({ type: 'create', seed: 1, width: 32, height: 16 });
+    const start = lastFrame(messages).year;
     host.handle({ type: 'step' });
-    expect(lastFrame(messages).year).toBe(YEARS_PER_STEP);
+    expect(lastFrame(messages).year).toBe(start + YEARS_PER_STEP);
 
     host.handle({ type: 'run', running: true });
     runQueued();
     runQueued();
-    expect(lastFrame(messages).year).toBe(3 * YEARS_PER_STEP);
+    expect(lastFrame(messages).year).toBe(start + 3 * YEARS_PER_STEP);
 
     host.handle({ type: 'run', running: false });
     runQueued();
     expect(queue).toHaveLength(0);
-    expect(lastFrame(messages).year).toBe(3 * YEARS_PER_STEP);
+    expect(lastFrame(messages).year).toBe(start + 3 * YEARS_PER_STEP);
   });
 
   it('ignores manual steps while running', () => {

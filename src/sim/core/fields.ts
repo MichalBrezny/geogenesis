@@ -17,6 +17,10 @@ export const FIELD_SPECS = {
   elevation: { type: 'f32', unit: 'm' },
   /** Surface air temperature. */
   airTemperature: { type: 'f32', unit: '°C' },
+  /** Fraction of the cell covered by snow or ice, 0..1. */
+  iceCover: { type: 'f32', unit: '' },
+  /** Planetary albedo of the cell (surface and clouds), 0..1. */
+  albedo: { type: 'f32', unit: '' },
   /** Crust type: 1 = continental (buoyant, never subducts), 0 = oceanic. */
   crustType: { type: 'i32', unit: '' },
   /** Tectonic plate the cell belongs to. */

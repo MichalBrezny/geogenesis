@@ -4,7 +4,13 @@ import { SEA_LEVEL } from '../sim/models/geosphere/flowRouting';
 import { elevationPalette, temperaturePalette, type Rgb } from './palettes';
 
 /** The fields the map needs; a PlanetState or a snapshot sent from the simulation worker. */
-export const RENDERED_FIELDS = ['elevation', 'plateId', 'drainageArea', 'airTemperature'] as const;
+export const RENDERED_FIELDS = [
+  'elevation',
+  'plateId',
+  'drainageArea',
+  'airTemperature',
+  'iceCover',
+] as const;
 export interface MapSource {
   grid: Pick<Grid, 'width' | 'height' | 'cellCount'>;
   fields: Pick<Fields, (typeof RENDERED_FIELDS)[number]>;
@@ -19,20 +25,26 @@ const RIVER_MIN_AREA = 1.5e12;
 /** Drainage area at which rivers reach full colour. */
 const RIVER_FULL_AREA = 2e13;
 const RIVER_COLOR: Rgb = [40, 90, 200];
+const LAND_ICE_COLOR: Rgb = [238, 242, 246];
+const SEA_ICE_COLOR: Rgb = [200, 215, 230];
 
 type CellColor = (state: MapSource, i: number) => Rgb;
 
 const layerColors: Record<MapLayer, CellColor> = {
   terrain(state, i) {
-    const { elevation, drainageArea } = state.fields;
-    const base = elevationPalette(elevation[i]!);
+    const { elevation, drainageArea, iceCover } = state.fields;
+    const ocean = elevation[i]! < SEA_LEVEL;
+    let color = elevationPalette(elevation[i]!);
     const area = drainageArea[i]!;
-    if (elevation[i]! < SEA_LEVEL || area < RIVER_MIN_AREA) return base;
-    const t = Math.min(
-      1,
-      0.4 + (0.6 * Math.log(area / RIVER_MIN_AREA)) / Math.log(RIVER_FULL_AREA / RIVER_MIN_AREA),
-    );
-    return mix(base, RIVER_COLOR, t);
+    if (!ocean && area >= RIVER_MIN_AREA) {
+      const t = Math.min(
+        1,
+        0.4 + (0.6 * Math.log(area / RIVER_MIN_AREA)) / Math.log(RIVER_FULL_AREA / RIVER_MIN_AREA),
+      );
+      color = mix(color, RIVER_COLOR, t);
+    }
+    const ice = iceCover[i]!;
+    return ice > 0 ? mix(color, ocean ? SEA_ICE_COLOR : LAND_ICE_COLOR, 0.2 + 0.8 * ice) : color;
   },
   plates(state, i) {
     const base = plateColor(state.fields.plateId[i]!);
