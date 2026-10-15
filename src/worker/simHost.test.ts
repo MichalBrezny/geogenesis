@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { WorkerResponse } from './protocol';
-import { SimHost, YEARS_PER_STEP } from './simHost';
+import { SimHost } from './simHost';
+
+/** Step length of the random-planet scenario. */
+const YEARS_PER_STEP = 1e6;
 
 function createHost() {
   const messages: WorkerResponse[] = [];
@@ -26,7 +29,7 @@ function lastFrame(messages: WorkerResponse[]) {
 describe('SimHost', () => {
   it('sends a frame for a new planet with transferable field copies', () => {
     const { host, messages, transfers } = createHost();
-    host.handle({ type: 'create', seed: 1, width: 32, height: 16 });
+    host.handle({ type: 'create', scenario: 'random', seed: 1, width: 32, height: 16 });
     const frame = lastFrame(messages);
     expect(frame.year).toBeGreaterThan(0);
     expect(frame.grid).toEqual({ width: 32, height: 16, cellCount: 512 });
@@ -39,7 +42,7 @@ describe('SimHost', () => {
 
   it('steps once on request and keeps stepping while running', () => {
     const { host, messages, queue, runQueued } = createHost();
-    host.handle({ type: 'create', seed: 1, width: 32, height: 16 });
+    host.handle({ type: 'create', scenario: 'random', seed: 1, width: 32, height: 16 });
     const start = lastFrame(messages).year;
     host.handle({ type: 'step' });
     expect(lastFrame(messages).year).toBe(start + YEARS_PER_STEP);
@@ -57,7 +60,7 @@ describe('SimHost', () => {
 
   it('ignores manual steps while running', () => {
     const { host, messages } = createHost();
-    host.handle({ type: 'create', seed: 1, width: 32, height: 16 });
+    host.handle({ type: 'create', scenario: 'random', seed: 1, width: 32, height: 16 });
     host.handle({ type: 'run', running: true });
     const count = messages.length;
     host.handle({ type: 'step' });

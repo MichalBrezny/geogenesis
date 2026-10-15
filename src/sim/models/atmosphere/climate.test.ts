@@ -5,18 +5,21 @@ import { createRng } from '../../core/rng';
 import { generateTectonicPlanet } from '../geosphere/tectonics';
 import { annualInsolation, createClimate, greenhouseForcing } from './climate';
 import { stellarLuminosity, SUN_AGE } from './star';
+import { createSurfaceAlbedo } from './surfaceAlbedo';
 
 const rng = createRng(1);
 
 function oceanPlanet(): PlanetState {
   const planet = createPlanet({ width: 64, height: 32 });
   planet.fields.elevation.fill(-4000);
+  createSurfaceAlbedo().runOneStep(planet, 0, rng);
   return planet;
 }
 
 function earthLike(): PlanetState {
   const planet = createPlanet({ seed: 3 });
   generateTectonicPlanet(planet);
+  createSurfaceAlbedo().runOneStep(planet, 0, rng);
   return planet;
 }
 

@@ -5,6 +5,7 @@ import { createCarbonCycle } from './models/atmosphere/carbon';
 import { createClimate } from './models/atmosphere/climate';
 import { precipitationModel } from './models/atmosphere/precipitation';
 import { stellarEvolution } from './models/atmosphere/star';
+import { createSurfaceAlbedo } from './models/atmosphere/surfaceAlbedo';
 import { createLinearDiffuser } from './models/geosphere/diffusion';
 import { createPlateDrift } from './models/geosphere/drift';
 import { flowRouting } from './models/geosphere/flowRouting';
@@ -21,6 +22,8 @@ export interface WorldOptions extends PlanetOptions {
 export interface World {
   planet: PlanetState;
   simulation: Simulation;
+  /** Simulated years per step for this world. */
+  yearsPerStep: number;
 }
 
 /** Creates a random planet with the standard component pipeline. */
@@ -28,6 +31,7 @@ export function createRandomWorld(options: WorldOptions = {}): World {
   const planet = createPlanet(options);
   planet.globals.year = options.startYear ?? 4.5e9;
   generateTectonicPlanet(planet);
+  const surfaceAlbedo = createSurfaceAlbedo();
   const climate = createClimate();
   const carbonCycle = createCarbonCycle();
   const simulation = createSimulation(
@@ -38,18 +42,19 @@ export function createRandomWorld(options: WorldOptions = {}): World {
       createStreamPowerEroder(),
       createLinearDiffuser(),
       stellarEvolution,
+      surfaceAlbedo,
       climate,
       precipitationModel,
       carbonCycle,
       recordHistory,
     ],
-    ['elevation', 'upliftRate', 'plateId', 'crustType'],
+    ['elevation', 'upliftRate', 'plateId', 'crustType', 'daisyWhite', 'daisyBlack'],
   );
   // Run once with dt = 0 so derived fields are valid before the first real step.
   simulation.step(planet, 0);
-  spinUpAtmosphere(planet, [climate, precipitationModel, carbonCycle]);
+  spinUpAtmosphere(planet, [surfaceAlbedo, climate, precipitationModel, carbonCycle]);
   recordHistory.runOneStep(planet, 0, createRng(0));
-  return { planet, simulation };
+  return { planet, simulation, yearsPerStep: 1e6 };
 }
 
 /**

@@ -6,6 +6,7 @@ import { generateTectonicPlanet } from '../geosphere/tectonics';
 import { createCarbonCycle, mantleHeat } from './carbon';
 import { createClimate } from './climate';
 import { precipitationModel } from './precipitation';
+import { createSurfaceAlbedo } from './surfaceAlbedo';
 
 const rng = createRng(1);
 
@@ -14,6 +15,7 @@ function planetAt(solarInput: number): PlanetState {
   generateTectonicPlanet(planet);
   planet.globals.year = 4.5e9;
   planet.globals.solarInput = solarInput;
+  createSurfaceAlbedo().runOneStep(planet, 0, rng);
   return planet;
 }
 

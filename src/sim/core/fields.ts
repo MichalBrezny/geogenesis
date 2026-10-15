@@ -19,6 +19,12 @@ export const FIELD_SPECS = {
   airTemperature: { type: 'f32', unit: '°C' },
   /** Fraction of the cell covered by snow or ice, 0..1. */
   iceCover: { type: 'f32', unit: '' },
+  /** Albedo of the ice-free surface including typical clouds, 0..1 (set by surfaceAlbedo). */
+  surfaceAlbedo: { type: 'f32', unit: '' },
+  /** Fraction of the cell covered by white daisies (Daisyworld), 0..1. */
+  daisyWhite: { type: 'f32', unit: '' },
+  /** Fraction of the cell covered by black daisies (Daisyworld), 0..1. */
+  daisyBlack: { type: 'f32', unit: '' },
   /** Planetary albedo of the cell (surface and clouds), 0..1. */
   albedo: { type: 'f32', unit: '' },
   /** Annual precipitation. */

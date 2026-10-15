@@ -11,6 +11,8 @@ export const RENDERED_FIELDS = [
   'airTemperature',
   'iceCover',
   'precipitation',
+  'daisyWhite',
+  'daisyBlack',
 ] as const;
 export interface MapSource {
   grid: Pick<Grid, 'width' | 'height' | 'cellCount'>;
@@ -18,7 +20,13 @@ export interface MapSource {
 }
 
 /** Map layers the player can switch between. */
-export const MAP_LAYERS = ['terrain', 'plates', 'airTemperature', 'precipitation'] as const;
+export const MAP_LAYERS = [
+  'terrain',
+  'plates',
+  'airTemperature',
+  'precipitation',
+  'daisies',
+] as const;
 export type MapLayer = (typeof MAP_LAYERS)[number];
 
 /** Drainage area (m²) above which a land cell is drawn as a river. */
@@ -28,6 +36,7 @@ const RIVER_FULL_AREA = 2e13;
 const RIVER_COLOR: Rgb = [40, 90, 200];
 const LAND_ICE_COLOR: Rgb = [238, 242, 246];
 const SEA_ICE_COLOR: Rgb = [200, 215, 230];
+const BARE_GROUND: Rgb = [196, 168, 118];
 
 type CellColor = (state: MapSource, i: number) => Rgb;
 
@@ -54,6 +63,18 @@ const layerColors: Record<MapLayer, CellColor> = {
   },
   airTemperature(state, i) {
     return temperaturePalette(state.fields.airTemperature[i]!);
+  },
+  daisies(state, i) {
+    const { daisyWhite, daisyBlack, elevation } = state.fields;
+    if (elevation[i]! < SEA_LEVEL) return [20, 40, 80];
+    const white = daisyWhite[i]!;
+    const black = daisyBlack[i]!;
+    const bare = Math.max(0, 1 - white - black);
+    return [
+      Math.round(BARE_GROUND[0] * bare + 245 * white + 22 * black),
+      Math.round(BARE_GROUND[1] * bare + 245 * white + 22 * black),
+      Math.round(BARE_GROUND[2] * bare + 235 * white + 28 * black),
+    ];
   },
   precipitation(state, i) {
     const color = precipitationPalette(state.fields.precipitation[i]!);

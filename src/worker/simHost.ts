@@ -1,10 +1,8 @@
 import { RENDERED_FIELDS } from '../render/mapRenderer';
 import { HISTORY_SERIES, type HistorySeries } from '../sim/history';
-import { createRandomWorld, type World } from '../sim/world';
+import { createScenario, type ScenarioId } from '../sim/scenarios';
+import type { World } from '../sim/world';
 import type { Frame, WorkerRequest, WorkerResponse } from './protocol';
-
-/** Simulated years per step. Will be driven by the selected time scale later. */
-export const YEARS_PER_STEP = 1_000_000;
 
 /**
  * Owns the simulation inside the worker. Kept free of worker globals so it can
@@ -13,6 +11,7 @@ export const YEARS_PER_STEP = 1_000_000;
  */
 export class SimHost {
   private world: World | undefined;
+  private scenario: ScenarioId = 'random';
   private running = false;
   private scheduled = false;
 
@@ -25,7 +24,8 @@ export class SimHost {
     try {
       switch (request.type) {
         case 'create':
-          this.world = createRandomWorld({
+          this.scenario = request.scenario;
+          this.world = createScenario(request.scenario, {
             seed: request.seed,
             width: request.width,
             height: request.height,
@@ -58,7 +58,7 @@ export class SimHost {
 
   private advance(): void {
     if (!this.world) return;
-    this.world.simulation.step(this.world.planet, YEARS_PER_STEP);
+    this.world.simulation.step(this.world.planet, this.world.yearsPerStep);
     this.sendFrame();
   }
 
@@ -79,6 +79,7 @@ export class SimHost {
     }
     const { width, height, cellCount } = planet.grid;
     const frame: Frame = {
+      scenario: this.scenario,
       grid: { width, height, cellCount },
       fields,
       year: planet.globals.year,

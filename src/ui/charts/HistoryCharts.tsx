@@ -20,23 +20,40 @@ const CHARTS: readonly ChartSpec[] = [
   { series: 'iceFraction', title: 'chart.ice', scale: 100, format: (v) => `${v.toFixed(1)}%` },
   { series: 'landFraction', title: 'chart.land', scale: 100, format: (v) => `${v.toFixed(1)}%` },
   { series: 'solarInput', title: 'chart.sun', scale: 100, format: (v) => `${v.toFixed(1)}%` },
+  {
+    series: 'whiteDaisies',
+    title: 'chart.whiteDaisies',
+    scale: 100,
+    format: (v) => `${v.toFixed(1)}%`,
+  },
+  {
+    series: 'blackDaisies',
+    title: 'chart.blackDaisies',
+    scale: 100,
+    format: (v) => `${v.toFixed(1)}%`,
+  },
 ];
+
+export type ChartSeries = ChartSpec['series'];
 
 /** Shared by all charts so hovering one shows the same moment in all of them. */
 const CURSOR_SYNC_KEY = 'planet-history';
 
 interface Props {
   history: Record<HistorySeries, Float64Array>;
+  /** Which measures to chart, in this order. */
+  series: readonly ChartSeries[];
 }
 
 /**
  * Small multiples of the planet's global history, one measure per chart on a
  * shared time axis (never two measures on one chart with two y-axes).
  */
-export function HistoryCharts({ history }: Props) {
+export function HistoryCharts({ history, series }: Props) {
+  const specs = series.map((name) => CHARTS.find((spec) => spec.series === name)!);
   return (
     <section className="history" aria-label={t('chart.sectionLabel')}>
-      {CHARTS.map((spec) => (
+      {specs.map((spec) => (
         <HistoryChart key={spec.series} spec={spec} history={history} />
       ))}
     </section>

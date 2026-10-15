@@ -1,7 +1,6 @@
 import type { SimComponent } from '../../core/component';
 import { areaWeightedMean, createGrid, type Grid } from '../../core/grid';
 import type { Atmosphere } from '../../core/planet';
-import { SEA_LEVEL } from '../geosphere/flowRouting';
 import { SOLAR_CONSTANT } from './star';
 
 /**
@@ -12,9 +11,7 @@ const OLR_A = 203.3;
 const OLR_B = 2.09;
 /** Meridional heat transport coefficient for the Laplacian on the unit sphere, W m⁻² K⁻¹. */
 const DEFAULT_DIFFUSIVITY = 0.45;
-/** Planetary albedo (surface plus typical cloud cover) of ice-free ocean, land and ice. */
-export const OCEAN_ALBEDO = 0.29;
-export const LAND_ALBEDO = 0.31;
+/** Planetary albedo (surface plus typical cloud cover) of snow and ice. */
 export const ICE_ALBEDO = 0.62;
 /** Snow and ice cover ramps from none at ICE_NONE to full at ICE_FULL (°C, annual mean). */
 const ICE_NONE = -5;
@@ -30,6 +27,11 @@ const CLIMATE_GRID_WIDTH = 64;
 export interface ClimateOptions {
   /** Heat transport coefficient; larger values even out the pole-equator contrast. */
   diffusivity?: number;
+  /**
+   * Albedo of snow and ice. Setting it to the surface albedo switches off the
+   * ice–albedo feedback (Daisyworld has none).
+   */
+  iceAlbedo?: number;
 }
 
 /**
@@ -76,20 +78,21 @@ export function iceFractionAt(temperature: number): number {
  */
 export function createClimate(options: ClimateOptions = {}): SimComponent {
   const diffusivity = options.diffusivity ?? DEFAULT_DIFFUSIVITY;
+  const iceAlbedo = options.iceAlbedo ?? ICE_ALBEDO;
   return {
     name: 'climate',
-    inputs: ['elevation'],
+    inputs: ['elevation', 'surfaceAlbedo'],
     outputs: ['airTemperature', 'iceCover', 'albedo'],
     runOneStep(state) {
       const { grid, fields, globals } = state;
-      const { elevation, airTemperature, iceCover, albedo } = fields;
+      const { elevation, surfaceAlbedo, airTemperature, iceCover, albedo } = fields;
       const climate = getClimateGrid(grid, diffusivity);
       const forcing = greenhouseForcing(globals.atmosphere);
 
       // Start from last step's albedo where it exists, so the ice state persists (hysteresis).
       for (let i = 0; i < grid.cellCount; i++) {
-        const base = elevation[i]! < SEA_LEVEL ? OCEAN_ALBEDO : LAND_ALBEDO;
-        if (albedo[i] === 0) albedo[i] = base * (1 - iceCover[i]!) + ICE_ALBEDO * iceCover[i]!;
+        const base = surfaceAlbedo[i]!;
+        if (albedo[i] === 0) albedo[i] = base * (1 - iceCover[i]!) + iceAlbedo * iceCover[i]!;
       }
 
       for (let iteration = 0; iteration < 12; iteration++) {
@@ -98,8 +101,7 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
         let maxChange = 0;
         for (let i = 0; i < grid.cellCount; i++) {
           const ice = iceFractionAt(airTemperature[i]!);
-          const base = elevation[i]! < SEA_LEVEL ? OCEAN_ALBEDO : LAND_ALBEDO;
-          const target = base * (1 - ice) + ICE_ALBEDO * ice;
+          const target = surfaceAlbedo[i]! * (1 - ice) + iceAlbedo * ice;
           // Damped update: the albedo–temperature iteration can oscillate at ice edges.
           const next = iteration === 0 ? target : 0.5 * (albedo[i]! + target);
           maxChange = Math.max(maxChange, Math.abs(next - albedo[i]!));

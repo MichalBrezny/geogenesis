@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { t } from '../i18n/i18n';
 import { MAP_LAYERS, renderLayer, type MapLayer } from '../render/mapRenderer';
 import type { Frame, WorkerRequest, WorkerResponse } from '../worker/protocol';
-import { HistoryCharts } from './charts/HistoryCharts';
+import { SCENARIO_IDS, type ScenarioId } from '../sim/scenarios';
+import { HistoryCharts, type ChartSeries } from './charts/HistoryCharts';
 import { formatPpm } from './format';
 
 /** Grid resolutions offered for a new planet, as [width, height]. */
@@ -11,6 +12,18 @@ const RESOLUTIONS = [
   [256, 128],
   [512, 256],
 ] as const;
+
+/** Charts and the initial map layer that suit each scenario. */
+const SCENARIO_VIEW: Record<ScenarioId, { charts: ChartSeries[]; layer: MapLayer }> = {
+  random: {
+    charts: ['meanTemperature', 'co2', 'iceFraction', 'landFraction', 'solarInput'],
+    layer: 'terrain',
+  },
+  daisyworld: {
+    charts: ['meanTemperature', 'whiteDaisies', 'blackDaisies', 'solarInput'],
+    layer: 'daisies',
+  },
+};
 
 function randomSeed(): number {
   return Math.floor(Math.random() * 2 ** 32);
@@ -24,13 +37,14 @@ export function App() {
   const [layer, setLayer] = useState<MapLayer>('terrain');
   const [running, setRunning] = useState(false);
   const [resolution, setResolution] = useState(1);
+  const [scenario, setScenario] = useState<ScenarioId>('random');
 
   const send = useCallback((request: WorkerRequest) => workerRef.current?.postMessage(request), []);
 
   const newPlanet = useCallback(
-    (resolutionIndex: number) => {
+    (scenarioId: ScenarioId, resolutionIndex: number) => {
       const [width, height] = RESOLUTIONS[resolutionIndex]!;
-      send({ type: 'create', seed: randomSeed(), width, height });
+      send({ type: 'create', scenario: scenarioId, seed: randomSeed(), width, height });
     },
     [send],
   );
@@ -44,7 +58,7 @@ export function App() {
       else setError(event.data.message);
     };
     workerRef.current = worker;
-    newPlanet(1);
+    newPlanet('random', 1);
     return () => worker.terminate();
   }, [newPlanet]);
 
@@ -69,7 +83,24 @@ export function App() {
         <button onClick={() => send({ type: 'step' })} disabled={running || !frame}>
           {t('controls.step')}
         </button>
-        <button onClick={() => newPlanet(resolution)}>{t('controls.newPlanet')}</button>
+        <button
+          onClick={() => {
+            newPlanet(scenario, resolution);
+            setLayer(SCENARIO_VIEW[scenario].layer);
+          }}
+        >
+          {t('controls.newPlanet')}
+        </button>
+        <label>
+          {t('controls.scenario')}{' '}
+          <select value={scenario} onChange={(e) => setScenario(e.target.value as ScenarioId)}>
+            {SCENARIO_IDS.map((id) => (
+              <option key={id} value={id}>
+                {t(`scenario.${id}`)}
+              </option>
+            ))}
+          </select>
+        </label>
         <label>
           {t('controls.resolution')}{' '}
           <select value={resolution} onChange={(e) => setResolution(Number(e.target.value))}>
@@ -103,7 +134,9 @@ export function App() {
       </header>
       {error && <p className="error">{error}</p>}
       <canvas ref={canvasRef} className="map" />
-      {frame && <HistoryCharts history={frame.history} />}
+      {frame && (
+        <HistoryCharts history={frame.history} series={SCENARIO_VIEW[frame.scenario].charts} />
+      )}
     </main>
   );
 }

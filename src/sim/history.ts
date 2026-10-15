@@ -11,6 +11,8 @@ export const HISTORY_SERIES = [
   'iceFraction',
   'solarInput',
   'landFraction',
+  'whiteDaisies',
+  'blackDaisies',
 ] as const;
 export type HistorySeries = (typeof HISTORY_SERIES)[number];
 export type History = Record<HistorySeries, number[]>;
@@ -42,6 +44,8 @@ export const recordHistory: SimComponent = {
       iceFraction: globals.iceFraction,
       solarInput: globals.solarInput,
       landFraction: landFraction(state),
+      whiteDaisies: areaWeightedMean(state.grid, state.fields.daisyWhite),
+      blackDaisies: areaWeightedMean(state.grid, state.fields.daisyBlack),
     };
     const last = history.year[history.year.length - 1];
     // A zero-length step (initialization) replaces the sample for the same year.
