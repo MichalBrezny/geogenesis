@@ -1,4 +1,5 @@
 import type { MapSource } from '../render/mapRenderer';
+import type { HistorySeries } from '../sim/history';
 
 /** Messages from the UI to the simulation worker. */
 export type WorkerRequest =
@@ -18,6 +19,8 @@ export interface Frame extends MapSource {
   iceFraction: number;
   /** Milliseconds per simulation component in the last step. */
   timings: Record<string, number>;
+  /** The whole recorded history, one array per series. */
+  history: Record<HistorySeries, Float64Array>;
 }
 
 /** Messages from the simulation worker to the UI. */

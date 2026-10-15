@@ -1,8 +1,15 @@
 :root {
   color-scheme: dark;
   font-family: system-ui, sans-serif;
-  background: #101418;
-  color: #e6e6e6;
+  --surface-page: #101418;
+  --surface-chart: #161b21;
+  --text-primary: #e6e6e6;
+  --text-secondary: #a9b1ba;
+  --grid: #2a3139;
+  /* Categorical slot 1 of the dark data palette. */
+  --series-1: #3987e5;
+  background: var(--surface-page);
+  color: var(--text-primary);
 }
 
 body {
@@ -37,10 +44,51 @@ body {
 }
 
 .muted {
-  color: #8a949e;
+  color: var(--text-secondary);
 }
 
 .error {
   color: #ff8a80;
   margin: 0;
+}
+
+.history {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+  max-width: 1024px;
+}
+
+.chart {
+  margin: 0;
+  padding: 8px 10px 4px;
+  background: var(--surface-chart);
+  border-radius: 6px;
+  min-width: 0;
+}
+
+.chart figcaption {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.8rem;
+  margin-bottom: 4px;
+}
+
+.chart-title {
+  color: var(--text-secondary);
+}
+
+.chart-value {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-when {
+  color: var(--text-secondary);
+}
+
+.chart-plot {
+  width: 100%;
 }

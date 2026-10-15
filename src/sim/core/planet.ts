@@ -1,4 +1,5 @@
 import { createFields, type Fields } from './fields';
+import { createHistory, type History } from '../history';
 import { createGrid, type Grid } from './grid';
 
 /** Well-mixed atmospheric gases. */
@@ -68,6 +69,8 @@ export interface PlanetState {
   fields: Fields;
   globals: GlobalState;
   plates: Plate[];
+  /** Global quantities over time, one sample per step (thinned on long runs). */
+  history: History;
   seed: number;
   rngState: number;
 }
@@ -100,6 +103,7 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
       energy: 0,
     },
     plates: [],
+    history: createHistory(),
     seed,
     rngState: seed,
   };

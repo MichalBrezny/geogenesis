@@ -1,4 +1,5 @@
 import { RENDERED_FIELDS } from '../render/mapRenderer';
+import { HISTORY_SERIES, type HistorySeries } from '../sim/history';
 import { createRandomWorld, type World } from '../sim/world';
 import type { Frame, WorkerRequest, WorkerResponse } from './protocol';
 
@@ -71,6 +72,11 @@ export class SimHost {
       (fields as Record<string, Float32Array | Int32Array>)[name] = copy;
       transfer.push(copy.buffer);
     }
+    const history = {} as Record<HistorySeries, Float64Array>;
+    for (const name of HISTORY_SERIES) {
+      history[name] = Float64Array.from(planet.history[name]);
+      transfer.push(history[name].buffer);
+    }
     const { width, height, cellCount } = planet.grid;
     const frame: Frame = {
       grid: { width, height, cellCount },
@@ -81,6 +87,7 @@ export class SimHost {
       co2: planet.globals.atmosphere.co2,
       iceFraction: planet.globals.iceFraction,
       timings: Object.fromEntries(simulation.timings),
+      history,
     };
     this.post({ type: 'frame', frame }, transfer);
   }

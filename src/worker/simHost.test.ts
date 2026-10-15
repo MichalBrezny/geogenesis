@@ -31,7 +31,10 @@ describe('SimHost', () => {
     expect(frame.year).toBeGreaterThan(0);
     expect(frame.grid).toEqual({ width: 32, height: 16, cellCount: 512 });
     expect(frame.fields.elevation).toHaveLength(512);
-    expect(transfers[0]).toHaveLength(Object.keys(frame.fields).length);
+    expect(transfers[0]).toHaveLength(
+      Object.keys(frame.fields).length + Object.keys(frame.history).length,
+    );
+    expect(frame.history.year).toEqual(Float64Array.of(frame.year));
   });
 
   it('steps once on request and keeps stepping while running', () => {

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { t } from '../i18n/i18n';
 import { MAP_LAYERS, renderLayer, type MapLayer } from '../render/mapRenderer';
 import type { Frame, WorkerRequest, WorkerResponse } from '../worker/protocol';
+import { HistoryCharts } from './charts/HistoryCharts';
+import { formatPpm } from './format';
 
 /** Grid resolutions offered for a new planet, as [width, height]. */
 const RESOLUTIONS = [
@@ -9,11 +11,6 @@ const RESOLUTIONS = [
   [256, 128],
   [512, 256],
 ] as const;
-
-/** CO₂ spans 1 ppm to a pure-CO₂ atmosphere, so show it with adaptive precision. */
-function formatPpm(ppm: number): string {
-  return ppm < 10 ? ppm.toFixed(1) : Math.round(ppm).toLocaleString('en');
-}
 
 function randomSeed(): number {
   return Math.floor(Math.random() * 2 ** 32);
@@ -106,6 +103,7 @@ export function App() {
       </header>
       {error && <p className="error">{error}</p>}
       <canvas ref={canvasRef} className="map" />
+      {frame && <HistoryCharts history={frame.history} />}
     </main>
   );
 }

@@ -15,5 +15,12 @@
   "stats.co2": "CO₂: {value} ppm",
   "stats.ice": "Ice: {value}%",
   "stats.sun": "Sun: {value}%",
-  "stats.stepTime": "Step: {value} ms"
+  "stats.stepTime": "Step: {value} ms",
+  "chart.sectionLabel": "Planet history",
+  "chart.temperature": "Mean temperature",
+  "chart.co2": "Atmospheric CO₂",
+  "chart.ice": "Ice cover",
+  "chart.land": "Land area",
+  "chart.sun": "Sun (present = 100%)",
+  "chart.at": "at {age}"
 }

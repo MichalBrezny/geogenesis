@@ -10,6 +10,7 @@ import { createPlateDrift } from './models/geosphere/drift';
 import { flowRouting } from './models/geosphere/flowRouting';
 import { createStreamPowerEroder } from './models/geosphere/streamPower';
 import { generateTectonicPlanet, tectonicUplift } from './models/geosphere/tectonics';
+import { recordHistory } from './history';
 import { createSimulation, type Simulation } from './simulation';
 
 export interface WorldOptions extends PlanetOptions {
@@ -40,12 +41,14 @@ export function createRandomWorld(options: WorldOptions = {}): World {
       climate,
       precipitationModel,
       carbonCycle,
+      recordHistory,
     ],
     ['elevation', 'upliftRate', 'plateId', 'crustType'],
   );
   // Run once with dt = 0 so derived fields are valid before the first real step.
   simulation.step(planet, 0);
   spinUpAtmosphere(planet, [climate, precipitationModel, carbonCycle]);
+  recordHistory.runOneStep(planet, 0, createRng(0));
   return { planet, simulation };
 }
 
