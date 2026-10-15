@@ -22,6 +22,8 @@ export interface GlobalState {
   meanTemperature: number;
   /** Fraction of the surface covered by ice, 0..1 (written by the climate model). */
   iceFraction: number;
+  /** Carbon fluxes relative to present-day Earth (written by the carbon cycle). */
+  carbon: { outgassing: number; weathering: number };
   /** Player energy budget (Ω). */
   energy: number;
 }
@@ -33,6 +35,11 @@ export interface Plate {
   eulerPole: [number, number, number];
   /** Rotation rate in radians per year (surface speed = rate × radius × sin(angle to pole)). */
   angularSpeed: number;
+  /**
+   * Rotation rate the plate's driving forces aim for (rad/yr). Collisions slow the
+   * plate below it; it recovers once free.
+   */
+  targetSpeed: number;
   /**
    * Total rotation of the plate since its crust was anchored, as a row-major 3×3
    * matrix mapping reference positions to current positions.
@@ -89,6 +96,7 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
       atmosphere: { co2: 280, ch4: 0.7, o2: 0.21 },
       meanTemperature: 0,
       iceFraction: 0,
+      carbon: { outgassing: 1, weathering: 1 },
       energy: 0,
     },
     plates: [],

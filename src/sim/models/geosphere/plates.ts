@@ -14,6 +14,7 @@ export function randomPlate(rng: Rng, id: number, grid: Grid): Plate {
     id,
     eulerPole: [0, 0, 1],
     angularSpeed: 0,
+    targetSpeed: 0,
     rotation: [...IDENTITY],
     crust: {
       owned: new Uint8Array(grid.cellCount),
@@ -31,6 +32,7 @@ export function randomizeMotion(plate: Plate, rng: Rng, radius: number): void {
   const speed = MIN_PLATE_SPEED + rng.next() * (MAX_PLATE_SPEED - MIN_PLATE_SPEED);
   plate.eulerPole = pole;
   plate.angularSpeed = speed / radius;
+  plate.targetSpeed = plate.angularSpeed;
 }
 
 export function randomUnitVector(rng: Rng): [number, number, number] {

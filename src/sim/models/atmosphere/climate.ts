@@ -32,9 +32,15 @@ export interface ClimateOptions {
   diffusivity?: number;
 }
 
-/** Radiative forcing (W/m²) of CO₂ and CH₄ relative to pre-industrial levels (Myhre et al. 1998). */
+/**
+ * Radiative forcing (W/m²) of CO₂ and CH₄ relative to pre-industrial levels.
+ * The logarithmic CO₂ term (Myhre et al. 1998) underestimates forcing at the very
+ * high CO₂ of early or snowball planets, so a quadratic term is added above the
+ * reference level (rough fit to radiative-convective models).
+ */
 export function greenhouseForcing(atmosphere: Atmosphere): number {
-  const co2 = 5.35 * Math.log(Math.max(atmosphere.co2, 1e-3) / REFERENCE_CO2);
+  const logRatio = Math.log(Math.max(atmosphere.co2, 1e-3) / REFERENCE_CO2);
+  const co2 = 5.35 * logRatio + 0.4 * Math.max(0, logRatio) ** 2;
   // The methane formula uses ppb.
   const ch4 = 0.036 * (Math.sqrt(atmosphere.ch4 * 1000) - Math.sqrt(REFERENCE_CH4 * 1000));
   return co2 + ch4;

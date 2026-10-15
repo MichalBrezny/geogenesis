@@ -1,4 +1,7 @@
+import type { SimComponent } from './core/component';
 import { createPlanet, type PlanetOptions, type PlanetState } from './core/planet';
+import { createRng } from './core/rng';
+import { createCarbonCycle } from './models/atmosphere/carbon';
 import { createClimate } from './models/atmosphere/climate';
 import { precipitationModel } from './models/atmosphere/precipitation';
 import { stellarEvolution } from './models/atmosphere/star';
@@ -24,6 +27,8 @@ export function createRandomWorld(options: WorldOptions = {}): World {
   const planet = createPlanet(options);
   planet.globals.year = options.startYear ?? 4.5e9;
   generateTectonicPlanet(planet);
+  const climate = createClimate();
+  const carbonCycle = createCarbonCycle();
   const simulation = createSimulation(
     [
       createPlateDrift(),
@@ -32,12 +37,26 @@ export function createRandomWorld(options: WorldOptions = {}): World {
       createStreamPowerEroder(),
       createLinearDiffuser(),
       stellarEvolution,
-      createClimate(),
+      climate,
       precipitationModel,
+      carbonCycle,
     ],
     ['elevation', 'upliftRate', 'plateId', 'crustType'],
   );
   // Run once with dt = 0 so derived fields are valid before the first real step.
   simulation.step(planet, 0);
+  spinUpAtmosphere(planet, [climate, precipitationModel, carbonCycle]);
   return { planet, simulation };
+}
+
+/**
+ * Lets the atmosphere settle into balance with the new planet without advancing
+ * time: alternates climate and carbon cycle with long carbon time steps, so the
+ * game does not open with a planet still adjusting from an arbitrary 280 ppm.
+ */
+function spinUpAtmosphere(planet: PlanetState, components: readonly SimComponent[]): void {
+  const rng = createRng(planet.rngState);
+  for (let iteration = 0; iteration < 10; iteration++) {
+    for (const component of components) component.runOneStep(planet, 20e6, rng);
+  }
 }

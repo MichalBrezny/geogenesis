@@ -10,6 +10,11 @@ const RESOLUTIONS = [
   [512, 256],
 ] as const;
 
+/** CO₂ spans 1 ppm to a pure-CO₂ atmosphere, so show it with adaptive precision. */
+function formatPpm(ppm: number): string {
+  return ppm < 10 ? ppm.toFixed(1) : Math.round(ppm).toLocaleString('en');
+}
+
 function randomSeed(): number {
   return Math.floor(Math.random() * 2 ** 32);
 }
@@ -92,6 +97,9 @@ export function App() {
           <>
             <span>{t('time.year', { year: frame.year.toLocaleString('en') })}</span>
             <span>{t('stats.meanTemperature', { value: frame.meanTemperature.toFixed(1) })}</span>
+            <span>{t('stats.co2', { value: formatPpm(frame.co2) })}</span>
+            <span>{t('stats.ice', { value: (frame.iceFraction * 100).toFixed(0) })}</span>
+            <span>{t('stats.sun', { value: (frame.solarInput * 100).toFixed(1) })}</span>
             <span className="muted">{t('stats.stepTime', { value: stepTime.toFixed(0) })}</span>
           </>
         )}

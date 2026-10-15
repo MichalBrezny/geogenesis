@@ -10,6 +10,12 @@ export type WorkerRequest =
 export interface Frame extends MapSource {
   year: number;
   meanTemperature: number;
+  /** Star luminosity relative to the present Sun. */
+  solarInput: number;
+  /** Atmospheric CO₂, ppm. */
+  co2: number;
+  /** Ice-covered fraction of the surface, 0..1. */
+  iceFraction: number;
   /** Milliseconds per simulation component in the last step. */
   timings: Record<string, number>;
 }

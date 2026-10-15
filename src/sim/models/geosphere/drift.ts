@@ -40,6 +40,8 @@ const SUBDUCTION_UPLIFT = 40;
 const MAX_ELEVATION = 6500;
 /** E-folding time (years) over which colliding continents bring both plates to a halt. */
 const COLLISION_STALL_TIME = 30e6;
+/** E-folding time (years) for a plate freed from a collision to regain its target speed. */
+const SPEED_RECOVERY_TIME = 80e6;
 /**
  * Years for a reference-grid shelf cell to accrete into continent when crust is fully
  * depleted. Finer grids have more, smaller coastal cells, so each accretes faster.
@@ -92,7 +94,12 @@ export function createPlateDrift(options: DriftOptions = {}): SimComponent {
       fillPlateHoles(state);
       const collisions = composePlates(state, rng);
       for (const plate of state.plates) {
-        if (collisions[plate.id]) plate.angularSpeed *= Math.exp(-dtYears / COLLISION_STALL_TIME);
+        if (collisions[plate.id]) {
+          plate.angularSpeed *= Math.exp(-dtYears / COLLISION_STALL_TIME);
+        } else {
+          const recovery = 1 - Math.exp(-dtYears / SPEED_RECOVERY_TIME);
+          plate.angularSpeed += (plate.targetSpeed - plate.angularSpeed) * recovery;
+        }
       }
       updateUplift(state, maxUpliftRate);
     },

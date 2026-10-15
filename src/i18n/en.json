@@ -12,5 +12,8 @@
   "layer.airTemperature": "Air temperature",
   "layer.precipitation": "Precipitation",
   "stats.meanTemperature": "Mean temperature: {value} °C",
+  "stats.co2": "CO₂: {value} ppm",
+  "stats.ice": "Ice: {value}%",
+  "stats.sun": "Sun: {value}%",
   "stats.stepTime": "Step: {value} ms"
 }

@@ -77,6 +77,9 @@ export class SimHost {
       fields,
       year: planet.globals.year,
       meanTemperature: planet.globals.meanTemperature,
+      solarInput: planet.globals.solarInput,
+      co2: planet.globals.atmosphere.co2,
+      iceFraction: planet.globals.iceFraction,
       timings: Object.fromEntries(simulation.timings),
     };
     this.post({ type: 'frame', frame }, transfer);
