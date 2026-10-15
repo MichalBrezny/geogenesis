@@ -1,23 +1,46 @@
 /**
  * Per-cell data layers, modelled on Landlab's grid fields.
  *
- * Every field is one Float32Array with one value per grid cell. Components
+ * Every field is one typed array with one value per grid cell. Components
  * declare which fields they read and write (see component.ts), and the
  * simulation validates that every input is produced by someone.
  *
- * Add new fields here; units go in the comment.
+ * Add new fields to FIELD_SPECS with their array type and unit.
  */
-export const FIELD_NAMES = [
-  'elevation', // m above sea level (negative = ocean floor)
-  'airTemperature', // °C
-] as const;
+interface FieldSpec {
+  readonly type: 'f32' | 'i32';
+  readonly unit: string;
+}
 
-export type FieldName = (typeof FIELD_NAMES)[number];
+export const FIELD_SPECS = {
+  /** Height above sea level (negative = ocean floor). */
+  elevation: { type: 'f32', unit: 'm' },
+  /** Surface air temperature. */
+  airTemperature: { type: 'f32', unit: '°C' },
+  /** Tectonic plate the cell belongs to. */
+  plateId: { type: 'i32', unit: '' },
+  /** Tectonic uplift rate (negative = subsidence). */
+  upliftRate: { type: 'f32', unit: 'm/yr' },
+  /** Downstream cell of steepest descent; -1 for outlets (ocean, sinks). */
+  flowReceiver: { type: 'i32', unit: '' },
+  /** Cell indices ordered from downstream to upstream (receivers before donors). */
+  flowUpstreamOrder: { type: 'i32', unit: '' },
+  /** Upstream contributing area, including the cell itself. */
+  drainageArea: { type: 'f32', unit: 'm²' },
+} as const satisfies Record<string, FieldSpec>;
 
-export type Fields = Record<FieldName, Float32Array>;
+export type FieldName = keyof typeof FIELD_SPECS;
+export const FIELD_NAMES = Object.keys(FIELD_SPECS) as FieldName[];
+
+type ArrayFor<T extends FieldSpec['type']> = T extends 'i32' ? Int32Array : Float32Array;
+
+export type Fields = { [K in FieldName]: ArrayFor<(typeof FIELD_SPECS)[K]['type']> };
 
 export function createFields(cellCount: number): Fields {
-  const fields = {} as Fields;
-  for (const name of FIELD_NAMES) fields[name] = new Float32Array(cellCount);
-  return fields;
+  const fields: Record<string, Float32Array | Int32Array> = {};
+  for (const name of FIELD_NAMES) {
+    fields[name] =
+      FIELD_SPECS[name].type === 'i32' ? new Int32Array(cellCount) : new Float32Array(cellCount);
+  }
+  return fields as Fields;
 }

@@ -1,0 +1,167 @@
+import { describe, expect, it } from 'vitest';
+import { cellIndex, getTopology, NEIGHBOR_COUNT } from '../../core/grid';
+import { createPlanet, type PlanetState } from '../../core/planet';
+import { createRng } from '../../core/rng';
+import { createLinearDiffuser } from './diffusion';
+import { flowRouting } from './flowRouting';
+import { createStreamPowerEroder } from './streamPower';
+import { generateTectonicPlanet } from './tectonics';
+
+const rng = createRng(1);
+
+/** Small planet: ocean everywhere except a land ridge sloping east into a basin with a closed pit. */
+function valleyPlanet(): PlanetState {
+  const planet = createPlanet({ width: 16, height: 8 });
+  const { elevation } = planet.fields;
+  elevation.fill(-1000);
+  for (let x = 2; x <= 10; x++) {
+    for (let y = 2; y <= 5; y++) elevation[cellIndex(planet.grid, x, y)] = 100 * (11 - x);
+  }
+  // A closed depression in the middle of the land.
+  elevation[cellIndex(planet.grid, 6, 3)] = 50;
+  return planet;
+}
+
+describe('flowRouting', () => {
+  it('drains every land cell to the ocean, also through depressions', () => {
+    const planet = valleyPlanet();
+    flowRouting.runOneStep(planet, 0, rng);
+    const { elevation, flowReceiver } = planet.fields;
+    for (let i = 0; i < elevation.length; i++) {
+      if (elevation[i]! < 0) {
+        expect(flowReceiver[i]).toBe(-1);
+        continue;
+      }
+      let cell = i;
+      for (let steps = 0; flowReceiver[cell]! >= 0; steps++) {
+        expect(steps).toBeLessThan(elevation.length);
+        cell = flowReceiver[cell]!;
+      }
+      expect(elevation[cell]!).toBeLessThan(0);
+    }
+  });
+
+  it('orders receivers before donors and conserves drainage area', () => {
+    const planet = valleyPlanet();
+    flowRouting.runOneStep(planet, 0, rng);
+    const { flowReceiver, flowUpstreamOrder, drainageArea } = planet.fields;
+    const position = new Int32Array(flowUpstreamOrder.length);
+    flowUpstreamOrder.forEach((cell, k) => (position[cell] = k));
+    let outletArea = 0;
+    let totalArea = 0;
+    for (let i = 0; i < flowReceiver.length; i++) {
+      totalArea += planet.grid.rowCellArea[Math.floor(i / planet.grid.width)]!;
+      const r = flowReceiver[i]!;
+      if (r < 0) outletArea += drainageArea[i]!;
+      else expect(position[r]!).toBeLessThan(position[i]!);
+    }
+    expect(outletArea / totalArea).toBeCloseTo(1, 4);
+  });
+
+  it('routes to the lowest cell on a planet without ocean', () => {
+    const planet = createPlanet({ width: 8, height: 4 });
+    planet.fields.elevation.fill(500);
+    planet.fields.elevation[5] = 100;
+    flowRouting.runOneStep(planet, 0, rng);
+    expect(planet.fields.flowReceiver[5]).toBe(-1);
+    expect(planet.fields.drainageArea[5]! / 4).toBeGreaterThan(planet.grid.rowCellArea[0]!);
+  });
+});
+
+describe('streamPowerEroder', () => {
+  it('lowers land towards base level, never below its receiver or sea level', () => {
+    const planet = valleyPlanet();
+    flowRouting.runOneStep(planet, 0, rng);
+    const before = Float32Array.from(planet.fields.elevation);
+    createStreamPowerEroder({ erodibility: 1e-6 }).runOneStep(planet, 1e7, rng);
+    const { elevation, flowReceiver } = planet.fields;
+    let lowered = 0;
+    for (let i = 0; i < elevation.length; i++) {
+      expect(elevation[i]!).toBeLessThanOrEqual(before[i]!);
+      if (elevation[i]! < before[i]!) lowered++;
+      const r = flowReceiver[i]!;
+      if (r >= 0 && before[i]! > Math.max(before[r]!, 0)) {
+        expect(elevation[i]!).toBeGreaterThanOrEqual(Math.max(elevation[r]!, 0) - 1e-3);
+      }
+    }
+    expect(lowered).toBeGreaterThan(0);
+  });
+
+  it('does not incise a closed depression while its outlet stays above it', () => {
+    const planet = valleyPlanet();
+    flowRouting.runOneStep(planet, 0, rng);
+    createStreamPowerEroder({ erodibility: 1e-9 }).runOneStep(planet, 1e6, rng);
+    expect(planet.fields.elevation[cellIndex(planet.grid, 6, 3)]).toBe(50);
+  });
+});
+
+describe('linearDiffuser', () => {
+  it('conserves land volume away from the coast and stays stable for huge time steps', () => {
+    const planet = createPlanet({ width: 32, height: 16 });
+    const { elevation } = planet.fields;
+    elevation.fill(1000);
+    elevation[cellIndex(planet.grid, 10, 8)] = 5000;
+    const volume = () => {
+      let v = 0;
+      for (let i = 0; i < elevation.length; i++)
+        v += elevation[i]! * planet.grid.rowCellArea[Math.floor(i / planet.grid.width)]!;
+      return v;
+    };
+    const before = volume();
+    createLinearDiffuser({ diffusivity: 1e4 }).runOneStep(planet, 1e8, rng);
+    expect(volume() / before).toBeCloseTo(1, 4);
+    expect(Math.max(...elevation)).toBeLessThan(5000);
+    expect(Math.min(...elevation)).toBeGreaterThanOrEqual(1000 - 1e-3);
+  });
+});
+
+describe('generateTectonicPlanet', () => {
+  it('assigns every cell to a plate and roughly honours the ocean fraction', () => {
+    const planet = createPlanet({ seed: 9 });
+    generateTectonicPlanet(planet, { oceanFraction: 0.7 });
+    const { plateId, elevation } = planet.fields;
+    expect(Math.min(...plateId)).toBeGreaterThanOrEqual(0);
+    expect(Math.max(...plateId)).toBeLessThan(planet.plates.length);
+    const ocean = elevation.filter((e) => e < 0).length / elevation.length;
+    expect(ocean).toBeGreaterThan(0.6);
+    expect(ocean).toBeLessThan(0.8);
+  });
+
+  it('only uplifts cells next to or near a plate boundary', () => {
+    const planet = createPlanet({ seed: 9 });
+    generateTectonicPlanet(planet);
+    const { neighbors } = getTopology(planet.grid);
+    const { plateId, upliftRate } = planet.fields;
+    // Distance (in cells) to the nearest boundary, by breadth-first search.
+    const distance = new Int32Array(plateId.length).fill(-1);
+    const queue: number[] = [];
+    for (let i = 0; i < plateId.length; i++) {
+      for (let d = 0; d < NEIGHBOR_COUNT; d += 2) {
+        const n = neighbors[i * NEIGHBOR_COUNT + d]!;
+        if (n >= 0 && plateId[n] !== plateId[i]) {
+          distance[i] = 0;
+          queue.push(i);
+          break;
+        }
+      }
+    }
+    for (let k = 0; k < queue.length; k++) {
+      const c = queue[k]!;
+      for (let d = 0; d < NEIGHBOR_COUNT; d += 2) {
+        const n = neighbors[c * NEIGHBOR_COUNT + d]!;
+        if (n >= 0 && distance[n] === -1) {
+          distance[n] = distance[c]! + 1;
+          queue.push(n);
+        }
+      }
+    }
+    let uplifted = 0;
+    for (let i = 0; i < upliftRate.length; i++) {
+      if (upliftRate[i]! > 0) {
+        uplifted++;
+        expect(distance[i]!).toBeLessThanOrEqual(3);
+      }
+    }
+    expect(uplifted).toBeGreaterThan(0);
+  });
+});

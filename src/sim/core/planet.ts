@@ -11,11 +11,21 @@ export interface GlobalState {
   energy: number;
 }
 
+/** A rigid tectonic plate rotating about an Euler pole. */
+export interface Plate {
+  id: number;
+  /** Unit vector of the rotation axis through the planet centre. */
+  eulerPole: [number, number, number];
+  /** Rotation rate in radians per year (surface speed = rate × radius × sin(angle to pole)). */
+  angularSpeed: number;
+}
+
 /** Complete simulation state. Must stay plain data so it can be serialized and sent to a worker. */
 export interface PlanetState {
   grid: Grid;
   fields: Fields;
   globals: GlobalState;
+  plates: Plate[];
   seed: number;
   rngState: number;
 }
@@ -39,6 +49,7 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
     grid,
     fields: createFields(grid.cellCount),
     globals: { year: 0, solarInput: 1, energy: 0 },
+    plates: [],
     seed,
     rngState: seed,
   };

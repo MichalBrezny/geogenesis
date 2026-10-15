@@ -6,7 +6,8 @@
   "controls.step": "Step",
   "controls.newPlanet": "New planet",
   "layer.label": "Map layer",
-  "layer.elevation": "Elevation",
+  "layer.terrain": "Terrain and rivers",
+  "layer.plates": "Tectonic plates",
   "layer.airTemperature": "Air temperature",
   "stats.meanTemperature": "Mean temperature: {value} °C"
 }

@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { t } from '../i18n/i18n';
-import { renderLayer, type MapLayer } from '../render/mapRenderer';
+import { MAP_LAYERS, renderLayer, type MapLayer } from '../render/mapRenderer';
 import { areaWeightedMean } from '../sim/core/grid';
 import { createRandomWorld, type World } from '../sim/world';
 
 /** Simulated years per step. Will be driven by the selected time scale later. */
 const YEARS_PER_STEP = 1_000_000;
 const STEP_INTERVAL_MS = 200;
-const LAYERS: readonly MapLayer[] = ['elevation', 'airTemperature'];
 
 function randomSeed(): number {
   return Math.floor(Math.random() * 2 ** 32);
@@ -16,7 +15,7 @@ function randomSeed(): number {
 export function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [world, setWorld] = useState<World>(() => createRandomWorld({ seed: randomSeed() }));
-  const [layer, setLayer] = useState<MapLayer>('elevation');
+  const [layer, setLayer] = useState<MapLayer>('terrain');
   const [running, setRunning] = useState(false);
   // Simulation state is mutated in place; this counter triggers re-renders.
   const [revision, setRevision] = useState(0);
@@ -58,7 +57,7 @@ export function App() {
         <label>
           {t('layer.label')}{' '}
           <select value={layer} onChange={(e) => setLayer(e.target.value as MapLayer)}>
-            {LAYERS.map((l) => (
+            {MAP_LAYERS.map((l) => (
               <option key={l} value={l}>
                 {t(`layer.${l}`)}
               </option>
