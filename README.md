@@ -144,3 +144,13 @@ push and pull request.
 - Hobley, D. E. J., et al. (2017). Creative computing with Landlab. _Earth Surface Dynamics_, 5,
   21–46.
 - Whittaker, R. H. (1975). _Communities and Ecosystems_ (2nd ed.). Macmillan.
+
+## Authors
+
+- **Michal Břežný**: idea, direction, design decisions and testing.
+- **Claude** (Anthropic), via [Claude Code](https://claude.com/claude-code): co-author of the code,
+  the models and the documentation.
+
+## License
+
+[MIT](LICENSE) © 2026 Michal Břežný

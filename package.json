@@ -12,7 +12,11 @@
     "lint": "eslint .",
     "format": "prettier --write ."
   },
-  "license": "UNLICENSED",
+  "license": "MIT",
+  "author": "Michal Břežný",
+  "contributors": [
+    "Claude (Anthropic) via Claude Code"
+  ],
   "type": "module",
   "dependencies": {
     "react": "^19.3.1",
