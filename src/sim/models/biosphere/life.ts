@@ -58,9 +58,12 @@ export function createLife(options: LifeOptions = {}): SimComponent {
     inputs: ['elevation', 'airTemperature', 'iceCover', 'biome'],
     outputs: ['vegetation', 'lifeTier'],
     runOneStep(state, dtYears, rng) {
-      const suitability = computeSuitability(state);
       if (dtYears > 0) {
-        growAndSpread(state, suitability, dtYears);
+        // Only classes that exist, or could evolve now, need any work.
+        const alive = presentClasses(state);
+        const relevant = alive.map((isAlive, c) => isAlive || isEvolutionCandidate(c, alive));
+        const suitability = computeSuitability(state, relevant);
+        growAndSpread(state, suitability, dtYears, alive);
         evolve(state, suitability, dtYears, mutationRate, rng);
       }
       summarize(state);
@@ -79,14 +82,33 @@ export function seedPrimordialLife(state: PlanetState): void {
   appeared[prokaryotes] = state.globals.year;
 }
 
-/** Carrying capacity (0..1) of every class in every cell: suitability[c * n + i]. */
-function computeSuitability(state: PlanetState): Float32Array {
+/**
+ * Carrying capacity (0..1) of every class in every cell: suitability[c * n + i].
+ * Classes not marked `relevant` are left at zero.
+ */
+function computeSuitability(state: PlanetState, relevant: readonly boolean[]): Float32Array {
   const n = state.grid.cellCount;
   const result = new Float32Array(n * LIFE_CLASS_COUNT);
   for (let c = 0; c < LIFE_CLASS_COUNT; c++) {
-    classSuitability(state, c, result.subarray(c * n, (c + 1) * n));
+    if (relevant[c]) classSuitability(state, c, result.subarray(c * n, (c + 1) * n));
   }
   return result;
+}
+
+/** Whether each class has any population anywhere. */
+function presentClasses(state: PlanetState): boolean[] {
+  const n = state.grid.cellCount;
+  const { populations } = state.biota;
+  return LIFE_CLASSES.map((_, c) => {
+    for (let i = c * n; i < (c + 1) * n; i++) if (populations[i]! > 0) return true;
+    return false;
+  });
+}
+
+/** A missing class whose ancestor lives, so it may evolve this step. */
+function isEvolutionCandidate(c: number, alive: readonly boolean[]): boolean {
+  const ancestor = LIFE_CLASSES[c]!.ancestor;
+  return !alive[c] && ancestor !== undefined && alive[lifeClassIndex(ancestor)]!;
 }
 
 /**
@@ -129,23 +151,30 @@ function oxygenFactor(lifeClass: LifeClass, o2: number): number {
   return Math.min(1, Math.max(0, (o2 - lifeClass.minOxygen) / (0.5 * lifeClass.minOxygen)));
 }
 
-function growAndSpread(state: PlanetState, suitability: Float32Array, dtYears: number): void {
+function growAndSpread(
+  state: PlanetState,
+  suitability: Float32Array,
+  dtYears: number,
+  alive: readonly boolean[],
+): void {
   const { grid, biota } = state;
   const { neighbors } = getTopology(grid);
   const n = grid.cellCount;
   const response = 1 - Math.exp(-dtYears / POPULATION_RESPONSE_TIME);
-  const previous = Float32Array.from(biota.populations);
 
   for (let c = 0; c < LIFE_CLASS_COUNT; c++) {
+    // An absent class has nothing to grow or spread from.
+    if (!alive[c]) continue;
     const offset = c * n;
+    const previous = biota.populations.slice(offset, offset + n);
     for (let i = 0; i < n; i++) {
-      let present = previous[offset + i]! > 0;
+      let present = previous[i]! > 0;
       for (let d = 0; d < NEIGHBOR_COUNT && !present; d += 2) {
         const nb = neighbors[i * NEIGHBOR_COUNT + d]!;
-        present = nb >= 0 && previous[offset + nb]! >= COLONISATION_THRESHOLD;
+        present = nb >= 0 && previous[nb]! >= COLONISATION_THRESHOLD;
       }
       if (!present) continue;
-      const before = previous[offset + i]!;
+      const before = previous[i]!;
       let after = before + (suitability[offset + i]! - before) * response;
       if (after < EXTINCTION_THRESHOLD) after = 0;
       biota.populations[offset + i] = after;
@@ -163,12 +192,11 @@ function evolve(
   const { grid, biota, globals } = state;
   const { neighbors } = getTopology(grid);
   const n = grid.cellCount;
-  const alive = classTotals(state).map((total) => total > 0);
+  const alive = presentClasses(state);
 
   LIFE_CLASSES.forEach((lifeClass, c) => {
-    if (alive[c] || !lifeClass.ancestor) return;
-    const a = lifeClassIndex(lifeClass.ancestor);
-    if (!alive[a]) return;
+    if (!isEvolutionCandidate(c, alive)) return;
+    const a = lifeClassIndex(lifeClass.ancestor!);
 
     // Where could the new class arise? Cells it can live in, next to or within the
     // ancestor's range (so sea life can found land life along coasts and back).
@@ -242,6 +270,7 @@ function summarize(state: PlanetState): void {
   fields.vegetation.set(biota.populations.subarray(plants * n, (plants + 1) * n));
   fields.lifeTier.fill(0);
   LIFE_CLASSES.forEach((lifeClass, c) => {
+    if (biota.cover[c] === 0) return;
     const tier = LIFE_TIERS.indexOf(lifeClass.tier) + 1;
     for (let i = 0; i < n; i++) {
       if (biota.populations[c * n + i]! >= 0.05 && tier > fields.lifeTier[i]!) {

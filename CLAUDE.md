@@ -57,7 +57,7 @@ Key design decisions:
 - **History** (`src/sim/history.ts`): `recordHistory` samples global series each step into `PlanetState.history` (thinned past 2000 samples); frames carry it to the small-multiple uPlot charts (`src/ui/charts`). One measure per chart — no dual axes.
 - **Tuning.** Erodibility and uplift are effective values for ~300 km cells, not field measurements, and are tuned as a pair: their ratio sets equilibrium mountain height, their magnitude sets how fast landscapes evolve. Check changes over ~1 Gyr of 1 Myr steps (land fraction, mean land elevation, peak height), not just one step.
 - **Worker.** The simulation runs in a Web Worker (`src/worker/sim.worker.ts` → `SimHost`). The UI sends `WorkerRequest`s and receives `Frame`s: transferred copies of the fields in `RENDERED_FIELDS` plus stats. A field the map needs must be added to `RENDERED_FIELDS`.
-- **Performance.** `simulation.timings` gives per-component milliseconds for the last step (shown as "Step: N ms" in the UI). Measure before optimizing. Approximate step costs: 128×64 ≈ 18 ms, 256×128 ≈ 50 ms, 512×256 ≈ 200 ms; `plateDrift` dominates.
+- **Performance.** `simulation.timings` gives per-component milliseconds for the last step (shown as "Step: N ms" in the UI). Measure before optimizing. Approximate step costs on a young planet: 128×64 ≈ 27 ms, 256×128 ≈ 70 ms; `plateDrift` dominates. The life model only works on classes that exist or can evolve, and the carbon cycle sums weathering once per step — keep hot loops away from absent classes and per-iteration planet sweeps.
 
 ## Roadmap
 

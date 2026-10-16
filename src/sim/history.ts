@@ -1,6 +1,5 @@
 import type { SimComponent } from './core/component';
 import { Biome } from './data/biomes';
-import { areaWeightedMean } from './core/grid';
 import type { PlanetState } from './core/planet';
 import { SEA_LEVEL } from './models/geosphere/flowRouting';
 
@@ -43,17 +42,18 @@ export const recordHistory: SimComponent = {
   outputs: [],
   runOneStep(state) {
     const { history, globals } = state;
+    const surface = surfaceShares(state);
     const sample: Record<HistorySeries, number> = {
       year: globals.year,
       meanTemperature: globals.meanTemperature,
       co2: globals.atmosphere.co2,
       iceFraction: globals.iceFraction,
       solarInput: globals.solarInput,
-      landFraction: landFraction(state),
-      whiteDaisies: areaWeightedMean(state.grid, state.fields.daisyWhite),
-      blackDaisies: areaWeightedMean(state.grid, state.fields.daisyBlack),
-      forestFraction: forestFraction(state),
-      desertFraction: biomeFraction(state, [Biome.Desert]),
+      landFraction: surface.land,
+      whiteDaisies: surface.whiteDaisies,
+      blackDaisies: surface.blackDaisies,
+      forestFraction: surface.forest,
+      desertFraction: surface.desert,
       o2: globals.atmosphere.o2,
       ch4: globals.atmosphere.ch4,
       livingClasses: state.biota.cover.filter((cover) => cover > 0).length,
@@ -77,24 +77,25 @@ const FOREST_BIOMES: readonly Biome[] = [
   Biome.Swamp,
 ];
 
-/** Fraction of the planet's surface actually covered by forest: forest climate × plant cover. */
-function forestFraction(state: PlanetState): number {
-  const { biome, vegetation } = state.fields;
-  const forest = Float32Array.from(biome, (b, i) =>
-    FOREST_BIOMES.includes(b as Biome) ? vegetation[i]! : 0,
-  );
-  return areaWeightedMean(state.grid, forest);
-}
-
-/** Fraction of the planet's surface covered by the given biomes. */
-function biomeFraction(state: PlanetState, biomes: readonly Biome[]): number {
-  const covered = Float32Array.from(state.fields.biome, (b) =>
-    biomes.includes(b as Biome) ? 1 : 0,
-  );
-  return areaWeightedMean(state.grid, covered);
-}
-
-function landFraction(state: PlanetState): number {
-  const land = state.fields.elevation.map((h) => (h >= SEA_LEVEL ? 1 : 0));
-  return areaWeightedMean(state.grid, land);
+/**
+ * Area fractions of the planet's surface in one pass: land, actual forest
+ * (forest climate × plant cover), desert and daisies.
+ */
+function surfaceShares(state: PlanetState) {
+  const { grid, fields } = state;
+  const { elevation, biome, vegetation, daisyWhite, daisyBlack } = fields;
+  const shares = { land: 0, forest: 0, desert: 0, whiteDaisies: 0, blackDaisies: 0 };
+  for (let y = 0; y < grid.height; y++) {
+    const weight = grid.rowAreaWeight[y]!;
+    for (let x = 0; x < grid.width; x++) {
+      const i = y * grid.width + x;
+      if (elevation[i]! >= SEA_LEVEL) shares.land += weight;
+      const b = biome[i] as Biome;
+      if (FOREST_BIOMES.includes(b)) shares.forest += weight * vegetation[i]!;
+      else if (b === Biome.Desert) shares.desert += weight;
+      shares.whiteDaisies += weight * daisyWhite[i]!;
+      shares.blackDaisies += weight * daisyBlack[i]!;
+    }
+  }
+  return shares;
 }
