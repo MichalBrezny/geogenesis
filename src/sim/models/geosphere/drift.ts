@@ -25,6 +25,8 @@ export interface DriftOptions {
   continentalFraction?: number;
 }
 
+/** Longest plate move (years) computed in one go; the model is tuned for 1 Myr steps. */
+const MAX_STEP = 1e6;
 /** Elevation of freshly formed ocean floor at a spreading ridge, in metres. */
 const RIDGE_DEPTH = -2600;
 /** E-folding time (years) for young ocean floor to cool and sink to abyssal depth. */
@@ -78,33 +80,42 @@ export function createPlateDrift(options: DriftOptions = {}): SimComponent {
     name: 'plateDrift',
     inputs: ['elevation', 'plateId', 'crustType'],
     outputs: ['elevation', 'plateId', 'crustType', 'upliftRate'],
-    runOneStep(state, dtYears, rng) {
+    runOneStep(state, stepYears, rng) {
       const speed = speedFactor * state.controls.driftSpeed;
-      if (dtYears <= 0 || speed <= 0) return;
-      coolOceanFloor(state, dtYears);
-      accreteContinents(state, dtYears, continentalFraction, rng);
-      // Persist erosion, uplift etc. from the last step into the plates before moving them.
-      writeBackToPlates(state);
-
-      if (rng.next() < 1 - Math.exp(-dtYears / reorganizationInterval)) {
-        reorganizePlates(state, rng);
+      if (stepYears <= 0 || speed <= 0) return;
+      // Collisions stall plates only after they are detected, so long steps let
+      // continents plough through each other: move in sub-steps of at most MAX_STEP.
+      const substeps = Math.ceil(stepYears / MAX_STEP);
+      for (let k = 0; k < substeps; k++) {
+        driftOnce(state, stepYears / substeps, speed, rng);
       }
-      for (const plate of state.plates) {
-        rotatePlate(plate, plate.angularSpeed * speed * dtYears);
-      }
-      fillPlateHoles(state);
-      const collisions = composePlates(state, rng);
-      for (const plate of state.plates) {
-        if (collisions[plate.id]) {
-          plate.angularSpeed *= Math.exp(-dtYears / COLLISION_STALL_TIME);
-        } else {
-          const recovery = 1 - Math.exp(-dtYears / SPEED_RECOVERY_TIME);
-          plate.angularSpeed += (plate.targetSpeed - plate.angularSpeed) * recovery;
-        }
-      }
-      updateUplift(state, maxUpliftRate);
     },
   };
+
+  function driftOnce(state: PlanetState, dtYears: number, speed: number, rng: Rng): void {
+    coolOceanFloor(state, dtYears);
+    accreteContinents(state, dtYears, continentalFraction, rng);
+    // Persist erosion, uplift etc. from the last step into the plates before moving them.
+    writeBackToPlates(state);
+
+    if (rng.next() < 1 - Math.exp(-dtYears / reorganizationInterval)) {
+      reorganizePlates(state, rng);
+    }
+    for (const plate of state.plates) {
+      rotatePlate(plate, plate.angularSpeed * speed * dtYears);
+    }
+    fillPlateHoles(state);
+    const collisions = composePlates(state, rng);
+    for (const plate of state.plates) {
+      if (collisions[plate.id]) {
+        plate.angularSpeed *= Math.exp(-dtYears / COLLISION_STALL_TIME);
+      } else {
+        const recovery = 1 - Math.exp(-dtYears / SPEED_RECOVERY_TIME);
+        plate.angularSpeed += (plate.targetSpeed - plate.angularSpeed) * recovery;
+      }
+    }
+    updateUplift(state, maxUpliftRate);
+  }
 }
 
 /**

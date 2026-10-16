@@ -1,5 +1,4 @@
 import type { SimComponent } from '../../core/component';
-import { getTopology, NEIGHBOR_COUNT, type Grid } from '../../core/grid';
 import type { PlanetState } from '../../core/planet';
 import type { Rng } from '../../core/rng';
 import type { Biome } from '../../data/biomes';
@@ -7,6 +6,7 @@ import { PEOPLE_PER_KM2, SENTIENCE_POTENTIAL, TECH_AGES } from '../../data/civil
 import { LIFE_CLASSES, lifeClassIndex, PLANT_PRODUCTIVITY } from '../../data/lifeClasses';
 import { recordEvent } from '../../events';
 import { classSuitability } from '../biosphere/life';
+import { disperse } from '../dispersal';
 import { SEA_LEVEL } from '../geosphere/flowRouting';
 
 export interface CivilizationOptions {
@@ -26,8 +26,8 @@ const MIN_DENSITY = 1e-6;
 const PLAGUE_RATE = 2e-4;
 /** World population (billions) below which a civilization is gone. */
 const COLLAPSE_POPULATION = 1e-5;
-/** How far (cells, straight lines) a seafaring civilization can settle across water. */
-const SEA_CROSSING = 3;
+/** How far (m, along a row or column) a seafaring civilization can settle across water. */
+const SEA_CROSSING = 500_000;
 
 /**
  * Sentience and civilization.
@@ -36,7 +36,7 @@ const SEA_CROSSING = 3;
  * chance to become sentient, weighted by their potential (mammals and birds
  * most, but even mollusks can). The civilization then grows where its species
  * can live and its food allows — farming and industry raise how much of the
- * land's production it can use — spreads to neighbouring cells (and over
+ * land's production it can use — spreads at its age's speed (and over
  * narrow seas once seafaring), clears vegetation, and advances through the tech
  * ages. Industry burns fossil fuels, warming the planet; plagues and nuclear
  * wars set it back; finishing the Nanotech age means Exodus: the civilization
@@ -61,7 +61,7 @@ export function createCivilization(options: CivilizationOptions = {}): SimCompon
       }
       if (dtYears <= 0) return;
       const capacity = carryingCapacity(state, civ.species);
-      settle(state, capacity, dtYears);
+      settle(state, capacity, dtYears, rng);
       clearLand(state, capacity);
       civ.population = worldPopulation(state);
       if (civ.population < COLLAPSE_POPULATION) {
@@ -136,40 +136,27 @@ function carryingCapacity(state: PlanetState, species: number): Float32Array {
   return capacity;
 }
 
-function settle(state: PlanetState, capacity: Float32Array, dtYears: number): void {
-  const { grid } = state;
-  const { neighbors } = getTopology(grid);
+function settle(state: PlanetState, capacity: Float32Array, dtYears: number, rng: Rng): void {
   const density = state.fields.civilization;
   const age = TECH_AGES[state.civilization.age]!;
-  const before = Float32Array.from(density);
   const growth = 1 - Math.exp(-age.growthRate * dtYears);
   for (let i = 0; i < density.length; i++) {
-    let reachable = before[i]! > MIN_DENSITY;
-    for (let d = 0; d < NEIGHBOR_COUNT && !reachable; d += 2) {
-      const nb = neighbors[i * NEIGHBOR_COUNT + d]!;
-      reachable = nb >= 0 && before[nb]! > MIN_DENSITY;
-    }
-    if (!reachable && age.seafaring) reachable = settledAcrossWater(grid, before, i);
-    if (!reachable) continue;
-    density[i] = before[i]! + (capacity[i]! - before[i]!) * growth;
+    if (density[i]! <= MIN_DENSITY) continue;
+    density[i] = density[i]! + (capacity[i]! - density[i]!) * growth;
     if (density[i]! < MIN_DENSITY) density[i] = 0;
   }
-}
-
-/** Whether a settled cell lies within SEA_CROSSING cells along a row or column. */
-function settledAcrossWater(grid: Grid, density: Float32Array, i: number): boolean {
-  const x = i % grid.width;
-  const y = (i - x) / grid.width;
-  for (let k = 2; k <= SEA_CROSSING; k++) {
-    const candidates = [
-      y * grid.width + ((x + k) % grid.width),
-      y * grid.width + ((x - k + grid.width) % grid.width),
-      y - k >= 0 ? i - k * grid.width : -1,
-      y + k < grid.height ? i + k * grid.width : -1,
-    ];
-    if (candidates.some((c) => c >= 0 && density[c]! > MIN_DENSITY)) return true;
-  }
-  return false;
+  disperse(state.grid, {
+    dtYears,
+    speed: age.spreadSpeed,
+    reach: age.seafaring ? SEA_CROSSING : 0,
+    rng,
+    isSource: (i) => density[i]! > MIN_DENSITY,
+    canEnter: (i) => density[i]! <= MIN_DENSITY && capacity[i]! > 0,
+    settle: (i, remaining) => {
+      const grown = capacity[i]! * (1 - Math.exp(-age.growthRate * remaining * dtYears));
+      density[i] = Math.max(grown, Math.min(capacity[i]!, 2 * MIN_DENSITY));
+    },
+  });
 }
 
 /** Farms and cities replace vegetation in proportion to how fully a cell is settled. */
@@ -252,10 +239,4 @@ function endCivilization(state: PlanetState, event: 'civilizationCollapsed' | 'e
   civ.population = 0;
   civ.sentientSince = null;
   state.fields.civilization.fill(0);
-}
-
-/** Simulated years per step for a planet: geological until a civilization arises. */
-export function civilizationStepYears(state: PlanetState, geologicalStep: number): number {
-  const civ = state.civilization;
-  return civ.species === null ? geologicalStep : TECH_AGES[civ.age]!.yearsPerStep;
 }

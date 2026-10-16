@@ -30,20 +30,29 @@ describe('life', () => {
     expect(planet.biota.appeared[lifeClassIndex('prokaryotes')]).toBe(4e9);
   });
 
-  it('spreads about one cell per step into suitable cells only', () => {
-    const planet = waterWorld();
-    const n = planet.grid.cellCount;
-    const fish = lifeClassIndex('fish');
-    planet.globals.atmosphere.o2 = 0.21;
-    planet.biota.populations[fish * n + cellIndex(planet.grid, 4, 8)] = 0.5;
-    const life = createLife({ mutationRate: 0 });
-    life.runOneStep(planet, 1e6, rng);
-    expect(population(planet, 'fish', cellIndex(planet.grid, 5, 8))).toBeGreaterThan(0);
-    expect(population(planet, 'fish', cellIndex(planet.grid, 7, 8))).toBe(0);
-    for (let step = 0; step < 40; step++) life.runOneStep(planet, 1e6, rng);
-    // Fish cross the open ocean around the planet but never live on the land strip.
-    expect(population(planet, 'fish', cellIndex(planet.grid, 20, 8))).toBeGreaterThan(0.5);
-    expect(population(planet, 'fish', cellIndex(planet.grid, 10, 8))).toBe(0);
+  it('spreads into suitable cells only, at a speed independent of the step length', () => {
+    /** Mean number of cells fish hold after `years`, from one founding cell. */
+    const spread = (years: number, dt: number) => {
+      let total = 0;
+      for (let seed = 1; seed <= 6; seed++) {
+        const planet = waterWorld();
+        const n = planet.grid.cellCount;
+        planet.globals.atmosphere.o2 = 0.21;
+        planet.biota.populations[lifeClassIndex('fish') * n + cellIndex(planet.grid, 20, 8)] = 0.5;
+        const life = createLife({ mutationRate: 0 });
+        const stepRng = createRng(seed);
+        for (let t = 0; t < years; t += dt) life.runOneStep(planet, dt, stepRng);
+        for (let i = 0; i < n; i++) if (population(planet, 'fish', i) > 0) total++;
+        // Fish never live on the land strip.
+        expect(population(planet, 'fish', cellIndex(planet.grid, 10, 8))).toBe(0);
+      }
+      return total / 6;
+    };
+    const coarse = spread(12e6, 4e6);
+    const fine = spread(12e6, 0.5e6);
+    expect(coarse).toBeGreaterThan(3);
+    expect(coarse).toBeLessThan(200);
+    expect(Math.abs(coarse - fine) / fine).toBeLessThan(0.35);
   });
 
   it('dies out where conditions become impossible', () => {

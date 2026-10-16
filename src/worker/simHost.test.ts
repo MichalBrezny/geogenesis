@@ -2,9 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import type { WorkerResponse } from './protocol';
 import { SimHost } from './simHost';
 
-/** Step length of the random-planet scenario. */
-const YEARS_PER_STEP = 1e6;
-
 function createHost() {
   const messages: WorkerResponse[] = [];
   const transfers: Transferable[][] = [];
@@ -43,19 +40,28 @@ describe('SimHost', () => {
   it('steps once on request and keeps stepping while running', () => {
     const { host, messages, queue, runQueued } = createHost();
     host.handle({ type: 'create', scenario: 'random', seed: 1, width: 32, height: 16 });
-    const start = lastFrame(messages).year;
+    // Each frame announces the length of the next step (set by the planet's era).
+    const advance = () => {
+      const before = lastFrame(messages);
+      return before.year + before.stepYears;
+    };
+    let expected = advance();
     host.handle({ type: 'step' });
-    expect(lastFrame(messages).year).toBe(start + YEARS_PER_STEP);
+    expect(lastFrame(messages).year).toBe(expected);
+    expect(lastFrame(messages).era).toBe('geological');
 
     host.handle({ type: 'run', running: true });
+    expected = advance();
     runQueued();
+    expect(lastFrame(messages).year).toBe(expected);
+    expected = advance();
     runQueued();
-    expect(lastFrame(messages).year).toBe(start + 3 * YEARS_PER_STEP);
+    expect(lastFrame(messages).year).toBe(expected);
 
     host.handle({ type: 'run', running: false });
     runQueued();
     expect(queue).toHaveLength(0);
-    expect(lastFrame(messages).year).toBe(start + 3 * YEARS_PER_STEP);
+    expect(lastFrame(messages).year).toBe(expected);
   });
 
   it('saves a planet and loads it back', async () => {

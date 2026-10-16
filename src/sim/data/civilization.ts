@@ -21,6 +21,8 @@ export interface TechAge {
   warRisk: number;
   /** Can cross narrow seas (boats). */
   seafaring: boolean;
+  /** Speed at which settlement spreads into new land, m/yr (walking, then roads, then rail). */
+  spreadSpeed: number;
 }
 
 export const TECH_AGES: readonly TechAge[] = [
@@ -35,6 +37,7 @@ export const TECH_AGES: readonly TechAge[] = [
     emissions: 0,
     warRisk: 0,
     seafaring: false,
+    spreadSpeed: 80,
   },
   {
     key: 'bronze',
@@ -47,6 +50,7 @@ export const TECH_AGES: readonly TechAge[] = [
     emissions: 0,
     warRisk: 0,
     seafaring: false,
+    spreadSpeed: 800,
   },
   {
     key: 'iron',
@@ -59,6 +63,7 @@ export const TECH_AGES: readonly TechAge[] = [
     emissions: 0,
     warRisk: 0,
     seafaring: true,
+    spreadSpeed: 800,
   },
   {
     key: 'industrial',
@@ -71,6 +76,7 @@ export const TECH_AGES: readonly TechAge[] = [
     emissions: 0.3,
     warRisk: 0,
     seafaring: true,
+    spreadSpeed: 15000,
   },
   {
     key: 'atomic',
@@ -83,6 +89,7 @@ export const TECH_AGES: readonly TechAge[] = [
     emissions: 0.35,
     warRisk: 0.004,
     seafaring: true,
+    spreadSpeed: 30000,
   },
   {
     key: 'information',
@@ -95,6 +102,7 @@ export const TECH_AGES: readonly TechAge[] = [
     emissions: 0.25,
     warRisk: 0.002,
     seafaring: true,
+    spreadSpeed: 30000,
   },
   {
     key: 'nanotech',
@@ -107,6 +115,7 @@ export const TECH_AGES: readonly TechAge[] = [
     emissions: 0.05,
     warRisk: 0.001,
     seafaring: true,
+    spreadSpeed: 30000,
   },
 ];
 

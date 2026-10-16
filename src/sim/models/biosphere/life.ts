@@ -12,6 +12,7 @@ import {
   type LifeClass,
 } from '../../data/lifeClasses';
 import { recordEvent } from '../../events';
+import { disperse } from '../dispersal';
 import { SEA_LEVEL } from '../geosphere/flowRouting';
 
 export interface LifeOptions {
@@ -19,12 +20,22 @@ export interface LifeOptions {
   mutationRate?: number;
 }
 
-/** Years for a population to settle to a new carrying capacity; far shorter than a step. */
+/** Years for a population to settle to a new carrying capacity (e-folding time). */
 const POPULATION_RESPONSE_TIME = 2e6;
+/**
+ * Speed (m/yr) at which life colonises habitable land or sea next to where it
+ * lives: 300 km per million years, so a class crosses a continent in some tens
+ * of millions of years — slow enough to watch, fast against evolution.
+ */
+const DISPERSAL_SPEED = 0.3;
 /** Population below which a class is gone from a cell. */
 const EXTINCTION_THRESHOLD = 1e-3;
-/** A neighbour must hold at least this much of a class to colonise a cell from it. */
-const COLONISATION_THRESHOLD = 0.05;
+/**
+ * A cell must hold at least this much of a class to send out colonists; newly
+ * colonised cells start at least this dense (if they can hold it), so the front
+ * keeps moving however short the steps are.
+ */
+const COLONISATION_THRESHOLD = 0.005;
 /** Population a new class starts with in the cell where it evolves. */
 const FOUNDER_POPULATION = 0.2;
 /**
@@ -42,9 +53,9 @@ const SEA_WATER_MIN_TEMPERATURE = -1.8;
  * Life: a population of every class in every cell, and evolution of new classes.
  *
  * Each step a class moves towards the carrying capacity its environment allows
- * (habitat, temperature, oxygen, plants for land animals) in cells it already
- * holds or can reach from a neighbouring cell, so it spreads about one cell per
- * step and cannot cross oceans or land it cannot live on. Classes vanish where
+ * (habitat, temperature, oxygen, plants for land animals) in cells it holds, and
+ * colonises neighbouring habitable cells at DISPERSAL_SPEED (independent of the
+ * step length and grid), so it cannot cross oceans or land it cannot live on. Classes vanish where
  * conditions turn against them — mass extinctions follow climate catastrophes.
  *
  * A class that is not alive can evolve from its living ancestor; the chance
@@ -63,7 +74,7 @@ export function createLife(options: LifeOptions = {}): SimComponent {
         const alive = presentClasses(state);
         const relevant = alive.map((isAlive, c) => isAlive || isEvolutionCandidate(c, alive));
         const suitability = computeSuitability(state, relevant);
-        growAndSpread(state, suitability, dtYears, alive);
+        growAndSpread(state, suitability, dtYears, alive, rng);
         evolve(state, suitability, dtYears, mutationRate, rng);
       }
       summarize(state);
@@ -156,29 +167,37 @@ function growAndSpread(
   suitability: Float32Array,
   dtYears: number,
   alive: readonly boolean[],
+  rng: Rng,
 ): void {
   const { grid, biota } = state;
-  const { neighbors } = getTopology(grid);
   const n = grid.cellCount;
   const response = 1 - Math.exp(-dtYears / POPULATION_RESPONSE_TIME);
+  const populations = biota.populations;
 
   for (let c = 0; c < LIFE_CLASS_COUNT; c++) {
     // An absent class has nothing to grow or spread from.
     if (!alive[c]) continue;
     const offset = c * n;
-    const previous = biota.populations.slice(offset, offset + n);
     for (let i = 0; i < n; i++) {
-      let present = previous[i]! > 0;
-      for (let d = 0; d < NEIGHBOR_COUNT && !present; d += 2) {
-        const nb = neighbors[i * NEIGHBOR_COUNT + d]!;
-        present = nb >= 0 && previous[nb]! >= COLONISATION_THRESHOLD;
-      }
-      if (!present) continue;
-      const before = previous[i]!;
+      const before = populations[offset + i]!;
+      if (before === 0) continue;
       let after = before + (suitability[offset + i]! - before) * response;
       if (after < EXTINCTION_THRESHOLD) after = 0;
-      biota.populations[offset + i] = after;
+      populations[offset + i] = after;
     }
+    disperse(grid, {
+      dtYears,
+      speed: DISPERSAL_SPEED,
+      rng,
+      isSource: (i) => populations[offset + i]! >= COLONISATION_THRESHOLD,
+      canEnter: (i) =>
+        populations[offset + i] === 0 && suitability[offset + i]! > EXTINCTION_THRESHOLD,
+      settle: (i, remaining) => {
+        const capacity = suitability[offset + i]!;
+        const grown = capacity * (1 - Math.exp((-remaining * dtYears) / POPULATION_RESPONSE_TIME));
+        populations[offset + i] = Math.max(grown, Math.min(capacity, COLONISATION_THRESHOLD));
+      },
+    });
   }
 }
 

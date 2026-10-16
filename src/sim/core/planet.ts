@@ -3,6 +3,7 @@ import type { PlanetEvent } from '../events';
 import { createHistory, type History } from '../history';
 import { LIFE_CLASS_COUNT } from '../data/lifeClasses';
 import { createGrid, type Grid } from './grid';
+import type { Era } from '../eras';
 
 /** Well-mixed atmospheric gases. */
 export interface Atmosphere {
@@ -31,6 +32,8 @@ export interface GlobalState {
   energy: number;
   /** Experimental mode: tools cost nothing. */
   unlimitedEnergy: boolean;
+  /** Era the planet was in after the last step (see eras.ts); absent before the first step. */
+  era?: Era;
 }
 
 /** A rigid tectonic plate rotating about an Euler pole. */

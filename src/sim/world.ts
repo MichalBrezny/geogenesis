@@ -17,7 +17,8 @@ import { generateTectonicPlanet, tectonicUplift } from './models/geosphere/tecto
 import { recordHistory } from './history';
 import { createSimulation, withMinInterval, type Simulation } from './simulation';
 import { energyIncome, STARTING_ENERGY } from './tools/tools';
-import { civilizationStepYears, createCivilization } from './models/civilization/civilization';
+import { createCivilization } from './models/civilization/civilization';
+import { eraStepYears, eraTracker, planetEra, type Era } from './eras';
 
 export interface WorldOptions extends PlanetOptions {
   /**
@@ -39,15 +40,17 @@ export interface RandomWorldSettings {
 export interface World {
   planet: PlanetState;
   simulation: Simulation;
-  /** Simulated years the next step should cover (finer once a civilization arises). */
+  /** Simulated years the next step should cover (set by the planet's era). */
   stepYears: (planet: PlanetState) => number;
+  /** The planet's era, or null for scenarios without eras (Daisyworld). */
+  era: (planet: PlanetState) => Era | null;
 }
 
-/** Step length before any civilization: the geological and evolutionary time scale. */
-const GEOLOGICAL_STEP = 1e6;
 /** Geology and evolution update at most this often (years) during civilizations. */
 const SLOW_PROCESS_INTERVAL = 1e5;
 const EVOLUTION_INTERVAL = 1e4;
+/** Years between history samples. */
+const HISTORY_INTERVAL = 1e6;
 
 /** Creates a random planet with the standard component pipeline. */
 export function createRandomWorld(options: WorldOptions = {}): World {
@@ -92,8 +95,9 @@ export function randomWorldFromPlanet(
       biogeochemistry,
       createCarbonCycle(),
       energyIncome,
-      // One sample per geological step keeps the long history readable in the charts.
-      withMinInterval(recordHistory, GEOLOGICAL_STEP),
+      // One sample per million years keeps the long history readable in the charts.
+      withMinInterval(recordHistory, HISTORY_INTERVAL),
+      eraTracker,
     ],
     [
       'elevation',
@@ -109,7 +113,8 @@ export function randomWorldFromPlanet(
   return {
     planet,
     simulation,
-    stepYears: (state) => civilizationStepYears(state, GEOLOGICAL_STEP),
+    stepYears: eraStepYears,
+    era: planetEra,
   };
 }
 

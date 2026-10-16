@@ -220,5 +220,16 @@
   "controlHelp.driftSpeed": "How fast the tectonic plates move",
   "controlHelp.erosion": "How fast rain and rivers wear down mountains",
   "controlHelp.mutationRate": "How quickly new life classes evolve",
-  "app.creating": "Creating a planet…"
+  "app.creating": "Creating a planet…",
+  "event.eraReached": "The planet enters the {name}.",
+  "era.geological": "geological era",
+  "era.evolution": "evolution era",
+  "era.civilization": "civilization era",
+  "era.technology": "technology era",
+  "stat.era": "Era",
+  "stat.eraHint": "Each era runs at its own pace: 10 million years per step while only microbes live, 500,000 years once complex life evolves, then centuries to a few years per step as a civilization advances.",
+  "eraName.geological": "Geological",
+  "eraName.evolution": "Evolution",
+  "eraName.civilization": "Civilization",
+  "eraName.technology": "Technology"
 }

@@ -4,7 +4,8 @@ import { createRng } from '../../core/rng';
 import { TECH_AGES } from '../../data/civilization';
 import { LIFE_CLASS_COUNT, lifeClassIndex } from '../../data/lifeClasses';
 import { Biome } from '../../data/biomes';
-import { civilizationStepYears, createCivilization } from './civilization';
+import { eraStepYears } from '../../eras';
+import { createCivilization } from './civilization';
 
 const rng = createRng(7);
 
@@ -36,7 +37,7 @@ describe('civilization', () => {
     }
     expect(planet.civilization.species).toBe(lifeClassIndex('mammals'));
     expect(planet.events.at(-1)).toMatchObject({ key: 'sentience', subject: 'mammals' });
-    expect(civilizationStepYears(planet, 1e6)).toBe(TECH_AGES[0]!.yearsPerStep);
+    expect(eraStepYears(planet)).toBe(TECH_AGES[0]!.yearsPerStep);
   });
 
   it('grows, advances through the ages, burns fossil fuels and finally leaves', () => {
@@ -48,8 +49,8 @@ describe('civilization', () => {
     const co2Before = planet.globals.atmosphere.co2;
     let steps = 0;
     while (planet.civilization.exodusYear === null && steps < 5000) {
-      civilization.runOneStep(planet, civilizationStepYears(planet, 1e6), rng);
-      planet.globals.year += civilizationStepYears(planet, 1e6);
+      civilization.runOneStep(planet, eraStepYears(planet), rng);
+      planet.globals.year += eraStepYears(planet);
       steps++;
     }
     expect(planet.civilization.exodusYear).not.toBeNull();
@@ -67,7 +68,7 @@ describe('civilization', () => {
     const civilization = createCivilization({ sentienceTime: 1e3 });
     civilization.runOneStep(planet, 1e6, rng);
     for (let step = 0; step < 200 && planet.civilization.age < 3; step++) {
-      civilization.runOneStep(planet, civilizationStepYears(planet, 1e6), rng);
+      civilization.runOneStep(planet, eraStepYears(planet), rng);
     }
     expect(Math.min(...planet.fields.vegetation)).toBeLessThan(0.8);
   });

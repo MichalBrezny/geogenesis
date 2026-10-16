@@ -66,5 +66,5 @@ export function daisyworldFromPlanet(planet: PlanetState, withDaisies = true): W
     'biome',
     'vegetation',
   ]);
-  return { planet, simulation, stepYears: () => 5e6 };
+  return { planet, simulation, stepYears: () => 5e6, era: () => null };
 }

@@ -4,6 +4,7 @@ import type { ToolUse } from '../sim/tools/tools';
 import type { PlanetEvent } from '../sim/events';
 import type { HistorySeries } from '../sim/history';
 import type { ScenarioId } from '../sim/scenarios';
+import type { Era } from '../sim/eras';
 
 /** Messages from the UI to the simulation worker. */
 export type WorkerRequest =
@@ -40,6 +41,8 @@ export interface Frame extends MapSource {
   events: PlanetEvent[];
   /** Simulated years the next step will cover. */
   stepYears: number;
+  /** The planet's era (sets the step length), or null for scenarios without eras. */
+  era: Era | null;
   energy: number;
   unlimitedEnergy: boolean;
   controls: ModelControls;

@@ -21,7 +21,8 @@ export type EventKey =
   | 'civilizationCollapsed'
   | 'exodus'
   | 'meteor'
-  | 'monolith';
+  | 'monolith'
+  | 'eraReached';
 
 /** Only the most recent events are kept. */
 export const MAX_EVENTS = 100;

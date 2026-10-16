@@ -88,8 +88,17 @@ function Vitals({ frame }: { frame: Frame }) {
   const stepTime = Object.values(frame.timings).reduce((sum, ms) => sum + ms, 0);
   // Geological time reads best in Gyr; once steps are years long, the calendar year does.
   const age =
-    frame.stepYears >= 1e6 ? formatGyr(frame.year) : Math.round(frame.year).toLocaleString('en');
+    frame.stepYears >= 1e5 ? formatGyr(frame.year) : Math.round(frame.year).toLocaleString('en');
   const items: [MessageKey, MessageKey, string][] = [
+    ...(frame.era
+      ? [
+          ['stat.era', 'stat.eraHint', t(`eraName.${frame.era}`)] as [
+            MessageKey,
+            MessageKey,
+            string,
+          ],
+        ]
+      : []),
     ['stat.age', 'stat.ageHint', age],
     ['stat.step', 'stat.stepHint', formatStep(frame.stepYears)],
     ['stat.temperature', 'stat.temperatureHint', `${frame.meanTemperature.toFixed(1)} °C`],

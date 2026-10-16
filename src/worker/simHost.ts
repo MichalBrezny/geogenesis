@@ -149,6 +149,7 @@ export class SimHost {
       civilization: { ...planet.civilization },
       events: planet.events.slice(-EVENTS_IN_FRAME),
       stepYears: this.world.stepYears(planet),
+      era: this.world.era(planet),
       energy: planet.globals.energy,
       unlimitedEnergy: planet.globals.unlimitedEnergy,
       controls: { ...planet.controls },
