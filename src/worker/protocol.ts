@@ -19,6 +19,11 @@ export interface Frame extends MapSource {
   co2: number;
   /** Ice-covered fraction of the surface, 0..1. */
   iceFraction: number;
+  /** Atmospheric O₂ (fraction) and CH₄ (ppm). */
+  o2: number;
+  ch4: number;
+  /** Planet-wide cover (0..1) and first appearance (year or null) of each life class. */
+  life: { cover: number[]; appeared: (number | null)[] };
   /** Milliseconds per simulation component in the last step. */
   timings: Record<string, number>;
   /** The whole recorded history, one array per series. */

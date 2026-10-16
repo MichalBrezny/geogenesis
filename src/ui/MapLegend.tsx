@@ -1,5 +1,6 @@
 import { t, type MessageKey } from '../i18n/i18n';
-import type { MapLayer } from '../render/mapRenderer';
+import { LIFE_TIER_COLORS, type MapLayer } from '../render/mapRenderer';
+import { LIFE_TIERS } from '../sim/data/lifeClasses';
 import {
   elevationPalette,
   precipitationPalette,
@@ -57,6 +58,19 @@ export function MapLegend({ layer }: { layer: MapLayer }) {
           <li key={id}>
             <span className="swatch" style={{ background: css(BIOMES[id].color) }} />
             {t(`biome.${BIOMES[id].key}` as MessageKey)}
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  if (layer === 'life') {
+    const tiers = ['none', ...LIFE_TIERS] as const;
+    return (
+      <ul className="legend" aria-label={t('legend.label')}>
+        {tiers.map((tier, index) => (
+          <li key={tier}>
+            <span className="swatch" style={{ background: css(LIFE_TIER_COLORS[index]!) }} />
+            {t(`lifeTier.${tier}`)}
           </li>
         ))}
       </ul>

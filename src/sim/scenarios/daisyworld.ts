@@ -55,6 +55,7 @@ export function createDaisyworld(options: DaisyworldOptions = {}): World {
     'daisyWhite',
     'daisyBlack',
     'biome',
+    'vegetation',
   ]);
   simulation.step(planet, 0);
   return { planet, simulation, yearsPerStep: 5e6 };

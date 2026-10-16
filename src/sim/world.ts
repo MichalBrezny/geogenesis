@@ -6,7 +6,9 @@ import { createClimate } from './models/atmosphere/climate';
 import { precipitationModel } from './models/atmosphere/precipitation';
 import { stellarEvolution } from './models/atmosphere/star';
 import { createSurfaceAlbedo } from './models/atmosphere/surfaceAlbedo';
+import { biogeochemistry } from './models/atmosphere/biogeochemistry';
 import { biomeModel } from './models/biosphere/biomes';
+import { createLife, seedPrimordialLife } from './models/biosphere/life';
 import { createLinearDiffuser } from './models/geosphere/diffusion';
 import { createPlateDrift } from './models/geosphere/drift';
 import { flowRouting } from './models/geosphere/flowRouting';
@@ -16,7 +18,10 @@ import { recordHistory } from './history';
 import { createSimulation, type Simulation } from './simulation';
 
 export interface WorldOptions extends PlanetOptions {
-  /** Planet (and star) age at the start, in years. Defaults to an Earth-like 4.5 Gyr. */
+  /**
+   * Planet (and star) age at the start, in years. Defaults to 4 Gyr: microbes only,
+   * so the player can watch complex life evolve while the star is Sun-like.
+   */
   startYear?: number;
 }
 
@@ -30,8 +35,10 @@ export interface World {
 /** Creates a random planet with the standard component pipeline. */
 export function createRandomWorld(options: WorldOptions = {}): World {
   const planet = createPlanet(options);
-  planet.globals.year = options.startYear ?? 4.5e9;
+  planet.globals.year = options.startYear ?? 4.0e9;
   generateTectonicPlanet(planet);
+  seedPrimordialLife(planet);
+  planet.globals.atmosphere.o2 = 0;
   const surfaceAlbedo = createSurfaceAlbedo();
   const climate = createClimate();
   const carbonCycle = createCarbonCycle();
@@ -47,10 +54,21 @@ export function createRandomWorld(options: WorldOptions = {}): World {
       climate,
       precipitationModel,
       biomeModel,
+      createLife(),
+      biogeochemistry,
       carbonCycle,
       recordHistory,
     ],
-    ['elevation', 'upliftRate', 'plateId', 'crustType', 'daisyWhite', 'daisyBlack', 'biome'],
+    [
+      'elevation',
+      'upliftRate',
+      'plateId',
+      'crustType',
+      'daisyWhite',
+      'daisyBlack',
+      'biome',
+      'vegetation',
+    ],
   );
   // Run once with dt = 0 so derived fields are valid before the first real step.
   simulation.step(planet, 0);

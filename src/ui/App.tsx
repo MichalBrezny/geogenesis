@@ -5,6 +5,7 @@ import type { Frame, WorkerRequest, WorkerResponse } from '../worker/protocol';
 import { SCENARIO_IDS, type ScenarioId } from '../sim/scenarios';
 import { HistoryCharts, type ChartSeries } from './charts/HistoryCharts';
 import { formatPpm } from './format';
+import { LifePanel } from './LifePanel';
 import { MapLegend } from './MapLegend';
 
 /** Grid resolutions offered for a new planet, as [width, height]. */
@@ -20,6 +21,8 @@ const SCENARIO_VIEW: Record<ScenarioId, { charts: ChartSeries[]; layer: MapLayer
     charts: [
       'meanTemperature',
       'co2',
+      'o2',
+      'livingClasses',
       'iceFraction',
       'forestFraction',
       'desertFraction',
@@ -135,6 +138,7 @@ export function App() {
             <span>{t('time.year', { year: frame.year.toLocaleString('en') })}</span>
             <span>{t('stats.meanTemperature', { value: frame.meanTemperature.toFixed(1) })}</span>
             <span>{t('stats.co2', { value: formatPpm(frame.co2) })}</span>
+            <span>{t('stats.o2', { value: (frame.o2 * 100).toFixed(1) })}</span>
             <span>{t('stats.ice', { value: (frame.iceFraction * 100).toFixed(0) })}</span>
             <span>{t('stats.sun', { value: (frame.solarInput * 100).toFixed(1) })}</span>
             <span className="muted">{t('stats.stepTime', { value: stepTime.toFixed(0) })}</span>
@@ -147,6 +151,7 @@ export function App() {
       {frame && (
         <HistoryCharts history={frame.history} series={SCENARIO_VIEW[frame.scenario].charts} />
       )}
+      {frame?.scenario === 'random' && <LifePanel life={frame.life} />}
     </main>
   );
 }

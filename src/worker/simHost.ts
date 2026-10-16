@@ -87,6 +87,9 @@ export class SimHost {
       solarInput: planet.globals.solarInput,
       co2: planet.globals.atmosphere.co2,
       iceFraction: planet.globals.iceFraction,
+      o2: planet.globals.atmosphere.o2,
+      ch4: planet.globals.atmosphere.ch4,
+      life: { cover: [...planet.biota.cover], appeared: [...planet.biota.appeared] },
       timings: Object.fromEntries(simulation.timings),
       history,
     };

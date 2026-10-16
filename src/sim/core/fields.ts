@@ -23,6 +23,10 @@ export const FIELD_SPECS = {
   surfaceAlbedo: { type: 'f32', unit: '' },
   /** Biome (see data/biomes.ts); 0 = ocean, also for land when no biome model runs. */
   biome: { type: 'i32', unit: '' },
+  /** Land plant cover, 0..1 (the plants life class); vegetates the biome. */
+  vegetation: { type: 'f32', unit: '' },
+  /** Most advanced tier of life present (index into LIFE_TIERS + 1; 0 = lifeless). */
+  lifeTier: { type: 'i32', unit: '' },
   /** Fraction of the cell covered by white daisies (Daisyworld), 0..1. */
   daisyWhite: { type: 'f32', unit: '' },
   /** Fraction of the cell covered by black daisies (Daisyworld), 0..1. */

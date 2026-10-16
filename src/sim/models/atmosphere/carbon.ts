@@ -20,6 +20,8 @@ const WEATHERING_TEMPERATURE_SENSITIVITY = 0.09;
 const WEATHERING_CO2_EXPONENT = 0.3;
 /** CO₂ (ppm) at which weathering is halved by lack of carbon; it cannot remove CO₂ that is gone. */
 const WEATHERING_CO2_HALF_SATURATION = 10;
+/** Weathering of bare rock relative to an average vegetated surface (plants speed it up ~3×). */
+const BARREN_WEATHERING = 0.35;
 /** Share of outgassing from hotspots and other volcanism independent of plate motion. */
 const HOTSPOT_SHARE = 0.3;
 /** E-folding time (years) of the excess heat of a young planet's mantle. */
@@ -58,7 +60,15 @@ export function createCarbonCycle(options: CarbonCycleOptions = {}): SimComponen
   const volcanism = options.volcanism ?? 1;
   return {
     name: 'carbonCycle',
-    inputs: ['elevation', 'airTemperature', 'precipitation', 'iceCover', 'plateId', 'biome'],
+    inputs: [
+      'elevation',
+      'airTemperature',
+      'precipitation',
+      'iceCover',
+      'plateId',
+      'biome',
+      'vegetation',
+    ],
     outputs: [],
     runOneStep(state, dtYears) {
       const plates = tectonicActivity(state);
@@ -130,7 +140,7 @@ export function tectonicActivity(state: PlanetState): number {
  */
 export function rawWeathering(state: PlanetState, co2: number, warming = 0): number {
   const { grid, fields } = state;
-  const { elevation, airTemperature, precipitation, iceCover, biome } = fields;
+  const { elevation, airTemperature, precipitation, iceCover, biome, vegetation } = fields;
   const co2Factor =
     (Math.pow(co2 / 280, WEATHERING_CO2_EXPONENT) *
       ((co2 / (co2 + WEATHERING_CO2_HALF_SATURATION)) * (280 + WEATHERING_CO2_HALF_SATURATION))) /
@@ -144,8 +154,12 @@ export function rawWeathering(state: PlanetState, co2: number, warming = 0): num
       const temperature = airTemperature[i]! + warming;
       const ice = Math.max(iceCover[i]!, temperature < -10 ? 1 : 0);
       const runoff = precipitation[i]! / 1000;
-      // Vegetation speeds weathering up; land without a biome counts as average.
-      const life = biome[i] === Biome.Ocean ? 1 : BIOMES[biome[i] as Biome].weathering;
+      // Plants speed weathering up several times; land without a biome counts as average.
+      const plants = vegetation[i]!;
+      const life =
+        biome[i] === Biome.Ocean
+          ? 1
+          : BARREN_WEATHERING * (1 - plants) + BIOMES[biome[i] as Biome].weathering * plants;
       total +=
         weight *
         life *

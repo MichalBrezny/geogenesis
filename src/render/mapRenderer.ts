@@ -1,6 +1,6 @@
 import type { Fields } from '../sim/core/fields';
 import type { Grid } from '../sim/core/grid';
-import { BIOMES, type Biome } from '../sim/data/biomes';
+import { Biome, BIOMES } from '../sim/data/biomes';
 import { SEA_LEVEL } from '../sim/models/geosphere/flowRouting';
 import { elevationPalette, precipitationPalette, temperaturePalette, type Rgb } from './palettes';
 
@@ -15,6 +15,8 @@ export const RENDERED_FIELDS = [
   'daisyWhite',
   'daisyBlack',
   'biome',
+  'vegetation',
+  'lifeTier',
 ] as const;
 export interface MapSource {
   grid: Pick<Grid, 'width' | 'height' | 'cellCount'>;
@@ -28,6 +30,7 @@ export const MAP_LAYERS = [
   'airTemperature',
   'precipitation',
   'biomes',
+  'life',
   'daisies',
 ] as const;
 export type MapLayer = (typeof MAP_LAYERS)[number];
@@ -40,6 +43,20 @@ const RIVER_COLOR: Rgb = [40, 90, 200];
 const LAND_ICE_COLOR: Rgb = [238, 242, 246];
 const SEA_ICE_COLOR: Rgb = [200, 215, 230];
 const BARE_GROUND: Rgb = [196, 168, 118];
+/** Barren land before plants. */
+export const BARREN_COLOR: Rgb = [120, 105, 95];
+/**
+ * Most advanced life per cell: lifeless, then each tier in LIFE_TIERS order on a
+ * single-hue ramp (dark to light = simple to complex on the dark map).
+ */
+export const LIFE_TIER_COLORS: readonly Rgb[] = [
+  [43, 47, 54],
+  [24, 79, 149],
+  [37, 106, 191],
+  [57, 135, 229],
+  [109, 167, 236],
+  [183, 211, 246],
+];
 
 type CellColor = (state: MapSource, i: number) => Rgb;
 
@@ -68,7 +85,14 @@ const layerColors: Record<MapLayer, CellColor> = {
     return temperaturePalette(state.fields.airTemperature[i]!);
   },
   biomes(state, i) {
-    return BIOMES[state.fields.biome[i] as Biome].color;
+    const { biome, vegetation, elevation } = state.fields;
+    const color = BIOMES[biome[i] as Biome].color;
+    // Climate says what could grow; plant cover says how much of it actually does.
+    if (elevation[i]! < SEA_LEVEL || biome[i] === Biome.Ice) return color;
+    return mix(BARREN_COLOR, color, Math.min(1, vegetation[i]! * 1.5));
+  },
+  life(state, i) {
+    return LIFE_TIER_COLORS[state.fields.lifeTier[i]!]!;
   },
   daisies(state, i) {
     const { daisyWhite, daisyBlack, elevation } = state.fields;

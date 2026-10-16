@@ -20,6 +20,9 @@ const CHARTS: readonly ChartSpec[] = [
   { series: 'iceFraction', title: 'chart.ice', scale: 100, format: (v) => `${v.toFixed(1)}%` },
   { series: 'landFraction', title: 'chart.land', scale: 100, format: (v) => `${v.toFixed(1)}%` },
   { series: 'solarInput', title: 'chart.sun', scale: 100, format: (v) => `${v.toFixed(1)}%` },
+  { series: 'o2', title: 'chart.o2', scale: 100, format: (v) => `${v.toFixed(1)}%` },
+  { series: 'ch4', title: 'chart.ch4', format: (v) => `${v.toFixed(1)} ppm`, log: true },
+  { series: 'livingClasses', title: 'chart.livingClasses', format: (v) => v.toFixed(0) },
   {
     series: 'forestFraction',
     title: 'chart.forest',

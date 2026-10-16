@@ -143,3 +143,35 @@ body {
   right: -48px;
   top: -3px;
 }
+
+.life-panel {
+  max-width: 1024px;
+  font-size: 0.85rem;
+}
+
+.life-panel h2 {
+  font-size: 1rem;
+  margin: 8px 0;
+}
+
+.life-panel table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.life-panel th,
+.life-panel td {
+  text-align: left;
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--grid);
+  font-weight: normal;
+}
+
+.life-panel thead th {
+  color: var(--text-secondary);
+}
+
+.life-panel .numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

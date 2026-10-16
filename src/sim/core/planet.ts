@@ -1,5 +1,6 @@
 import { createFields, type Fields } from './fields';
 import { createHistory, type History } from '../history';
+import { LIFE_CLASS_COUNT } from '../data/lifeClasses';
 import { createGrid, type Grid } from './grid';
 
 /** Well-mixed atmospheric gases. */
@@ -63,6 +64,16 @@ export interface PlateCrust {
   type: Uint8Array;
 }
 
+/** Life on the planet (see models/biosphere/life.ts). */
+export interface Biota {
+  /** populations[c * cellCount + i]: class c in cell i, as a fraction of carrying capacity. */
+  populations: Float32Array;
+  /** Year each class first appeared, or null if it never has. Indexed like LIFE_CLASSES. */
+  appeared: (number | null)[];
+  /** Area-weighted mean population of each class over the planet (written each step). */
+  cover: number[];
+}
+
 /** Complete simulation state. Must stay plain data so it can be serialized and sent to a worker. */
 export interface PlanetState {
   grid: Grid;
@@ -71,6 +82,7 @@ export interface PlanetState {
   plates: Plate[];
   /** Global quantities over time, one sample per step (thinned on long runs). */
   history: History;
+  biota: Biota;
   seed: number;
   rngState: number;
 }
@@ -104,6 +116,11 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
     },
     plates: [],
     history: createHistory(),
+    biota: {
+      populations: new Float32Array(grid.cellCount * LIFE_CLASS_COUNT),
+      appeared: Array.from({ length: LIFE_CLASS_COUNT }, () => null),
+      cover: Array.from({ length: LIFE_CLASS_COUNT }, () => 0),
+    },
     seed,
     rngState: seed,
   };

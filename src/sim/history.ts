@@ -16,6 +16,9 @@ export const HISTORY_SERIES = [
   'blackDaisies',
   'forestFraction',
   'desertFraction',
+  'o2',
+  'ch4',
+  'livingClasses',
 ] as const;
 export type HistorySeries = (typeof HISTORY_SERIES)[number];
 export type History = Record<HistorySeries, number[]>;
@@ -49,8 +52,11 @@ export const recordHistory: SimComponent = {
       landFraction: landFraction(state),
       whiteDaisies: areaWeightedMean(state.grid, state.fields.daisyWhite),
       blackDaisies: areaWeightedMean(state.grid, state.fields.daisyBlack),
-      forestFraction: biomeFraction(state, FOREST_BIOMES),
+      forestFraction: forestFraction(state),
       desertFraction: biomeFraction(state, [Biome.Desert]),
+      o2: globals.atmosphere.o2,
+      ch4: globals.atmosphere.ch4,
+      livingClasses: state.biota.cover.filter((cover) => cover > 0).length,
     };
     const last = history.year[history.year.length - 1];
     // A zero-length step (initialization) replaces the sample for the same year.
@@ -70,6 +76,15 @@ const FOREST_BIOMES: readonly Biome[] = [
   Biome.Jungle,
   Biome.Swamp,
 ];
+
+/** Fraction of the planet's surface actually covered by forest: forest climate × plant cover. */
+function forestFraction(state: PlanetState): number {
+  const { biome, vegetation } = state.fields;
+  const forest = Float32Array.from(biome, (b, i) =>
+    FOREST_BIOMES.includes(b as Biome) ? vegetation[i]! : 0,
+  );
+  return areaWeightedMean(state.grid, forest);
+}
 
 /** Fraction of the planet's surface covered by the given biomes. */
 function biomeFraction(state: PlanetState, biomes: readonly Biome[]): number {
