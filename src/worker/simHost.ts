@@ -1,6 +1,7 @@
 import { RENDERED_FIELDS } from '../render/mapRenderer';
 import { HISTORY_SERIES, type HistorySeries } from '../sim/history';
-import { createScenario, type ScenarioId } from '../sim/scenarios';
+import { createScenario, isScenarioId, restoreScenario, type ScenarioId } from '../sim/scenarios';
+import { compress, decompress, deserializeGame, serializeGame } from '../sim/serialize';
 import { applyTool } from '../sim/tools/tools';
 import type { World } from '../sim/world';
 import type { Frame, WorkerRequest, WorkerResponse } from './protocol';
@@ -55,12 +56,42 @@ export class SimHost {
           Object.assign(this.world.planet.controls, request.controls);
           this.sendFrame();
           break;
+        case 'save':
+          void this.save();
+          break;
+        case 'load':
+          void this.load(request.bytes);
+          break;
         case 'unlimitedEnergy':
           if (!this.world) break;
           this.world.planet.globals.unlimitedEnergy = request.enabled;
           this.sendFrame();
           break;
       }
+    } catch (error) {
+      this.post({ type: 'error', message: String(error) }, []);
+    }
+  }
+
+  private async save(): Promise<void> {
+    if (!this.world) return;
+    const { planet } = this.world;
+    try {
+      const bytes = await compress(serializeGame({ scenario: this.scenario, planet }));
+      const fileName = `planet-${Math.round(planet.globals.year)}.simearth`;
+      this.post({ type: 'saved', bytes: bytes.buffer as ArrayBuffer, fileName }, [bytes.buffer]);
+    } catch (error) {
+      this.post({ type: 'error', message: String(error) }, []);
+    }
+  }
+
+  private async load(buffer: ArrayBuffer): Promise<void> {
+    try {
+      const game = deserializeGame(await decompress(new Uint8Array(buffer)));
+      if (!isScenarioId(game.scenario)) throw new Error(`Unknown scenario "${game.scenario}"`);
+      this.scenario = game.scenario;
+      this.world = restoreScenario(game.scenario, game.planet);
+      this.sendFrame();
     } catch (error) {
       this.post({ type: 'error', message: String(error) }, []);
     }

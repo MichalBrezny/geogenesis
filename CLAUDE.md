@@ -11,7 +11,7 @@ All code, identifiers, comments, commit messages and UI strings are in **English
 ## Commands
 
 ```sh
-npm run dev          # dev server at http://localhost:5173
+npm run dev          # dev server at http://localhost:5173 (polling watcher; if the UI looks stale, restart it)
 npm test             # all tests once (vitest run)
 npx vitest run src/sim/core/grid.test.ts   # single test file
 npx vitest run -t "wraps east-west"        # single test by name
@@ -52,6 +52,7 @@ Key design decisions:
 - **Civilization** (`src/sim/models/civilization/`, ages in `src/sim/data/civilization.ts`): established animals may become sentient (weighted by `SENTIENCE_POTENTIAL` and the share of their habitat they fill). The civilization settles where its species lives and food allows, spreads (over narrow seas once seafaring), clears vegetation, emits CO₂ from the Industrial Age, suffers plagues and nuclear wars, and advances through `TECH_AGES`; finishing Nanotech is Exodus. `PlanetState.events` logs notable moments (`recordEvent`).
 - **Time scales.** `World.stepYears(planet)` gives the next step length: 1 Myr before sentience, then the current age's `yearsPerStep` (down to 5 years). Slow components are wrapped with `withMinInterval` (geology 100 kyr, evolution 10 kyr, history 1 Myr) so they cost nothing in short steps; components receive the elapsed time as `dt`.
 - **Player controls and tools.** `PlanetState.controls` holds runtime multipliers (sun, volcanism, drift, erosion, mutation) that components read every step — use them instead of component options for anything the player may change. Tools (`src/sim/tools/tools.ts`) are pure functions on the state with an Ω cost (`globals.energy`, income from `energyIncome`, `unlimitedEnergy` for experimental mode); terrain edits reach the plates through the drift write-back.
+- **Save files** (`src/sim/serialize.ts`): the whole `PlanetState` plus scenario id, as a binary file (magic, `SAVE_VERSION`, JSON header with typed arrays referenced into an aligned data section), gzip-compressed in the worker. Anything added to `PlanetState` is saved automatically if it is plain data or a supported typed array; bump `SAVE_VERSION` when the shape changes incompatibly. Each scenario provides `restore(planet)` that rebuilds its simulation without regenerating; component schedules live in `PlanetState.lastRunYear` so a loaded game resumes identically.
 - **Scenarios** (`src/sim/scenarios/`): `SCENARIOS` maps ids to world factories (`random` = `createRandomWorld`, `daisyworld`). Each `World` carries its own `yearsPerStep`. Daisyworld is land-only with no geology or carbon cycle and no ice–albedo feedback; daisies (Watson & Lovelock 1983) run many generations per step, relax towards the result and disperse to neighbours. The UI picks charts and the initial map layer per scenario (`SCENARIO_VIEW` in `App.tsx`).
 - **History** (`src/sim/history.ts`): `recordHistory` samples global series each step into `PlanetState.history` (thinned past 2000 samples); frames carry it to the small-multiple uPlot charts (`src/ui/charts`). One measure per chart — no dual axes.
 - **Tuning.** Erodibility and uplift are effective values for ~300 km cells, not field measurements, and are tuned as a pair: their ratio sets equilibrium mountain height, their magnitude sets how fast landscapes evolve. Check changes over ~1 Gyr of 1 Myr steps (land fraction, mean land elevation, peak height), not just one step.
@@ -60,4 +61,4 @@ Key design decisions:
 
 ## Roadmap
 
-M0 scaffold (done) → M1 geosphere (done: plate-based terrain, drift, uplift, flow routing, fluvial erosion, diffusion; deliberately not doing more Landlab-style physics such as flexure or sediment transport until gameplay needs it) → M2 climate (done: energy balance, ice–albedo, precipitation, carbon cycle, history charts, Daisyworld) → M3 biomes (done) → M4 life classes and evolution (done) → M5 civilization (done) → M6 player tools, Ω energy budget, scenarios (tools and controls done), save/load.
+M0 scaffold (done) → M1 geosphere (done: plate-based terrain, drift, uplift, flow routing, fluvial erosion, diffusion; deliberately not doing more Landlab-style physics such as flexure or sediment transport until gameplay needs it) → M2 climate (done: energy balance, ice–albedo, precipitation, carbon cycle, history charts, Daisyworld) → M3 biomes (done) → M4 life classes and evolution (done) → M5 civilization (done) → M6 player tools, Ω energy budget, scenarios (done: tools, controls, save/load).

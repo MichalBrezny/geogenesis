@@ -131,6 +131,8 @@ export interface PlanetState {
   /** Notable moments, most recent last (see events.ts). */
   events: PlanetEvent[];
   controls: ModelControls;
+  /** Year each simulation component last ran, by component name (see simulation.ts). */
+  lastRunYear: Record<string, number>;
   seed: number;
   rngState: number;
 }
@@ -180,6 +182,7 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
     },
     events: [],
     controls: { ...DEFAULT_CONTROLS },
+    lastRunYear: {},
     seed,
     rngState: seed,
   };

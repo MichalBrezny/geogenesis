@@ -45,6 +45,16 @@ const SCENARIO_VIEW: Record<ScenarioId, { charts: ChartSeries[]; layer: MapLayer
   },
 };
 
+/** Offers bytes from the worker as a file download. */
+function download(bytes: ArrayBuffer, fileName: string): void {
+  const url = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 function randomSeed(): number {
   return Math.floor(Math.random() * 2 ** 32);
 }
@@ -81,6 +91,7 @@ export function App() {
       const message = event.data;
       if (message.type === 'frame') setFrame(message.frame);
       else if (message.type === 'error') setError(message.message);
+      else if (message.type === 'saved') download(message.bytes, message.fileName);
       else {
         setNotice(t(message.reason === 'energy' ? 'tools.noEnergy' : 'tools.notAllowed'));
         window.clearTimeout(noticeTimer.current);
@@ -99,6 +110,16 @@ export function App() {
   const toggleRunning = () => {
     send({ type: 'run', running: !running });
     setRunning(!running);
+  };
+
+  const fileInput = useRef<HTMLInputElement>(null);
+  const loadFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setError(null);
+    const bytes = await file.arrayBuffer();
+    workerRef.current?.postMessage({ type: 'load', bytes } satisfies WorkerRequest, [bytes]);
   };
 
   const stepTime = frame ? Object.values(frame.timings).reduce((sum, ms) => sum + ms, 0) : 0;
@@ -130,6 +151,17 @@ export function App() {
         >
           {t('controls.newPlanet')}
         </button>
+        <button onClick={() => send({ type: 'save' })} disabled={!frame}>
+          {t('controls.save')}
+        </button>
+        <button onClick={() => fileInput.current?.click()}>{t('controls.load')}</button>
+        <input
+          ref={fileInput}
+          type="file"
+          accept=".simearth"
+          hidden
+          onChange={(event) => void loadFile(event)}
+        />
         <label>
           {t('controls.scenario')}{' '}
           <select value={scenario} onChange={(e) => setScenario(e.target.value as ScenarioId)}>

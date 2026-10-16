@@ -48,9 +48,16 @@ export function createRandomWorld(options: WorldOptions = {}): World {
   seedPrimordialLife(planet);
   planet.globals.atmosphere.o2 = 0;
   planet.globals.energy = STARTING_ENERGY;
-  const surfaceAlbedo = createSurfaceAlbedo();
-  const climate = createClimate();
-  const carbonCycle = createCarbonCycle();
+  const world = randomWorldFromPlanet(planet);
+  // Run once with dt = 0 so derived fields are valid before the first real step.
+  world.simulation.step(planet, 0);
+  spinUpAtmosphere(planet);
+  recordHistory.runOneStep(planet, 0, createRng(0));
+  return world;
+}
+
+/** Builds the random-planet simulation around an existing planet (new or loaded). */
+export function randomWorldFromPlanet(planet: PlanetState): World {
   const simulation = createSimulation(
     [
       withMinInterval(createPlateDrift(), SLOW_PROCESS_INTERVAL),
@@ -59,14 +66,14 @@ export function createRandomWorld(options: WorldOptions = {}): World {
       withMinInterval(createStreamPowerEroder(), SLOW_PROCESS_INTERVAL),
       withMinInterval(createLinearDiffuser(), SLOW_PROCESS_INTERVAL),
       stellarEvolution,
-      surfaceAlbedo,
-      climate,
+      createSurfaceAlbedo(),
+      createClimate(),
       precipitationModel,
       biomeModel,
       withMinInterval(createLife(), EVOLUTION_INTERVAL),
       createCivilization(),
       biogeochemistry,
-      carbonCycle,
+      createCarbonCycle(),
       energyIncome,
       // One sample per geological step keeps the long history readable in the charts.
       withMinInterval(recordHistory, GEOLOGICAL_STEP),
@@ -82,10 +89,6 @@ export function createRandomWorld(options: WorldOptions = {}): World {
       'vegetation',
     ],
   );
-  // Run once with dt = 0 so derived fields are valid before the first real step.
-  simulation.step(planet, 0);
-  spinUpAtmosphere(planet, [surfaceAlbedo, climate, precipitationModel, biomeModel, carbonCycle]);
-  recordHistory.runOneStep(planet, 0, createRng(0));
   return {
     planet,
     simulation,
@@ -98,7 +101,14 @@ export function createRandomWorld(options: WorldOptions = {}): World {
  * time: alternates climate and carbon cycle with long carbon time steps, so the
  * game does not open with a planet still adjusting from an arbitrary 280 ppm.
  */
-function spinUpAtmosphere(planet: PlanetState, components: readonly SimComponent[]): void {
+function spinUpAtmosphere(planet: PlanetState): void {
+  const components: SimComponent[] = [
+    createSurfaceAlbedo(),
+    createClimate(),
+    precipitationModel,
+    biomeModel,
+    createCarbonCycle(),
+  ];
   const rng = createRng(planet.rngState);
   for (let iteration = 0; iteration < 10; iteration++) {
     for (const component of components) component.runOneStep(planet, 20e6, rng);

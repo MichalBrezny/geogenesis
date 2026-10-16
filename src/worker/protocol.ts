@@ -12,7 +12,10 @@ export type WorkerRequest =
   | { type: 'step' }
   | { type: 'tool'; use: ToolUse }
   | { type: 'controls'; controls: Partial<ModelControls> }
-  | { type: 'unlimitedEnergy'; enabled: boolean };
+  | { type: 'unlimitedEnergy'; enabled: boolean }
+  | { type: 'save' }
+  /** Contents of a save file (gzip-compressed, see sim/serialize.ts). */
+  | { type: 'load'; bytes: ArrayBuffer };
 
 /** A copy of what the UI needs to draw one frame; field arrays are transferred, not shared. */
 export interface Frame extends MapSource {
@@ -49,4 +52,5 @@ export type WorkerResponse =
   | { type: 'frame'; frame: Frame }
   | { type: 'error'; message: string }
   /** A tool could not be used; the UI explains why. */
-  | { type: 'toolRefused'; reason: 'energy' | 'notAllowed' };
+  | { type: 'toolRefused'; reason: 'energy' | 'notAllowed' }
+  | { type: 'saved'; bytes: ArrayBuffer; fileName: string };

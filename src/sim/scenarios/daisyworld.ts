@@ -1,4 +1,4 @@
-import { createPlanet, type PlanetOptions } from '../core/planet';
+import { createPlanet, type PlanetOptions, type PlanetState } from '../core/planet';
 import { createRng } from '../core/rng';
 import { createValueNoise3D, fractalNoise } from '../core/noise';
 import { recordHistory } from '../history';
@@ -42,13 +42,20 @@ export function createDaisyworld(options: DaisyworldOptions = {}): World {
     planet.fields.crustType[i] = 1;
   }
 
+  const world = daisyworldFromPlanet(planet, options.withDaisies ?? true);
+  world.simulation.step(planet, 0);
+  return world;
+}
+
+/** Builds the Daisyworld simulation around an existing planet (new or loaded). */
+export function daisyworldFromPlanet(planet: PlanetState, withDaisies = true): World {
   const components = [
     stellarEvolution,
     createSurfaceAlbedo({ landAlbedo: DAISYWORLD_GROUND_ALBEDO }),
     // Classic Daisyworld has no ice–albedo feedback: snow is as bright as the ground.
     createClimate({ iceAlbedo: DAISYWORLD_GROUND_ALBEDO }),
   ];
-  if (options.withDaisies ?? true) {
+  if (withDaisies) {
     components.push(createDaisies({ groundAlbedo: DAISYWORLD_GROUND_ALBEDO }));
   }
   components.push(energyIncome, recordHistory);
@@ -59,6 +66,5 @@ export function createDaisyworld(options: DaisyworldOptions = {}): World {
     'biome',
     'vegetation',
   ]);
-  simulation.step(planet, 0);
   return { planet, simulation, stepYears: () => 5e6 };
 }

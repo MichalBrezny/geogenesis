@@ -5,6 +5,8 @@
   "controls.pause": "Pause",
   "controls.step": "Step",
   "controls.newPlanet": "New planet",
+  "controls.save": "Save",
+  "controls.load": "Load",
   "controls.resolution": "Resolution",
   "layer.label": "Map layer",
   "layer.terrain": "Terrain and rivers",

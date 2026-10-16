@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { WorkerResponse } from './protocol';
 import { SimHost } from './simHost';
 
@@ -56,6 +56,29 @@ describe('SimHost', () => {
     runQueued();
     expect(queue).toHaveLength(0);
     expect(lastFrame(messages).year).toBe(start + 3 * YEARS_PER_STEP);
+  });
+
+  it('saves a planet and loads it back', async () => {
+    const { host, messages } = createHost();
+    host.handle({ type: 'create', scenario: 'daisyworld', seed: 2, width: 32, height: 16 });
+    host.handle({ type: 'step' });
+    const saved = lastFrame(messages);
+    host.handle({ type: 'save' });
+    await vi.waitFor(() => expect(messages.at(-1)?.type).toBe('saved'));
+    const file = messages.at(-1) as Extract<WorkerResponse, { type: 'saved' }>;
+    expect(file.fileName).toMatch(/.simearth$/);
+
+    host.handle({ type: 'create', scenario: 'random', seed: 9, width: 32, height: 16 });
+    host.handle({ type: 'load', bytes: file.bytes });
+    await vi.waitFor(() => expect(lastFrame(messages).scenario).toBe('daisyworld'));
+    expect(lastFrame(messages).year).toBe(saved.year);
+    expect(lastFrame(messages).fields.elevation).toEqual(saved.fields.elevation);
+  });
+
+  it('reports a broken save file', async () => {
+    const { host, messages } = createHost();
+    host.handle({ type: 'load', bytes: new Uint8Array([1, 2, 3]).buffer });
+    await vi.waitFor(() => expect(messages.at(-1)?.type).toBe('error'));
   });
 
   it('ignores manual steps while running', () => {

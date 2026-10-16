@@ -38,7 +38,6 @@ export function createSimulation(
     for (const output of component.outputs) available.add(output);
   }
 
-  const lastRunYear = new Map<string, number>();
   const timings = new Map<string, number>();
 
   return {
@@ -48,16 +47,18 @@ export function createSimulation(
       timings.clear();
       const rng = createRng(state.rngState);
       const year = state.globals.year + dtYears;
+      // Kept in the planet state, so a saved and reloaded planet resumes the same schedule.
+      const lastRunYear = state.lastRunYear;
       for (const component of components) {
         const interval = component.minIntervalYears ?? 0;
-        const last = lastRunYear.get(component.name);
+        const last = lastRunYear[component.name];
         const elapsed = last === undefined ? dtYears : year - last;
         // A component always runs on its first step so its outputs are initialized.
         if (last !== undefined && elapsed < interval) continue;
         const start = performance.now();
         component.runOneStep(state, elapsed, rng);
         timings.set(component.name, performance.now() - start);
-        lastRunYear.set(component.name, year);
+        lastRunYear[component.name] = year;
       }
       state.globals.year = year;
       state.rngState = rng.state;
