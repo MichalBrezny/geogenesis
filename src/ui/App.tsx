@@ -225,7 +225,10 @@ export function App() {
     const index = cellAt(event);
     if (index < 0) return;
     const { width } = frame.grid;
-    send({ type: 'tool', use: { tool, x: index % width, y: Math.floor(index / width), lifeClass } });
+    send({
+      type: 'tool',
+      use: { tool, x: index % width, y: Math.floor(index / width), lifeClass },
+    });
   };
 
   return (

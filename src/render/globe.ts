@@ -90,7 +90,7 @@ export function projectGlobe(
 
 /** Turns the view by a drag of (dx, dy) disc radii; latitude is clamped so the poles stay upright. */
 export function dragGlobe(view: GlobeView, dx: number, dy: number): GlobeView {
-  const longitude = (((view.longitude - (dx * 90)) % 360) + 360) % 360;
+  const longitude = (((view.longitude - dx * 90) % 360) + 360) % 360;
   const latitude = Math.max(-90, Math.min(90, view.latitude + dy * 90));
   return { longitude, latitude };
 }
