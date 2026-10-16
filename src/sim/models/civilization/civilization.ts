@@ -92,12 +92,6 @@ function maybeBecomeSentient(state: PlanetState, dtYears: number, sentienceTime:
 
   let pick = rng.next() * total;
   const species = candidates.findIndex((weight) => (pick -= weight) < 0);
-  const civ = state.civilization;
-  civ.species = species;
-  civ.age = 0;
-  civ.progress = 0;
-  civ.sentientSince = state.globals.year;
-
   // The first band appears where the species is most numerous.
   const n = state.grid.cellCount;
   let home = 0;
@@ -106,6 +100,17 @@ function maybeBecomeSentient(state: PlanetState, dtYears: number, sentienceTime:
       home = i;
     }
   }
+  makeSentient(state, species, home);
+}
+
+/** Makes a life class sentient, with its first band in cell `home`. */
+export function makeSentient(state: PlanetState, species: number, home: number): void {
+  const civ = state.civilization;
+  civ.species = species;
+  civ.age = 0;
+  civ.progress = 0;
+  civ.sentientSince = state.globals.year;
+  state.fields.civilization.fill(0);
   state.fields.civilization[home] = TECH_AGES[0]!.foodUse * 0.5;
   civ.population = worldPopulation(state);
   recordEvent(state, 'sentience', LIFE_CLASSES[species]!.key);

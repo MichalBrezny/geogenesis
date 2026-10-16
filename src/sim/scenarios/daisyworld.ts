@@ -7,6 +7,7 @@ import { stellarEvolution } from '../models/atmosphere/star';
 import { createSurfaceAlbedo } from '../models/atmosphere/surfaceAlbedo';
 import { createDaisies } from '../models/biosphere/daisies';
 import { createSimulation } from '../simulation';
+import { energyIncome, STARTING_ENERGY } from '../tools/tools';
 import type { World } from '../world';
 
 /** Albedo of Daisyworld's bare ground: brighter than Earth's land, as in the original model. */
@@ -29,6 +30,7 @@ export function createDaisyworld(options: DaisyworldOptions = {}): World {
   const planet = createPlanet(options);
   planet.globals.year = options.startYear ?? 2.5e9;
   planet.globals.atmosphere.co2 = 280;
+  planet.globals.energy = STARTING_ENERGY;
 
   // Gentle rolling land everywhere: no oceans, so nothing but daisies sets the albedo.
   const noise = createValueNoise3D(createRng(planet.seed));
@@ -49,7 +51,7 @@ export function createDaisyworld(options: DaisyworldOptions = {}): World {
   if (options.withDaisies ?? true) {
     components.push(createDaisies({ groundAlbedo: DAISYWORLD_GROUND_ALBEDO }));
   }
-  components.push(recordHistory);
+  components.push(energyIncome, recordHistory);
   const simulation = createSimulation(components, [
     'elevation',
     'daisyWhite',

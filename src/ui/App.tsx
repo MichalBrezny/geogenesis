@@ -7,7 +7,14 @@ import { HistoryCharts, type ChartSeries } from './charts/HistoryCharts';
 import { formatPpm, formatStep } from './format';
 import { CivilizationPanel, EventLog } from './CivilizationPanel';
 import { LifePanel } from './LifePanel';
+import { ControlsPanel } from './ControlsPanel';
 import { MapLegend } from './MapLegend';
+import { ToolPalette } from './ToolPalette';
+import type { LifeClassKey } from '../sim/data/lifeClasses';
+import type { ToolId } from '../sim/tools/tools';
+
+/** How long a tool notice stays on screen, ms. */
+const NOTICE_DURATION = 3000;
 
 /** Grid resolutions offered for a new planet, as [width, height]. */
 const RESOLUTIONS = [
@@ -51,6 +58,10 @@ export function App() {
   const [running, setRunning] = useState(false);
   const [resolution, setResolution] = useState(1);
   const [scenario, setScenario] = useState<ScenarioId>('random');
+  const [tool, setTool] = useState<ToolId | null>(null);
+  const [lifeClass, setLifeClass] = useState<LifeClassKey>('prokaryotes');
+  const [notice, setNotice] = useState<string | null>(null);
+  const noticeTimer = useRef<number | undefined>(undefined);
 
   const send = useCallback((request: WorkerRequest) => workerRef.current?.postMessage(request), []);
 
@@ -67,8 +78,14 @@ export function App() {
       type: 'module',
     });
     worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
-      if (event.data.type === 'frame') setFrame(event.data.frame);
-      else setError(event.data.message);
+      const message = event.data;
+      if (message.type === 'frame') setFrame(message.frame);
+      else if (message.type === 'error') setError(message.message);
+      else {
+        setNotice(t(message.reason === 'energy' ? 'tools.noEnergy' : 'tools.notAllowed'));
+        window.clearTimeout(noticeTimer.current);
+        noticeTimer.current = window.setTimeout(() => setNotice(null), NOTICE_DURATION);
+      }
     };
     workerRef.current = worker;
     newPlanet('random', 1);
@@ -85,6 +102,15 @@ export function App() {
   };
 
   const stepTime = frame ? Object.values(frame.timings).reduce((sum, ms) => sum + ms, 0) : 0;
+
+  /** Applies the selected tool to the grid cell under the click. */
+  const applyToolAt = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!tool || !frame) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = Math.floor(((event.clientX - rect.left) / rect.width) * frame.grid.width);
+    const y = Math.floor(((event.clientY - rect.top) / rect.height) * frame.grid.height);
+    send({ type: 'tool', use: { tool, x, y, lifeClass } });
+  };
 
   return (
     <main className="app">
@@ -148,8 +174,34 @@ export function App() {
         )}
       </header>
       {error && <p className="error">{error}</p>}
-      <canvas ref={canvasRef} className="map" />
+      <canvas
+        ref={canvasRef}
+        className={tool ? 'map tool-active' : 'map'}
+        onClick={applyToolAt}
+        aria-label={t('map.label')}
+      />
       <MapLegend layer={layer} />
+      {notice && (
+        <p className="notice" role="status">
+          {notice}
+        </p>
+      )}
+      {frame && (
+        <div className="panels">
+          <ToolPalette
+            frame={frame}
+            tool={tool}
+            onToolChange={setTool}
+            lifeClass={lifeClass}
+            onLifeClassChange={setLifeClass}
+            onUnlimitedEnergyChange={(enabled) => send({ type: 'unlimitedEnergy', enabled })}
+          />
+          <ControlsPanel
+            controls={frame.controls}
+            onChange={(controls) => send({ type: 'controls', controls })}
+          />
+        </div>
+      )}
       {frame && (
         <HistoryCharts history={frame.history} series={SCENARIO_VIEW[frame.scenario].charts} />
       )}

@@ -29,6 +29,8 @@ export interface GlobalState {
   carbon: { outgassing: number; weathering: number };
   /** Player energy budget (Ω). */
   energy: number;
+  /** Experimental mode: tools cost nothing. */
+  unlimitedEnergy: boolean;
 }
 
 /** A rigid tectonic plate rotating about an Euler pole. */
@@ -91,6 +93,31 @@ export interface CivilizationState {
   exodusYear: number | null;
 }
 
+/**
+ * Player-adjustable model parameters, as multipliers on each process (1 = normal),
+ * like the model control panels of SimEarth.
+ */
+export interface ModelControls {
+  /** Plate speeds. */
+  driftSpeed: number;
+  /** Volcanic CO₂ outgassing. */
+  volcanism: number;
+  /** River and hillslope erosion. */
+  erosion: number;
+  /** Rate at which new life classes evolve. */
+  mutationRate: number;
+  /** The star's brightness. */
+  solarFactor: number;
+}
+
+export const DEFAULT_CONTROLS: Readonly<ModelControls> = {
+  driftSpeed: 1,
+  volcanism: 1,
+  erosion: 1,
+  mutationRate: 1,
+  solarFactor: 1,
+};
+
 /** Complete simulation state. Must stay plain data so it can be serialized and sent to a worker. */
 export interface PlanetState {
   grid: Grid;
@@ -103,6 +130,7 @@ export interface PlanetState {
   civilization: CivilizationState;
   /** Notable moments, most recent last (see events.ts). */
   events: PlanetEvent[];
+  controls: ModelControls;
   seed: number;
   rngState: number;
 }
@@ -133,6 +161,7 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
       iceFraction: 0,
       carbon: { outgassing: 1, weathering: 1 },
       energy: 0,
+      unlimitedEnergy: false,
     },
     plates: [],
     history: createHistory(),
@@ -150,6 +179,7 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
       exodusYear: null,
     },
     events: [],
+    controls: { ...DEFAULT_CONTROLS },
     seed,
     rngState: seed,
   };

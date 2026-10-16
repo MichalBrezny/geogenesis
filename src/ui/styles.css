@@ -228,3 +228,56 @@ body {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+.map.tool-active {
+  cursor: crosshair;
+}
+
+.notice {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.tools .energy {
+  font-weight: normal;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.tool-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.tool-buttons button.selected {
+  outline: 2px solid var(--series-1);
+}
+
+.tool-buttons .cost {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+.tools p {
+  margin: 6px 0;
+}
+
+.sliders {
+  display: grid;
+  gap: 6px;
+}
+
+.sliders label {
+  display: grid;
+  grid-template-columns: 9rem 1fr 3.5rem;
+  align-items: center;
+  gap: 8px;
+}
+
+.slider-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}

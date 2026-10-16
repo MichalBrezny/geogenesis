@@ -19,7 +19,9 @@ export type EventKey =
   | 'plague'
   | 'nuclearWar'
   | 'civilizationCollapsed'
-  | 'exodus';
+  | 'exodus'
+  | 'meteor'
+  | 'monolith';
 
 /** Only the most recent events are kept. */
 export const MAX_EVENTS = 100;

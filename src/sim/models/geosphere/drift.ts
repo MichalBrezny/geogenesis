@@ -79,7 +79,8 @@ export function createPlateDrift(options: DriftOptions = {}): SimComponent {
     inputs: ['elevation', 'plateId', 'crustType'],
     outputs: ['elevation', 'plateId', 'crustType', 'upliftRate'],
     runOneStep(state, dtYears, rng) {
-      if (dtYears <= 0 || speedFactor <= 0) return;
+      const speed = speedFactor * state.controls.driftSpeed;
+      if (dtYears <= 0 || speed <= 0) return;
       coolOceanFloor(state, dtYears);
       accreteContinents(state, dtYears, continentalFraction, rng);
       // Persist erosion, uplift etc. from the last step into the plates before moving them.
@@ -89,7 +90,7 @@ export function createPlateDrift(options: DriftOptions = {}): SimComponent {
         reorganizePlates(state, rng);
       }
       for (const plate of state.plates) {
-        rotatePlate(plate, plate.angularSpeed * speedFactor * dtYears);
+        rotatePlate(plate, plate.angularSpeed * speed * dtYears);
       }
       fillPlateHoles(state);
       const collisions = composePlates(state, rng);

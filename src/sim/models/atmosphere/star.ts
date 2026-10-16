@@ -23,6 +23,6 @@ export const stellarEvolution: SimComponent = {
   inputs: [],
   outputs: [],
   runOneStep(state) {
-    state.globals.solarInput = stellarLuminosity(state.globals.year);
+    state.globals.solarInput = stellarLuminosity(state.globals.year) * state.controls.solarFactor;
   },
 };

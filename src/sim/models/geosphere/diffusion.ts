@@ -25,12 +25,13 @@ const S = 4;
  * symmetric, so this does not create or destroy material.
  */
 export function createLinearDiffuser(options: DiffusionOptions = {}): SimComponent {
-  const D = options.diffusivity ?? 100;
+  const baseDiffusivity = options.diffusivity ?? 100;
   return {
     name: 'linearDiffuser',
     inputs: ['elevation'],
     outputs: ['elevation'],
     runOneStep(state, dtYears) {
+      const D = baseDiffusivity * state.controls.erosion;
       if (dtYears <= 0 || D <= 0) return;
       const { grid } = state;
       const { neighbors, rowNorthEdge, rowSouthEdge } = getTopology(grid);

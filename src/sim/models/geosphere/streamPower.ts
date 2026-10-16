@@ -36,7 +36,9 @@ export function createStreamPowerEroder(options: StreamPowerOptions = {}): SimCo
         const h = elevation[i]!;
         // Lake floors and flats below their outlet are not incised.
         if (h <= base) continue;
-        const factor = (K * Math.pow(drainageArea[i]!, m) * dtYears) / neighborDistance(grid, i, r);
+        const factor =
+          (K * state.controls.erosion * Math.pow(drainageArea[i]!, m) * dtYears) /
+          neighborDistance(grid, i, r);
         elevation[i] = (h + factor * base) / (1 + factor);
       }
     },

@@ -73,7 +73,10 @@ export function createCarbonCycle(options: CarbonCycleOptions = {}): SimComponen
     runOneStep(state, dtYears) {
       const plates = tectonicActivity(state);
       const outgassing =
-        volcanism * mantleHeat(state.globals.year) * (HOTSPOT_SHARE + (1 - HOTSPOT_SHARE) * plates);
+        volcanism *
+        state.controls.volcanism *
+        mantleHeat(state.globals.year) *
+        (HOTSPOT_SHARE + (1 - HOTSPOT_SHARE) * plates);
       const atmosphere = state.globals.atmosphere;
       const before = atmosphere.co2;
       const weathering = (co2: number) =>

@@ -1,6 +1,7 @@
 import { RENDERED_FIELDS } from '../render/mapRenderer';
 import { HISTORY_SERIES, type HistorySeries } from '../sim/history';
 import { createScenario, type ScenarioId } from '../sim/scenarios';
+import { applyTool } from '../sim/tools/tools';
 import type { World } from '../sim/world';
 import type { Frame, WorkerRequest, WorkerResponse } from './protocol';
 
@@ -41,6 +42,23 @@ export class SimHost {
           break;
         case 'step':
           if (!this.running) this.advance();
+          break;
+        case 'tool': {
+          if (!this.world) break;
+          const result = applyTool(this.world.planet, request.use);
+          if (!result.ok) this.post({ type: 'toolRefused', reason: result.reason }, []);
+          this.sendFrame();
+          break;
+        }
+        case 'controls':
+          if (!this.world) break;
+          Object.assign(this.world.planet.controls, request.controls);
+          this.sendFrame();
+          break;
+        case 'unlimitedEnergy':
+          if (!this.world) break;
+          this.world.planet.globals.unlimitedEnergy = request.enabled;
+          this.sendFrame();
           break;
       }
     } catch (error) {
@@ -96,6 +114,9 @@ export class SimHost {
       civilization: { ...planet.civilization },
       events: planet.events.slice(-EVENTS_IN_FRAME),
       stepYears: this.world.stepYears(planet),
+      energy: planet.globals.energy,
+      unlimitedEnergy: planet.globals.unlimitedEnergy,
+      controls: { ...planet.controls },
       timings: Object.fromEntries(simulation.timings),
       history,
     };

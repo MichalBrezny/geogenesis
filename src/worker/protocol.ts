@@ -1,5 +1,6 @@
 import type { MapSource } from '../render/mapRenderer';
-import type { CivilizationState } from '../sim/core/planet';
+import type { CivilizationState, ModelControls } from '../sim/core/planet';
+import type { ToolUse } from '../sim/tools/tools';
 import type { PlanetEvent } from '../sim/events';
 import type { HistorySeries } from '../sim/history';
 import type { ScenarioId } from '../sim/scenarios';
@@ -8,7 +9,10 @@ import type { ScenarioId } from '../sim/scenarios';
 export type WorkerRequest =
   | { type: 'create'; scenario: ScenarioId; seed: number; width: number; height: number }
   | { type: 'run'; running: boolean }
-  | { type: 'step' };
+  | { type: 'step' }
+  | { type: 'tool'; use: ToolUse }
+  | { type: 'controls'; controls: Partial<ModelControls> }
+  | { type: 'unlimitedEnergy'; enabled: boolean };
 
 /** A copy of what the UI needs to draw one frame; field arrays are transferred, not shared. */
 export interface Frame extends MapSource {
@@ -31,6 +35,9 @@ export interface Frame extends MapSource {
   events: PlanetEvent[];
   /** Simulated years the next step will cover. */
   stepYears: number;
+  energy: number;
+  unlimitedEnergy: boolean;
+  controls: ModelControls;
   /** Milliseconds per simulation component in the last step. */
   timings: Record<string, number>;
   /** The whole recorded history, one array per series. */
@@ -38,4 +45,8 @@ export interface Frame extends MapSource {
 }
 
 /** Messages from the simulation worker to the UI. */
-export type WorkerResponse = { type: 'frame'; frame: Frame } | { type: 'error'; message: string };
+export type WorkerResponse =
+  | { type: 'frame'; frame: Frame }
+  | { type: 'error'; message: string }
+  /** A tool could not be used; the UI explains why. */
+  | { type: 'toolRefused'; reason: 'energy' | 'notAllowed' };

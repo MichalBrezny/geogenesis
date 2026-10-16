@@ -203,7 +203,9 @@ function evolve(
     if (bestCell < 0) return;
 
     const share = overlap / potential;
-    const rate = (mutationRate * share) / (BASE_EVOLUTION_TIME * lifeClass.difficulty);
+    const rate =
+      (mutationRate * state.controls.mutationRate * share) /
+      (BASE_EVOLUTION_TIME * lifeClass.difficulty);
     if (rng.next() < 1 - Math.exp(-rate * dtYears)) {
       biota.populations[c * n + bestCell] = FOUNDER_POPULATION;
       if (biota.appeared[c] === null) biota.appeared[c] = globals.year;

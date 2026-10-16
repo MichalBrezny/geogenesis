@@ -16,6 +16,7 @@ import { createStreamPowerEroder } from './models/geosphere/streamPower';
 import { generateTectonicPlanet, tectonicUplift } from './models/geosphere/tectonics';
 import { recordHistory } from './history';
 import { createSimulation, withMinInterval, type Simulation } from './simulation';
+import { energyIncome, STARTING_ENERGY } from './tools/tools';
 import { civilizationStepYears, createCivilization } from './models/civilization/civilization';
 
 export interface WorldOptions extends PlanetOptions {
@@ -46,6 +47,7 @@ export function createRandomWorld(options: WorldOptions = {}): World {
   generateTectonicPlanet(planet);
   seedPrimordialLife(planet);
   planet.globals.atmosphere.o2 = 0;
+  planet.globals.energy = STARTING_ENERGY;
   const surfaceAlbedo = createSurfaceAlbedo();
   const climate = createClimate();
   const carbonCycle = createCarbonCycle();
@@ -65,6 +67,7 @@ export function createRandomWorld(options: WorldOptions = {}): World {
       createCivilization(),
       biogeochemistry,
       carbonCycle,
+      energyIncome,
       // One sample per geological step keeps the long history readable in the charts.
       withMinInterval(recordHistory, GEOLOGICAL_STEP),
     ],
