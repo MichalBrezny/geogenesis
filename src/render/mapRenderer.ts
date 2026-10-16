@@ -8,7 +8,9 @@ import { elevationPalette, precipitationPalette, temperaturePalette, type Rgb } 
 export const RENDERED_FIELDS = [
   'elevation',
   'plateId',
-  'drainageArea',
+  'discharge',
+  'windU',
+  'windV',
   'airTemperature',
   'iceCover',
   'precipitation',
@@ -37,10 +39,10 @@ export const MAP_LAYERS = [
 ] as const;
 export type MapLayer = (typeof MAP_LAYERS)[number];
 
-/** Drainage area (m²) above which a land cell is drawn as a river. */
-const RIVER_MIN_AREA = 1.5e12;
-/** Drainage area at which rivers reach full colour. */
-const RIVER_FULL_AREA = 2e13;
+/** Discharge (m³/yr) above which a land cell is drawn as a river (~3,000 m³/s; Earth has ~50). */
+export const RIVER_MIN_DISCHARGE = 1e11;
+/** Discharge at which rivers reach full colour (~100,000 m³/s, half an Amazon). */
+const RIVER_FULL_DISCHARGE = 3e12;
 const RIVER_COLOR: Rgb = [40, 90, 200];
 const LAND_ICE_COLOR: Rgb = [238, 242, 246];
 const SEA_ICE_COLOR: Rgb = [200, 215, 230];
@@ -66,14 +68,16 @@ type CellColor = (state: MapSource, i: number) => Rgb;
 
 const layerColors: Record<MapLayer, CellColor> = {
   terrain(state, i) {
-    const { elevation, drainageArea, iceCover } = state.fields;
+    const { elevation, discharge, iceCover } = state.fields;
     const ocean = elevation[i]! < SEA_LEVEL;
     let color = elevationPalette(elevation[i]!);
-    const area = drainageArea[i]!;
-    if (!ocean && area >= RIVER_MIN_AREA) {
+    const flow = discharge[i]!;
+    if (!ocean && flow >= RIVER_MIN_DISCHARGE) {
       const t = Math.min(
         1,
-        0.4 + (0.6 * Math.log(area / RIVER_MIN_AREA)) / Math.log(RIVER_FULL_AREA / RIVER_MIN_AREA),
+        0.4 +
+          (0.6 * Math.log(flow / RIVER_MIN_DISCHARGE)) /
+            Math.log(RIVER_FULL_DISCHARGE / RIVER_MIN_DISCHARGE),
       );
       color = mix(color, RIVER_COLOR, t);
     }

@@ -26,6 +26,8 @@ export interface GlobalState {
   meanTemperature: number;
   /** Fraction of the surface covered by ice, 0..1 (written by the climate model). */
   iceFraction: number;
+  /** Shape of the general circulation (written by the circulation model). */
+  circulation?: { hadleyWidth: number; meanItcz: number };
   /** Carbon fluxes relative to present-day Earth (written by the carbon cycle). */
   carbon: { outgassing: number; weathering: number };
   /** Player energy budget (Ω). */

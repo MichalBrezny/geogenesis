@@ -4,6 +4,7 @@ import { createPlanet, type PlanetState } from '../../core/planet';
 import { createRng } from '../../core/rng';
 import { generateTectonicPlanet } from '../geosphere/tectonics';
 import { createCarbonCycle, mantleHeat } from './carbon';
+import { circulationModel } from './circulation';
 import { createClimate } from './climate';
 import { precipitationModel } from './precipitation';
 import { createSurfaceAlbedo } from './surfaceAlbedo';
@@ -19,9 +20,9 @@ function planetAt(solarInput: number): PlanetState {
   return planet;
 }
 
-/** Runs climate, precipitation and (optionally) the carbon cycle until they settle. */
+/** Runs climate, circulation, precipitation and (optionally) the carbon cycle until they settle. */
 function settle(planet: PlanetState, withCarbon: boolean): void {
-  const components: SimComponent[] = [createClimate(), precipitationModel];
+  const components: SimComponent[] = [createClimate(), circulationModel, precipitationModel];
   if (withCarbon) components.push(createCarbonCycle());
   for (let k = 0; k < 30; k++) {
     for (const component of components) component.runOneStep(planet, 10e6, rng);
@@ -66,6 +67,7 @@ describe('carbon cycle', () => {
     let thawed = false;
     for (let step = 0; step < 400 && !thawed; step++) {
       climate.runOneStep(planet, 1e6, rng);
+      circulationModel.runOneStep(planet, 1e6, rng);
       precipitationModel.runOneStep(planet, 1e6, rng);
       carbon.runOneStep(planet, 1e6, rng);
       thawed = planet.globals.iceFraction < 0.5;

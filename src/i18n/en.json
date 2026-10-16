@@ -194,7 +194,7 @@
   "layerHelp.terrain": "Elevation, oceans, rivers and ice",
   "layerHelp.plates": "Tectonic plates; they drift and build mountains where they collide",
   "layerHelp.airTemperature": "Annual mean air temperature",
-  "layerHelp.precipitation": "Annual rain and snow",
+  "layerHelp.precipitation": "Annual rain and snow, carried by the winds from the sea",
   "layerHelp.biomes": "Biomes set by temperature and rainfall, shaded by actual plant cover",
   "layerHelp.life": "The most advanced life in each place",
   "layerHelp.civilization": "Where the civilization lives",
@@ -231,5 +231,9 @@
   "eraName.geological": "Geological",
   "eraName.evolution": "Evolution",
   "eraName.civilization": "Civilization",
-  "eraName.technology": "Technology"
+  "eraName.technology": "Technology",
+  "inspect.wind": "Wind",
+  "inspect.windValue": "{speed} m/s from {from}",
+  "inspect.calm": "Calm",
+  "inspect.river": "River"
 }

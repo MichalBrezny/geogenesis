@@ -28,9 +28,10 @@ const HOTSPOT_SHARE = 0.3;
 const MANTLE_COOLING_TIME = 2.5e9;
 /**
  * Raw weathering sum (see `rawWeathering`) that counts as the present-day carbon
- * flux. Calibrated so random planets at 4.5 Gyr settle at roughly 10–15 °C.
+ * flux. Calibrated (with the moisture-budget precipitation) so random planets settle
+ * at roughly 13–16 °C half a billion years after complex life appears.
  */
-const REFERENCE_WEATHERING = 0.55;
+const REFERENCE_WEATHERING = 0.42;
 /**
  * Years for the atmosphere–ocean CO₂ reservoir to change by its own size under a
  * unit flux imbalance. Earth's exchangeable carbon responds over a few hundred

@@ -10,6 +10,11 @@ export const SEA_LEVEL = 0;
  * has a strictly lower neighbour to drain to.
  */
 const FILL_EPSILON = 1e-3;
+/** Potential evapotranspiration (mm/yr) per °C above PET_ZERO; roughly Earth's range. */
+const PET_PER_DEGREE = 60;
+const PET_ZERO = -5;
+/** Shape parameter of Fu's form of the Budyko curve (Earth's catchments: about 2.6). */
+const BUDYKO_W = 2.6;
 
 /**
  * Routes water over the land surface (a combination of Landlab's
@@ -20,20 +25,30 @@ const FILL_EPSILON = 1e-3;
  * 2. D8 steepest descent on the filled surface gives each land cell a receiver.
  * 3. The priority-flood visit order is already sorted from downstream to
  *    upstream, which lets drainage area be accumulated in one reverse pass.
+ * 4. Runoff is what rain leaves after evapotranspiration (Budyko curve: dry
+ *    and hot land evaporates nearly all of it); summed downstream it gives the
+ *    rivers' discharge, which drives erosion.
  *
  * Ocean cells (and the single lowest cell on a planet without ocean) are outlets
  * with receiver -1.
  */
 export const flowRouting: SimComponent = {
   name: 'flowRouting',
-  inputs: ['elevation'],
-  outputs: ['flowReceiver', 'flowUpstreamOrder', 'drainageArea'],
+  inputs: ['elevation', 'precipitation', 'airTemperature'],
+  outputs: ['flowReceiver', 'flowUpstreamOrder', 'drainageArea', 'runoff', 'discharge'],
   runOneStep(state) {
     const { grid, fields } = state;
-    const { elevation, flowReceiver, flowUpstreamOrder, drainageArea } = fields;
+    const { elevation, flowReceiver, flowUpstreamOrder, drainageArea, runoff, discharge } = fields;
     const filled = fillDepressions(grid, elevation, flowUpstreamOrder);
     assignReceivers(grid, filled, elevation, flowReceiver);
     accumulateDrainageArea(grid, flowReceiver, flowUpstreamOrder, drainageArea);
+    for (let i = 0; i < grid.cellCount; i++) {
+      runoff[i] =
+        elevation[i]! < SEA_LEVEL
+          ? 0
+          : runoffOf(fields.precipitation[i]!, fields.airTemperature[i]!);
+    }
+    accumulateDischarge(grid, flowReceiver, flowUpstreamOrder, runoff, discharge);
   },
 };
 
@@ -133,6 +148,37 @@ function accumulateDrainageArea(
     const i = order[k]!;
     const r = receiver[i]!;
     if (r >= 0) area[r] = area[r]! + area[i]!;
+  }
+}
+
+/**
+ * Runoff (mm/yr) from annual precipitation and temperature: precipitation minus
+ * evapotranspiration, from Fu's form of the Budyko curve,
+ * ET/P = 1 + φ − (1 + φ^w)^(1/w) with dryness φ = PET / P.
+ */
+export function runoffOf(precipitation: number, temperature: number): number {
+  if (precipitation <= 0) return 0;
+  const pet = PET_PER_DEGREE * Math.max(0, temperature - PET_ZERO);
+  const dryness = pet / precipitation;
+  const evaporated = 1 + dryness - Math.pow(1 + Math.pow(dryness, BUDYKO_W), 1 / BUDYKO_W);
+  return precipitation * Math.max(0, 1 - evaporated);
+}
+
+/** River discharge (m³/yr): each cell's runoff plus everything flowing into it. */
+function accumulateDischarge(
+  grid: Grid,
+  receiver: Int32Array,
+  order: Int32Array,
+  runoff: Float32Array,
+  discharge: Float32Array,
+): void {
+  for (let i = 0; i < grid.cellCount; i++) {
+    discharge[i] = (runoff[i]! / 1000) * grid.rowCellArea[Math.floor(i / grid.width)]!;
+  }
+  for (let k = order.length - 1; k >= 0; k--) {
+    const i = order[k]!;
+    const r = receiver[i]!;
+    if (r >= 0) discharge[r] = discharge[r]! + discharge[i]!;
   }
 }
 

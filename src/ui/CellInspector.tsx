@@ -2,6 +2,7 @@ import { t, type MessageKey } from '../i18n/i18n';
 import { BIOMES, type Biome } from '../sim/data/biomes';
 import { PEOPLE_PER_KM2 } from '../sim/data/civilization';
 import { LIFE_TIERS } from '../sim/data/lifeClasses';
+import { RIVER_MIN_DISCHARGE } from '../render/mapRenderer';
 import type { Frame } from '../worker/protocol';
 
 /** Cell under the pointer and where to draw the readout (page coordinates). */
@@ -27,9 +28,14 @@ export function CellInspector({ frame, cell }: { frame: Frame; cell: HoveredCell
     ],
     ['inspect.temperature', `${f.airTemperature[i]!.toFixed(1)} °C`],
     ['inspect.precipitation', `${Math.round(f.precipitation[i]!).toLocaleString('en')} mm/yr`],
+    ['inspect.wind', formatWind(f.windU[i]!, f.windV[i]!)],
     ['inspect.biome', t(`biome.${BIOMES[f.biome[i] as Biome].key}` as MessageKey)],
     ['inspect.life', t(`lifeTier.${tier === 0 ? 'none' : LIFE_TIERS[tier - 1]!}` as MessageKey)],
   ];
+  if (!ocean && f.discharge[i]! >= RIVER_MIN_DISCHARGE) {
+    const perSecond = f.discharge[i]! / SECONDS_PER_YEAR;
+    rows.push(['inspect.river', `${Math.round(perSecond).toLocaleString('en')} m³/s`]);
+  }
   if (!ocean) rows.push(['inspect.plants', `${Math.round(f.vegetation[i]! * 100)}%`]);
   if (f.civilization[i]! > 0) {
     rows.push(['inspect.people', `${(f.civilization[i]! * PEOPLE_PER_KM2).toFixed(2)} / km²`]);
@@ -46,6 +52,19 @@ export function CellInspector({ frame, cell }: { frame: Frame; cell: HoveredCell
       </dl>
     </div>
   );
+}
+
+const SECONDS_PER_YEAR = 365.25 * 86_400;
+const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] as const;
+
+/** Wind speed and the direction it blows from, e.g. "6 m/s from E". */
+function formatWind(u: number, v: number): string {
+  const speed = Math.hypot(u, v);
+  if (speed < 0.3) return t('inspect.calm');
+  // Meteorological convention: the direction the wind comes from, clockwise from north.
+  const from = (Math.atan2(-u, -v) * 180) / Math.PI;
+  const sector = Math.round((((from % 360) + 360) % 360) / 45) % 8;
+  return t('inspect.windValue', { speed: speed.toFixed(0), from: COMPASS[sector]! });
 }
 
 function formatPosition(latitude: number, longitude: number): string {

@@ -3,6 +3,7 @@ import { createPlanet, type PlanetOptions, type PlanetState } from './core/plane
 import { createRng } from './core/rng';
 import { createCarbonCycle } from './models/atmosphere/carbon';
 import { createClimate } from './models/atmosphere/climate';
+import { circulationModel } from './models/atmosphere/circulation';
 import { precipitationModel } from './models/atmosphere/precipitation';
 import { stellarEvolution } from './models/atmosphere/star';
 import { createSurfaceAlbedo } from './models/atmosphere/surfaceAlbedo';
@@ -88,6 +89,7 @@ export function randomWorldFromPlanet(
       stellarEvolution,
       createSurfaceAlbedo(),
       createClimate(),
+      circulationModel,
       precipitationModel,
       biomeModel,
       withMinInterval(createLife(), EVOLUTION_INTERVAL),
@@ -100,6 +102,9 @@ export function randomWorldFromPlanet(
       eraTracker,
     ],
     [
+      // Geology runs first and uses the last step's climate.
+      'airTemperature',
+      'precipitation',
       'elevation',
       'upliftRate',
       'plateId',
@@ -127,6 +132,7 @@ function spinUpAtmosphere(planet: PlanetState): void {
   const components: SimComponent[] = [
     createSurfaceAlbedo(),
     createClimate(),
+    circulationModel,
     precipitationModel,
     biomeModel,
     createCarbonCycle(),

@@ -1,53 +1,111 @@
 import { describe, expect, it } from 'vitest';
 import { cellIndex } from '../../core/grid';
-import { createPlanet } from '../../core/planet';
+import { createPlanet, type PlanetState } from '../../core/planet';
 import { createRng } from '../../core/rng';
-import { precipitationModel, prevailingWind, zonalPrecipitation } from './precipitation';
+import { cellWind, circulationModel } from './circulation';
+import { precipitationModel } from './precipitation';
 
 const rng = createRng(1);
 
-describe('precipitation', () => {
-  it('has wet tropics, dry subtropics and wetter mid-latitudes', () => {
-    expect(zonalPrecipitation(0)).toBeGreaterThan(2000);
-    expect(zonalPrecipitation(27)).toBeLessThan(zonalPrecipitation(0) / 2);
-    expect(zonalPrecipitation(50)).toBeGreaterThan(zonalPrecipitation(27));
-    expect(zonalPrecipitation(85)).toBeLessThan(zonalPrecipitation(50));
+/** An ocean planet with an Earth-like temperature profile. */
+function aquaplanet(width = 64, height = 32): PlanetState {
+  const planet = createPlanet({ width, height });
+  const { grid, fields } = planet;
+  fields.elevation.fill(-3000);
+  for (let y = 0; y < grid.height; y++) {
+    const s = Math.sin((grid.rowLatitude[y]! * Math.PI) / 180);
+    fields.airTemperature.fill(28 - 45 * s * s, y * grid.width, (y + 1) * grid.width);
+  }
+  return planet;
+}
+
+function rainAndWind(planet: PlanetState): void {
+  circulationModel.runOneStep(planet, 0, rng);
+  precipitationModel.runOneStep(planet, 0, rng);
+}
+
+/** Mean of a field over the rows within a latitude range. */
+function zonalMean(planet: PlanetState, values: Float32Array, from: number, to: number): number {
+  const { grid } = planet;
+  let sum = 0;
+  let count = 0;
+  for (let y = 0; y < grid.height; y++) {
+    const latitude = grid.rowLatitude[y]!;
+    if (latitude < from || latitude > to) continue;
+    for (let x = 0; x < grid.width; x++) {
+      sum += values[y * grid.width + x]!;
+      count++;
+    }
+  }
+  return sum / count;
+}
+
+describe('circulation', () => {
+  it('has trade winds, westerlies and polar easterlies', () => {
+    const [tradeU, tradeV] = cellWind(15, 0, 30);
+    expect(tradeU).toBeLessThan(0);
+    expect(tradeV).toBeLessThan(0); // towards the ITCZ
+    expect(cellWind(-15, 0, 30)[1]).toBeGreaterThan(0);
+    const [westerlyU, westerlyV] = cellWind(45, 0, 30);
+    expect(westerlyU).toBeGreaterThan(0);
+    expect(westerlyV).toBeGreaterThan(0); // poleward
+    expect(cellWind(75, 0, 30)[0]).toBeLessThan(0);
   });
 
-  it('leaves a rain shadow behind a mountain range', () => {
-    const planet = createPlanet({ width: 64, height: 32 });
+  it('moves the ITCZ towards the warmer hemisphere', () => {
+    const planet = aquaplanet();
     const { grid, fields } = planet;
-    fields.elevation.fill(-3000);
-    fields.airTemperature.fill(15);
-    // A mid-latitude continent with a north-south range in the middle (all rows here
-    // have westerlies).
+    for (let i = 0; i < grid.cellCount; i++) {
+      if (grid.rowLatitude[Math.floor(i / grid.width)]! > 0) fields.airTemperature[i]! += 4;
+    }
+    circulationModel.runOneStep(planet, 0, rng);
+    expect(planet.globals.circulation!.meanItcz).toBeGreaterThan(2);
+  });
+});
+
+describe('precipitation', () => {
+  it('rains most at the ITCZ, little under the subtropical highs and at the poles', () => {
+    const planet = aquaplanet();
+    rainAndWind(planet);
+    const rain = planet.fields.precipitation;
+    const tropics = zonalMean(planet, rain, -8, 8);
+    const subtropics = zonalMean(planet, rain, 20, 32);
+    const midLatitudes = zonalMean(planet, rain, 40, 55);
+    const polar = zonalMean(planet, rain, 70, 90);
+    expect(tropics).toBeGreaterThan(2 * subtropics);
+    expect(midLatitudes).toBeGreaterThan(subtropics);
+    expect(polar).toBeLessThan(midLatitudes / 2);
+    const global = zonalMean(planet, rain, -90, 90);
+    expect(global).toBeGreaterThan(500);
+    expect(global).toBeLessThan(2500);
+  });
+
+  it('wets windward slopes and leaves a rain shadow behind a mountain range', () => {
+    const planet = aquaplanet();
+    const { grid, fields } = planet;
+    // A mid-latitude continent in the westerlies with a north-south range in the middle.
     const y = grid.rowLatitude.findIndex((lat) => lat < 45);
-    expect(prevailingWind(grid.rowLatitude[y]!)).toBe(1);
-    for (let row = y - 2; row <= y + 2; row++) {
-      for (let x = 18; x < 33; x++) {
-        fields.elevation[cellIndex(grid, x, row)] = x === 25 ? 3000 : 200;
+    for (let row = y - 3; row <= y + 3; row++) {
+      for (let x = 16; x < 36; x++) {
+        const range = Math.max(0, 3000 - 1000 * Math.abs(x - 24));
+        fields.elevation[cellIndex(grid, x, row)] = 200 + range;
       }
     }
-    precipitationModel.runOneStep(planet, 0, rng);
-
+    rainAndWind(planet);
     const rain = (x: number) => fields.precipitation[cellIndex(grid, x, y)]!;
     // Westerlies: the windward (west) slope is wetter than the lee (east) side.
-    expect(rain(25)).toBeGreaterThan(rain(24));
-    expect(rain(27)).toBeLessThan(rain(23) * 0.7);
-    // Inland is drier than the coast.
-    expect(rain(23)).toBeLessThan(rain(18));
+    expect(rain(23)).toBeGreaterThan(rain(26));
+    expect(rain(27)).toBeLessThan(rain(22) * 0.7);
   });
 
   it('rains more where it is warmer', () => {
-    const planet = createPlanet({ width: 16, height: 8 });
-    planet.fields.elevation.fill(-3000);
-    planet.fields.airTemperature.fill(5);
-    precipitationModel.runOneStep(planet, 0, rng);
-    const cold = Float32Array.from(planet.fields.precipitation);
-    planet.fields.airTemperature.fill(25);
-    precipitationModel.runOneStep(planet, 0, rng);
-    for (let i = 0; i < cold.length; i++) {
-      expect(planet.fields.precipitation[i]!).toBeGreaterThan(cold[i]!);
-    }
+    const cold = aquaplanet(16, 8);
+    cold.fields.airTemperature.fill(5);
+    rainAndWind(cold);
+    const warm = aquaplanet(16, 8);
+    warm.fields.airTemperature.fill(25);
+    rainAndWind(warm);
+    const mean = (p: PlanetState) => zonalMean(p, p.fields.precipitation, -90, 90);
+    expect(mean(warm)).toBeGreaterThan(1.5 * mean(cold));
   });
 });

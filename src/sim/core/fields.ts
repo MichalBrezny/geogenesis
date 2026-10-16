@@ -37,6 +37,11 @@ export const FIELD_SPECS = {
   albedo: { type: 'f32', unit: '' },
   /** Annual precipitation. */
   precipitation: { type: 'f32', unit: 'mm/yr' },
+  /** Annual-mean surface wind, eastward and northward components (circulation model). */
+  windU: { type: 'f32', unit: 'm/s' },
+  windV: { type: 'f32', unit: 'm/s' },
+  /** Water leaving the cell as runoff (precipitation minus evapotranspiration). */
+  runoff: { type: 'f32', unit: 'mm/yr' },
   /** Crust type: 1 = continental (buoyant, never subducts), 0 = oceanic. */
   crustType: { type: 'i32', unit: '' },
   /** Tectonic plate the cell belongs to. */
@@ -49,6 +54,8 @@ export const FIELD_SPECS = {
   flowUpstreamOrder: { type: 'i32', unit: '' },
   /** Upstream contributing area, including the cell itself. */
   drainageArea: { type: 'f32', unit: 'm²' },
+  /** River discharge: runoff of the cell and everything upstream of it. */
+  discharge: { type: 'f32', unit: 'm³/yr' },
 } as const satisfies Record<string, FieldSpec>;
 
 export type FieldName = keyof typeof FIELD_SPECS;

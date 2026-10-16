@@ -19,6 +19,9 @@ function valleyPlanet(): PlanetState {
   }
   // A closed depression in the middle of the land.
   elevation[cellIndex(planet.grid, 6, 3)] = 50;
+  // A wet, temperate climate, so the rivers carry water.
+  planet.fields.precipitation.fill(1200);
+  planet.fields.airTemperature.fill(10);
   return planet;
 }
 
@@ -85,6 +88,18 @@ describe('streamPowerEroder', () => {
       }
     }
     expect(lowered).toBeGreaterThan(0);
+  });
+
+  it('cuts faster where more water runs off', () => {
+    const erosion = (precipitation: number) => {
+      const planet = valleyPlanet();
+      planet.fields.precipitation.fill(precipitation);
+      flowRouting.runOneStep(planet, 0, rng);
+      const before = planet.fields.elevation.reduce((sum, e) => sum + Math.max(0, e), 0);
+      createStreamPowerEroder({ erodibility: 1e-7 }).runOneStep(planet, 1e7, rng);
+      return before - planet.fields.elevation.reduce((sum, e) => sum + Math.max(0, e), 0);
+    };
+    expect(erosion(2000)).toBeGreaterThan(1.5 * erosion(400));
   });
 
   it('does not incise a closed depression while its outlet stays above it', () => {
