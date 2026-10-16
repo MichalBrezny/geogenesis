@@ -48,6 +48,10 @@ const SCENARIO_VIEW: Record<ScenarioId, { charts: ChartSeries[]; layer: MapLayer
     charts: ['meanTemperature', 'whiteDaisies', 'blackDaisies', 'solarInput'],
     layer: 'daisies',
   },
+  aquarium: {
+    charts: ['meanTemperature', 'co2', 'o2', 'livingClasses', 'landFraction', 'solarInput'],
+    layer: 'life',
+  },
 };
 
 /** Offers bytes from the worker as a file download. */
@@ -280,13 +284,13 @@ export function App() {
       {frame && (
         <HistoryCharts history={frame.history} series={SCENARIO_VIEW[frame.scenario].charts} />
       )}
-      {frame?.scenario === 'random' && (
+      {frame && frame.scenario !== 'daisyworld' && (
         <div className="panels">
           <CivilizationPanel civilization={frame.civilization} />
           <EventLog events={frame.events} />
         </div>
       )}
-      {frame?.scenario === 'random' && <LifePanel life={frame.life} />}
+      {frame && frame.scenario !== 'daisyworld' && <LifePanel life={frame.life} />}
     </main>
   );
 }

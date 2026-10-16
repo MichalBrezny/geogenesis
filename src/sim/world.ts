@@ -25,6 +25,15 @@ export interface WorldOptions extends PlanetOptions {
    * so the player can watch complex life evolve while the star is Sun-like.
    */
   startYear?: number;
+  /** Fraction of the surface under water; 0.7 is Earth-like. */
+  oceanFraction?: number;
+  /** Continental crust the planet keeps regrowing towards (see plate drift). */
+  continentalFraction?: number;
+}
+
+/** Choices a planet's simulation is built with; part of the saved scenario. */
+export interface RandomWorldSettings {
+  continentalFraction: number;
 }
 
 export interface World {
@@ -44,11 +53,13 @@ const EVOLUTION_INTERVAL = 1e4;
 export function createRandomWorld(options: WorldOptions = {}): World {
   const planet = createPlanet(options);
   planet.globals.year = options.startYear ?? 4.0e9;
-  generateTectonicPlanet(planet);
+  generateTectonicPlanet(planet, { oceanFraction: options.oceanFraction ?? 0.7 });
   seedPrimordialLife(planet);
   planet.globals.atmosphere.o2 = 0;
   planet.globals.energy = STARTING_ENERGY;
-  const world = randomWorldFromPlanet(planet);
+  const world = randomWorldFromPlanet(planet, {
+    continentalFraction: options.continentalFraction ?? 0.3,
+  });
   // Run once with dt = 0 so derived fields are valid before the first real step.
   world.simulation.step(planet, 0);
   spinUpAtmosphere(planet);
@@ -57,10 +68,16 @@ export function createRandomWorld(options: WorldOptions = {}): World {
 }
 
 /** Builds the random-planet simulation around an existing planet (new or loaded). */
-export function randomWorldFromPlanet(planet: PlanetState): World {
+export function randomWorldFromPlanet(
+  planet: PlanetState,
+  settings: RandomWorldSettings = { continentalFraction: 0.3 },
+): World {
   const simulation = createSimulation(
     [
-      withMinInterval(createPlateDrift(), SLOW_PROCESS_INTERVAL),
+      withMinInterval(
+        createPlateDrift({ continentalFraction: settings.continentalFraction }),
+        SLOW_PROCESS_INTERVAL,
+      ),
       withMinInterval(tectonicUplift, SLOW_PROCESS_INTERVAL),
       withMinInterval(flowRouting, SLOW_PROCESS_INTERVAL),
       withMinInterval(createStreamPowerEroder(), SLOW_PROCESS_INTERVAL),

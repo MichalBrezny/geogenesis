@@ -13,6 +13,12 @@ interface Scenario {
 export const SCENARIOS = {
   random: { create: createRandomWorld, restore: randomWorldFromPlanet },
   daisyworld: { create: createDaisyworld, restore: (planet) => daisyworldFromPlanet(planet) },
+  aquarium: {
+    // SimEarth's water world: no continents, only the islands volcanoes build.
+    create: (options) =>
+      createRandomWorld({ ...options, oceanFraction: 1, continentalFraction: 0 }),
+    restore: (planet) => randomWorldFromPlanet(planet, { continentalFraction: 0 }),
+  },
 } satisfies Record<string, Scenario>;
 
 export type ScenarioId = keyof typeof SCENARIOS;

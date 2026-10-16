@@ -145,6 +145,7 @@
   "controls.scenario": "Scenario",
   "scenario.random": "Random planet",
   "scenario.daisyworld": "Daisyworld",
+  "scenario.aquarium": "Aquarium (water world)",
   "chart.whiteDaisies": "White daisies",
   "chart.blackDaisies": "Black daisies",
   "stats.meanTemperature": "Mean temperature: {value} °C",
