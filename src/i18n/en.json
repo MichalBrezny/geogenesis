@@ -1,5 +1,6 @@
 {
-  "app.title": "Sim Earth",
+  "app.title": "Geogenesis",
+  "app.subtitle": "a planet simulation",
   "time.year": "Year {year}",
   "controls.play": "Play",
   "controls.pause": "Pause",

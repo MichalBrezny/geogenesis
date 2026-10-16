@@ -234,7 +234,9 @@ export function App() {
   return (
     <main className="app">
       <header className="toolbar">
-        <h1>{t('app.title')}</h1>
+        <h1>
+          {t('app.title')} <span className="subtitle">{t('app.subtitle')}</span>
+        </h1>
         <button onClick={toggleRunning} disabled={!frame}>
           {running ? t('controls.pause') : t('controls.play')}
         </button>
@@ -273,7 +275,7 @@ export function App() {
         <input
           ref={fileInput}
           type="file"
-          accept=".simearth"
+          accept=".geogenesis,.simearth"
           hidden
           onChange={(event) => void loadFile(event)}
         />

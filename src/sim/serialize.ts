@@ -7,6 +7,7 @@ import type { PlanetState } from './core/planet';
  * into the data section, where the arrays are stored back to back, each aligned
  * to 8 bytes. Everything is little-endian.
  */
+// Kept from the project's working title so that older saves still load.
 const MAGIC = 'SIMEARTH';
 export const SAVE_VERSION = 1;
 
@@ -65,7 +66,7 @@ export function serializeGame(game: SavedGame): Uint8Array {
 
 export function deserializeGame(bytes: Uint8Array): SavedGame {
   if (bytes.length < 16 || new TextDecoder().decode(bytes.subarray(0, 8)) !== MAGIC) {
-    throw new SaveFormatError('Not a Sim Earth save file');
+    throw new SaveFormatError('Not a Geogenesis save file');
   }
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const version = view.getUint32(8, true);

@@ -82,7 +82,7 @@ export class SimHost {
     const { planet } = this.world;
     try {
       const bytes = await compress(serializeGame({ scenario: this.scenario, planet }));
-      const fileName = `planet-${Math.round(planet.globals.year)}.simearth`;
+      const fileName = `planet-${Math.round(planet.globals.year)}.geogenesis`;
       this.post({ type: 'saved', bytes: bytes.buffer as ArrayBuffer, fileName }, [bytes.buffer]);
     } catch (error) {
       this.post({ type: 'error', message: String(error) }, []);

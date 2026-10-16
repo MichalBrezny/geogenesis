@@ -1,6 +1,6 @@
-# Sim Earth
+# Geogenesis: a planet simulation
 
-A browser-based planet simulation in the spirit of **SimEarth** (Maxis, 1990). Watch a planet
+**Geogenesis** is a browser-based planet simulation inspired by **SimEarth** (Maxis, 1990). Watch a planet
 evolve over billions of years: plates drift and build mountains, rivers carve valleys, the climate
 swings between hothouse and snowball, life evolves from microbes to sentient species, and a
 civilization may rise, wreck its world or leave it for the stars. You can watch, or step in with
@@ -10,7 +10,7 @@ The models are simplified but grounded in real Earth-system science: an energy-b
 silicate-weathering carbon thermostat, Whittaker biomes, Daisyworld, Landlab-style erosion. They
 are coupled by Gaia-style feedbacks, so life changes the climate that shapes life.
 
-> This is a fan project. It is not affiliated with, endorsed by or derived from the code of Maxis or
+> Geogenesis is an independent project. It is not affiliated with, endorsed by or derived from the code of Maxis or
 > Electronic Arts. "SimEarth" is a trademark of its respective owner.
 
 ## Features

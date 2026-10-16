@@ -66,7 +66,7 @@ describe('SimHost', () => {
     host.handle({ type: 'save' });
     await vi.waitFor(() => expect(messages.at(-1)?.type).toBe('saved'));
     const file = messages.at(-1) as Extract<WorkerResponse, { type: 'saved' }>;
-    expect(file.fileName).toMatch(/.simearth$/);
+    expect(file.fileName).toMatch(/.geogenesis$/);
 
     host.handle({ type: 'create', scenario: 'random', seed: 9, width: 32, height: 16 });
     host.handle({ type: 'load', bytes: file.bytes });

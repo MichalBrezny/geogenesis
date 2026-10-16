@@ -1,7 +1,7 @@
 {
-  "name": "sim-earth",
+  "name": "geogenesis",
   "version": "0.1.0",
-  "description": "A SimEarth-style planet simulation game for the browser",
+  "description": "Geogenesis: a planet simulation for the browser, inspired by SimEarth",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
