@@ -1,3 +1,5 @@
+<img src="public/icon-180.png" alt="" width="72" align="right">
+
 # Geogenesis: a planet simulation
 
 **Geogenesis** is a browser-based planet simulation inspired by **SimEarth** (Maxis, 1990). Watch a planet
@@ -6,9 +8,11 @@ swings between hothouse and snowball, life evolves from microbes to sentient spe
 civilization may rise, wreck its world or leave it for the stars. You can watch, or step in with
 tools that reshape the land, the air and the living world.
 
-> **Status: alpha 0.1.** All core models work and the planet evolves from microbes to
-> civilization, but there is not much of a game yet and the UI is rough. See the
-> [road to beta](#road-to-beta).
+> **Status: alpha 0.2.** All core models work and the planet evolves from microbes to
+> civilization, and the screen is organised around the planet. There is not much of a game
+> yet: goals, feedback and balance come next. See the [road to beta](#road-to-beta).
+
+![A planet 900 million years after the first cells: biomes on the map, tools on the left, history charts on the right](docs/screenshot.jpg)
 
 The models are simplified but grounded in real Earth-system science: an energy-balance climate, the
 silicate-weathering carbon thermostat, Whittaker biomes, Daisyworld, Landlab-style erosion. They
@@ -59,8 +63,11 @@ npm run dev        # http://localhost:5173
    Turn on experimental mode for unlimited energy.
 4. Use the **model controls** to change how bright the sun is, how active the planet is, or how
    fast life mutates.
-5. Watch the charts and the event log. Complex life takes about a billion years; once a species
+5. Watch the history charts, the life table and the event log in the tabs on the right. Complex life takes about a billion years; once a species
    becomes sentient, time slows down to centuries and then years per step.
+
+Keyboard: **Space** play or pause, **S** one step, **1–9** map layers, **G** flat map or globe,
+**Esc** put the tool down, **?** all shortcuts. Every control explains itself on hover.
 
 ## Development
 
@@ -120,7 +127,7 @@ and feedback that shows what your actions did. Each milestone ends with a minor 
 
 | Milestone                      | Content                                                                                                                                                                                                                                                                      | Release  |
 | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| **M8** Interface               | Reorganise the screen: the planet in the middle, a compact top bar with time controls and key stats, tools on the side, collapsible panels for charts, life, civilization and events. Keyboard shortcuts, tooltips on every control, a layout that works on smaller screens. | 0.2      |
+| **M8** Interface ✅            | Reorganise the screen: the planet in the middle, a compact top bar with time controls and key stats, tools on the side, collapsible panels for charts, life, civilization and events. Keyboard shortcuts, tooltips on every control, a layout that works on smaller screens. | 0.2      |
 | **M9** Feedback                | Show what is happening and why: notifications for important events, visible effects of tools on the map, readouts that explain the climate and carbon balance (where CO₂ comes from, why it is cold), alerts when a trend turns dangerous.                                   | 0.3      |
 | **M10** Goals                  | Scenarios with objectives and an end: thaw a snowball planet, keep life alive as the Sun brightens, guide a species to sentience, reach Exodus. Win and loss conditions and a score.                                                                                         | 0.4      |
 | **M11** Challenge              | Natural disasters that can be switched on or off (earthquakes, storms, meteor showers, supervolcanoes); civilization choices in the spirit of SimEarth (energy sources, research, population policy) that trade growth against the planet.                                   | 0.5      |
