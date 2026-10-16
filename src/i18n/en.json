@@ -262,5 +262,9 @@
   "overlayHelp.wind": "Show wind arrows over any map layer",
   "overlayHelp.currents": "Show ocean current arrows over any map layer",
   "overlayHelp.isobars": "Show 4 hPa pressure contours and high/low centres over any map layer",
-  "help.keyOverlay": "Show or hide wind, current and isobar overlays"
+  "help.keyOverlay": "Show or hide wind, current and isobar overlays",
+  "layer.clouds": "Clouds",
+  "layerHelp.clouds": "Cloud cover: thick where air rises and rains, stratus over cold seas, clear skies over deserts",
+  "inspect.clouds": "Cloud cover",
+  "legend.cloudCover": "Cloud cover"
 }

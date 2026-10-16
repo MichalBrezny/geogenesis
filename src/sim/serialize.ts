@@ -95,6 +95,8 @@ export function deserializeGame(bytes: Uint8Array): SavedGame {
 /** Keeps version-2 saves loadable when optional plain-data state is added. */
 function hydrateAddedState(planet: PlanetState): void {
   planet.globals.seaLevel ??= 0;
+  planet.globals.sedimentExport ??= 0;
+  planet.fields.iceThickness ??= new Float32Array(planet.grid.cellCount);
   planet.fields.lakeDepth ??= new Float32Array(planet.grid.cellCount);
   planet.fields.lakeType ??= new Int32Array(planet.grid.cellCount);
   const samples = planet.history.year?.length ?? 0;

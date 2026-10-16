@@ -7,6 +7,7 @@ import { generateTectonicPlanet } from '../geosphere/tectonics';
 import { createCarbonCycle, mantleHeat } from './carbon';
 import { circulationModel } from './circulation';
 import { createClimate } from './climate';
+import { landIceMassBalance } from './ice';
 import { precipitationModel } from './precipitation';
 import { createSurfaceAlbedo } from './surfaceAlbedo';
 
@@ -23,7 +24,12 @@ function planetAt(solarInput: number): PlanetState {
 
 /** Runs climate, circulation, precipitation and (optionally) the carbon cycle until they settle. */
 function settle(planet: PlanetState, withCarbon: boolean): void {
-  const components: SimComponent[] = [createClimate(), circulationModel, precipitationModel];
+  const components: SimComponent[] = [
+    createClimate(),
+    circulationModel,
+    precipitationModel,
+    landIceMassBalance,
+  ];
   if (withCarbon) components.push(createCarbonCycle());
   for (let k = 0; k < 30; k++) {
     for (const component of components) component.runOneStep(planet, 10e6, rng);
@@ -54,12 +60,17 @@ describe('carbon cycle', () => {
       dim.regulated.globals.atmosphere.co2,
     );
     expect(regulatedWarming).toBeLessThan(freeWarming * 0.6);
-  });
+  }, 10_000);
 
   it('lets CO₂ build up under a snowball until it thaws', () => {
     const planet = planetAt(0.95);
     planet.globals.atmosphere.co2 = 50;
     planet.fields.iceCover.fill(1);
+    for (let i = 0; i < planet.grid.cellCount; i++) {
+      if (planet.fields.elevation[i]! >= planet.globals.seaLevel) {
+        planet.fields.iceThickness[i] = 1500;
+      }
+    }
     const climate = createClimate();
     const carbon = createCarbonCycle();
     climate.runOneStep(planet, 0, rng);
@@ -70,6 +81,7 @@ describe('carbon cycle', () => {
       climate.runOneStep(planet, 1e6, rng);
       circulationModel.runOneStep(planet, 1e6, rng);
       precipitationModel.runOneStep(planet, 1e6, rng);
+      landIceMassBalance.runOneStep(planet, 1e6, rng);
       carbon.runOneStep(planet, 1e6, rng);
       thawed = planet.globals.iceFraction < 0.5;
     }

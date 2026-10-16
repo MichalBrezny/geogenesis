@@ -9,6 +9,8 @@ import { precipitationModel } from './models/atmosphere/precipitation';
 import { stellarEvolution } from './models/atmosphere/star';
 import { createSurfaceAlbedo } from './models/atmosphere/surfaceAlbedo';
 import { biogeochemistry } from './models/atmosphere/biogeochemistry';
+import { cloudModel } from './models/atmosphere/clouds';
+import { landIceMassBalance } from './models/atmosphere/ice';
 import { biomeModel } from './models/biosphere/biomes';
 import { createLife, seedPrimordialLife } from './models/biosphere/life';
 import { createLinearDiffuser } from './models/geosphere/diffusion';
@@ -80,7 +82,6 @@ export function randomWorldFromPlanet(
 ): World {
   const simulation = createSimulation(
     [
-      seaLevelModel,
       withMinInterval(
         createPlateDrift({ continentalFraction: settings.continentalFraction }),
         SLOW_PROCESS_INTERVAL,
@@ -95,6 +96,9 @@ export function randomWorldFromPlanet(
       circulationModel,
       oceanModel,
       precipitationModel,
+      cloudModel,
+      landIceMassBalance,
+      seaLevelModel,
       biomeModel,
       withMinInterval(createLife(), EVOLUTION_INTERVAL),
       createCivilization(),
@@ -110,6 +114,8 @@ export function randomWorldFromPlanet(
       // step's ocean.
       'airTemperature',
       'iceCover',
+      'iceThickness',
+      'lowCloud',
       'precipitation',
       'oceanAnomaly',
       'elevation',
@@ -139,10 +145,12 @@ function spinUpAtmosphere(planet: PlanetState): void {
   const components: SimComponent[] = [
     createSurfaceAlbedo(),
     createClimate(),
-    seaLevelModel,
     circulationModel,
     oceanModel,
     precipitationModel,
+    cloudModel,
+    landIceMassBalance,
+    seaLevelModel,
     biomeModel,
     createCarbonCycle(),
   ];

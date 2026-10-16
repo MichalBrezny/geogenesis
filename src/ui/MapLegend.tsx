@@ -8,6 +8,7 @@ import {
 } from '../render/mapRenderer';
 import { LIFE_TIERS } from '../sim/data/lifeClasses';
 import {
+  cloudPalette,
   elevationPalette,
   precipitationPalette,
   pressurePalette,
@@ -56,6 +57,13 @@ const SCALES: Partial<Record<MapLayer, Scale>> = {
     max: 12,
     ticks: [0, 3, 6, 9, 12],
     unit: 'm/s',
+  },
+  clouds: {
+    palette: cloudPalette,
+    min: 0,
+    max: 100,
+    ticks: [0, 25, 50, 75, 100],
+    unit: '%',
   },
   oceanCurrents: {
     palette: seaAnomalyPalette,

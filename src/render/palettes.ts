@@ -81,3 +81,9 @@ export const seaAnomalyPalette = gradient([
   { value: 2, color: [230, 150, 120] },
   { value: 6, color: [195, 50, 40] },
 ]);
+
+/** Cloud cover (%): dark sky to white overcast. */
+export const cloudPalette = gradient([
+  { value: 0, color: [16, 30, 52] },
+  { value: 100, color: [242, 244, 248] },
+]);

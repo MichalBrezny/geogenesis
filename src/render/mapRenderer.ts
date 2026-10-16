@@ -25,6 +25,7 @@ export const RENDERED_FIELDS = [
   'oceanCurrentU',
   'oceanCurrentV',
   'oceanAnomaly',
+  'cloudCover',
   'airTemperature',
   'iceCover',
   'precipitation',
@@ -48,6 +49,7 @@ export const MAP_LAYERS = [
   'airTemperature',
   'pressure',
   'precipitation',
+  'clouds',
   'wind',
   'oceanCurrents',
   'biomes',
@@ -152,6 +154,12 @@ const layerColors: Record<MapLayer, CellColor> = {
       Math.round(BARE_GROUND[1] * bare + 245 * white + 22 * black),
       Math.round(BARE_GROUND[2] * bare + 235 * white + 28 * black),
     ];
+  },
+  clouds(state, i) {
+    const { cloudCover, elevation } = state.fields;
+    // Clouds as white over a dark planet, so the cloud bands stand out.
+    const base: Rgb = elevation[i]! < state.seaLevel ? [16, 30, 52] : [46, 50, 44];
+    return mix(base, [242, 244, 248], Math.min(1, Math.max(0, cloudCover[i]!)));
   },
   wind(state, i) {
     const { windU, windV, elevation } = state.fields;

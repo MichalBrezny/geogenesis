@@ -153,22 +153,39 @@ describe('flowRouting', () => {
 });
 
 describe('streamPowerEroder', () => {
-  it('lowers land towards base level, never below its receiver or sea level', () => {
+  it('incises land, routes sediment offshore, and conserves terrain volume', () => {
     const planet = valleyPlanet();
     flowRouting.runOneStep(planet, 0, rng);
     const before = Float32Array.from(planet.fields.elevation);
+    const beforeExport = planet.globals.sedimentExport;
     createStreamPowerEroder({ erodibility: 1e-6 }).runOneStep(planet, 1e7, rng);
     const { elevation, flowReceiver } = planet.fields;
     let lowered = 0;
+    let deposited = 0;
+    let offshore = 0;
+    let erodedVolume = 0;
+    let depositedVolume = 0;
     for (let i = 0; i < elevation.length; i++) {
-      expect(elevation[i]!).toBeLessThanOrEqual(before[i]!);
-      if (elevation[i]! < before[i]!) lowered++;
+      const area = planet.grid.rowCellArea[Math.floor(i / planet.grid.width)]!;
+      if (elevation[i]! < before[i]!) {
+        lowered++;
+        erodedVolume += (before[i]! - elevation[i]!) * area;
+      }
+      if (elevation[i]! > before[i]!) {
+        deposited++;
+        depositedVolume += (elevation[i]! - before[i]!) * area;
+        if (before[i]! < 0) offshore++;
+      }
       const r = flowReceiver[i]!;
-      if (r >= 0 && before[i]! > Math.max(before[r]!, 0)) {
+      if (elevation[i]! < before[i]! && r >= 0 && before[i]! > Math.max(before[r]!, 0)) {
         expect(elevation[i]!).toBeGreaterThanOrEqual(Math.max(elevation[r]!, 0) - 1e-3);
       }
     }
     expect(lowered).toBeGreaterThan(0);
+    expect(deposited).toBeGreaterThan(0);
+    expect(offshore).toBeGreaterThan(0);
+    const exported = planet.globals.sedimentExport - beforeExport;
+    expect(Math.abs(erodedVolume - depositedVolume - exported) / erodedVolume).toBeLessThan(1e-5);
   });
 
   it('cuts faster where more water runs off', () => {
@@ -187,7 +204,31 @@ describe('streamPowerEroder', () => {
     const planet = valleyPlanet();
     flowRouting.runOneStep(planet, 0, rng);
     createStreamPowerEroder({ erodibility: 1e-9 }).runOneStep(planet, 1e6, rng);
-    expect(planet.fields.elevation[cellIndex(planet.grid, 6, 3)]).toBe(50);
+    expect(planet.fields.elevation[cellIndex(planet.grid, 6, 3)]).toBeGreaterThanOrEqual(50);
+  });
+
+  it('lowers a temperate glaciated valley faster than an ice-free one', () => {
+    const bare = valleyPlanet();
+    const glaciated = valleyPlanet();
+    for (const planet of [bare, glaciated]) {
+      planet.fields.airTemperature.fill(-3);
+      flowRouting.runOneStep(planet, 0, rng);
+    }
+    for (let i = 0; i < glaciated.grid.cellCount; i++) {
+      if (glaciated.fields.elevation[i]! >= 0) glaciated.fields.iceThickness[i] = 1000;
+    }
+    const summit = cellIndex(bare.grid, 2, 3);
+    const before = bare.fields.elevation[summit]!;
+    const eroder = createStreamPowerEroder({
+      erodibility: 1e-9,
+      transportCoefficient: 1e6,
+    });
+    eroder.runOneStep(bare, 1e8, rng);
+    eroder.runOneStep(glaciated, 1e8, rng);
+    const riverLowering = before - bare.fields.elevation[summit]!;
+    const glacialLowering = before - glaciated.fields.elevation[summit]!;
+    expect(riverLowering).toBeGreaterThan(0);
+    expect(glacialLowering).toBeGreaterThan(riverLowering * 1.5);
   });
 });
 

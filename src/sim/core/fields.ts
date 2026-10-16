@@ -19,6 +19,12 @@ export const FIELD_SPECS = {
   airTemperature: { type: 'f32', unit: '°C' },
   /** Fraction of the cell covered by snow or ice, 0..1. */
   iceCover: { type: 'f32', unit: '' },
+  /** Thickness of grounded land ice; zero over the ocean. */
+  iceThickness: { type: 'f32', unit: 'm' },
+  /** Total cloud cover, 0..1 (cloud model). */
+  cloudCover: { type: 'f32', unit: '' },
+  /** Low cloud cover, 0..1; the part that changes the climate's albedo. */
+  lowCloud: { type: 'f32', unit: '' },
   /** Albedo of the ice-free surface including typical clouds, 0..1 (set by surfaceAlbedo). */
   surfaceAlbedo: { type: 'f32', unit: '' },
   /** Biome (see data/biomes.ts); 0 = ocean, also for land when no biome model runs. */

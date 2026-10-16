@@ -28,6 +28,7 @@ export function CellInspector({ frame, cell }: { frame: Frame; cell: HoveredCell
     ['inspect.temperature', `${f.airTemperature[i]!.toFixed(1)} °C`],
     ['inspect.precipitation', `${Math.round(f.precipitation[i]!).toLocaleString('en')} mm/yr`],
     ['inspect.wind', formatWind(f.windU[i]!, f.windV[i]!)],
+    ['inspect.clouds', `${Math.round(f.cloudCover[i]! * 100)}%`],
     ['inspect.biome', t(`biome.${BIOMES[f.biome[i] as Biome].key}` as MessageKey)],
     ['inspect.life', t(`lifeTier.${tier === 0 ? 'none' : LIFE_TIERS[tier - 1]!}` as MessageKey)],
   ];

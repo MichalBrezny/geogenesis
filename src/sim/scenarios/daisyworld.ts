@@ -62,6 +62,9 @@ export function daisyworldFromPlanet(planet: PlanetState, withDaisies = true): W
   const simulation = createSimulation(components, [
     'elevation',
     'oceanAnomaly',
+    'precipitation',
+    'iceThickness',
+    'lowCloud',
     'daisyWhite',
     'daisyBlack',
     'biome',

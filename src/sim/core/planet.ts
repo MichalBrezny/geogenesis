@@ -28,6 +28,10 @@ export interface GlobalState {
   iceFraction: number;
   /** Ocean surface elevation relative to the ice-free datum, m. */
   seaLevel: number;
+  /** Cumulative sediment exported beyond represented marine accommodation, m³. */
+  sedimentExport: number;
+  /** Area-mean total cloud cover, 0..1 (written by the cloud model). */
+  cloudCover?: number;
   /** Shape of the general circulation (written by the circulation model). */
   circulation?: { hadleyWidth: number; meanItcz: number };
   /** Carbon fluxes relative to present-day Earth (written by the carbon cycle). */
@@ -109,7 +113,7 @@ export interface ModelControls {
   driftSpeed: number;
   /** Volcanic CO₂ outgassing. */
   volcanism: number;
-  /** River and hillslope erosion. */
+  /** River, glacial and hillslope erosion. */
   erosion: number;
   /** Rate at which new life classes evolve. */
   mutationRate: number;
@@ -169,6 +173,7 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
       meanTemperature: 0,
       iceFraction: 0,
       seaLevel: 0,
+      sedimentExport: 0,
       carbon: { outgassing: 1, weathering: 1, burial: 0 },
       energy: 0,
       unlimitedEnergy: false,

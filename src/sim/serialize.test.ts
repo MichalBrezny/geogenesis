@@ -33,14 +33,18 @@ describe('save files', () => {
     );
   });
 
-  it('hydrates sea level, lakes and history when loading an older version-2 shape', () => {
+  it('hydrates ice thickness, sea level, lakes and history from an older version-2 shape', () => {
     const planet = createRandomWorld({ seed: 7, width: 32, height: 16 }).planet;
     delete (planet.globals as Partial<typeof planet.globals>).seaLevel;
+    delete (planet.globals as Partial<typeof planet.globals>).sedimentExport;
+    delete (planet.fields as Partial<typeof planet.fields>).iceThickness;
     delete (planet.fields as Partial<typeof planet.fields>).lakeDepth;
     delete (planet.fields as Partial<typeof planet.fields>).lakeType;
     delete (planet.history as Partial<typeof planet.history>).seaLevel;
     const loaded = deserializeGame(serializeGame({ scenario: 'random', planet }));
     expect(loaded.planet.globals.seaLevel).toBe(0);
+    expect(loaded.planet.globals.sedimentExport).toBe(0);
+    expect(loaded.planet.fields.iceThickness).toEqual(new Float32Array(planet.grid.cellCount));
     expect(loaded.planet.fields.lakeDepth).toEqual(new Float32Array(planet.grid.cellCount));
     expect(loaded.planet.fields.lakeType).toEqual(new Int32Array(planet.grid.cellCount));
     expect(loaded.planet.history.seaLevel).toEqual(loaded.planet.history.year.map(() => 0));

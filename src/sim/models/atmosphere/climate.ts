@@ -1,7 +1,12 @@
 import type { SimComponent } from '../../core/component';
 import { areaWeightedMean, createGrid, type Grid } from '../../core/grid';
 import type { Atmosphere } from '../../core/planet';
+import { isOcean } from '../geosphere/seaLevel';
+import { LOW_CLOUD_ALBEDO, REFERENCE_LOW_CLOUD } from './clouds';
+import { surfaceIceCover } from './ice';
 import { SOLAR_CONSTANT } from './star';
+
+export { iceFractionAt } from './ice';
 
 /**
  * Outgoing longwave radiation OLR = A + B·T (T in °C), from satellite fits
@@ -13,9 +18,6 @@ const OLR_B = 2.09;
 const DEFAULT_DIFFUSIVITY = 0.45;
 /** Planetary albedo (surface plus typical cloud cover) of snow and ice. */
 export const ICE_ALBEDO = 0.62;
-/** Snow and ice cover ramps from none at ICE_NONE to full at ICE_FULL (°C, annual mean). */
-const ICE_NONE = -5;
-const ICE_FULL = -15;
 /** Temperature drop with altitude, °C per metre (standard atmosphere). */
 const LAPSE_RATE = 0.0065;
 /** Pre-industrial greenhouse gas levels the forcing is measured against (ppm). */
@@ -64,11 +66,6 @@ export function annualInsolation(latitudeDeg: number, solarInput: number): numbe
   return ((SOLAR_CONSTANT * solarInput) / 4) * (1 - 0.482 * p2);
 }
 
-/** Fraction of a cell covered by snow and ice at an annual-mean temperature. */
-export function iceFractionAt(temperature: number): number {
-  return Math.min(1, Math.max(0, (ICE_NONE - temperature) / (ICE_NONE - ICE_FULL)));
-}
-
 /**
  * Energy-balance climate model (Budyko–Sellers / North type) in 2D.
  *
@@ -88,15 +85,31 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
   const iceAlbedo = options.iceAlbedo ?? ICE_ALBEDO;
   return {
     name: 'climate',
-    inputs: ['elevation', 'surfaceAlbedo', 'oceanAnomaly'],
+    inputs: [
+      'elevation',
+      'surfaceAlbedo',
+      'oceanAnomaly',
+      'precipitation',
+      'iceThickness',
+      'lowCloud',
+    ],
     outputs: ['airTemperature', 'iceCover', 'albedo'],
     runOneStep(state, dtYears) {
       const { grid, fields, globals } = state;
-      const { elevation, surfaceAlbedo, airTemperature, iceCover, albedo } = fields;
+      const {
+        elevation,
+        surfaceAlbedo,
+        airTemperature,
+        precipitation,
+        iceThickness,
+        iceCover,
+        albedo,
+      } = fields;
       // Last step's temperatures, for the ocean's lag. The first run of a planet has
       // dt = 0 and goes straight to equilibrium.
       const lag = dtYears > 0 ? Math.exp(-dtYears / OCEAN_RESPONSE_TIME) : 0;
       const previous = lag > 1e-6 ? Float32Array.from(airTemperature) : null;
+      const hasClouds = globals.cloudCover !== undefined;
       const climate = getClimateGrid(grid, diffusivity);
       const forcing = greenhouseForcing(globals.atmosphere);
 
@@ -118,8 +131,21 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
         );
         let maxChange = 0;
         for (let i = 0; i < grid.cellCount; i++) {
-          const ice = iceFractionAt(airTemperature[i]!);
-          const target = surfaceAlbedo[i]! * (1 - ice) + iceAlbedo * ice;
+          const ice = surfaceIceCover(
+            isOcean(elevation[i]!, globals.seaLevel),
+            airTemperature[i]!,
+            precipitation[i]!,
+            iceThickness[i]!,
+          );
+          // Low cloud above the reference brightens the ice-free part (the last step's
+          // clouds); planets without a cloud model keep the typical clouds of the albedos.
+          const cloud = hasClouds
+            ? LOW_CLOUD_ALBEDO * (fields.lowCloud[i]! - REFERENCE_LOW_CLOUD) * (1 - ice)
+            : 0;
+          const target = Math.min(
+            0.9,
+            Math.max(0.03, surfaceAlbedo[i]! * (1 - ice) + iceAlbedo * ice + cloud),
+          );
           // Damped update: the albedo–temperature iteration can oscillate at ice edges.
           const next = iteration === 0 ? target : 0.5 * (albedo[i]! + target);
           maxChange = Math.max(maxChange, Math.abs(next - albedo[i]!));
@@ -131,7 +157,12 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
       if (previous) {
         for (let i = 0; i < grid.cellCount; i++) {
           airTemperature[i] = airTemperature[i]! + (previous[i]! - airTemperature[i]!) * lag;
-          iceCover[i] = iceFractionAt(airTemperature[i]!);
+          iceCover[i] = surfaceIceCover(
+            isOcean(elevation[i]!, globals.seaLevel),
+            airTemperature[i]!,
+            precipitation[i]!,
+            iceThickness[i]!,
+          );
         }
       }
 

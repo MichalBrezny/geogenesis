@@ -19,6 +19,7 @@ function oceanPlanet(): PlanetState {
 function earthLike(): PlanetState {
   const planet = createPlanet({ seed: 3 });
   generateTectonicPlanet(planet);
+  planet.fields.precipitation.fill(500);
   createSurfaceAlbedo().runOneStep(planet, 0, rng);
   return planet;
 }

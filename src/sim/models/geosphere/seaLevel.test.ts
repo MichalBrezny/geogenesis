@@ -10,13 +10,13 @@ describe('seaLevelModel', () => {
       for (let x = 0; x < planet.grid.width; x++) {
         const i = y * planet.grid.width + x;
         planet.fields.elevation[i] = x < 11 ? -1000 : 100;
-        if (x >= 11) planet.fields.iceCover[i] = 0.15;
+        if (x >= 11) planet.fields.iceThickness[i] = 150;
       }
     }
     expect(equilibriumSeaLevel(planet)).toBeLessThan(-50);
     expect(equilibriumSeaLevel(planet)).toBeGreaterThan(-150);
     for (let i = 0; i < planet.grid.cellCount; i++) {
-      if (planet.fields.elevation[i]! >= 0) planet.fields.iceCover[i] = 1;
+      if (planet.fields.elevation[i]! >= 0) planet.fields.iceThickness[i] = 2000;
     }
     expect(equilibriumSeaLevel(planet)).toBeLessThan(-500);
   });
@@ -27,7 +27,7 @@ describe('seaLevelModel', () => {
       for (let x = 0; x < planet.grid.width; x++) {
         const i = y * planet.grid.width + x;
         planet.fields.elevation[i] = x < 7 ? -100 : x < 10 ? -50 : 100;
-        if (planet.fields.elevation[i]! >= 0) planet.fields.iceCover[i] = 0.2;
+        if (planet.fields.elevation[i]! >= 0) planet.fields.iceThickness[i] = 200;
       }
     }
     const beforeLand = landSurfaceFraction(
@@ -42,7 +42,7 @@ describe('seaLevelModel', () => {
       landSurfaceFraction(planet.grid, planet.fields.elevation, planet.globals.seaLevel),
     ).toBeGreaterThan(beforeLand);
 
-    planet.fields.iceCover.fill(0);
+    planet.fields.iceThickness.fill(0);
     seaLevelModel.runOneStep(planet, 10_000, createRng(1));
     expect(planet.globals.seaLevel).toBeGreaterThan(glacialLevel);
     expect(planet.globals.seaLevel).toBeLessThan(0);
