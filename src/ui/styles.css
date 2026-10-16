@@ -148,6 +148,25 @@ body {
   image-rendering: pixelated;
 }
 
+/* The map or globe with its arrow overlay on top. */
+.planet-canvas {
+  position: relative;
+  line-height: 0;
+}
+
+.planet-canvas.globe-wrap {
+  align-self: center;
+}
+
+.planet canvas.overlay-arrows {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  image-rendering: auto;
+}
+
 /* Room left under the planet for the legend. */
 .map {
   width: min(100cqw, calc((100cqh - var(--legend-room)) * 2));

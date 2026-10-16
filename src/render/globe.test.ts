@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { globeProjection } from './arrows';
 import { buildGlobeLookup, dragGlobe, globeCell, projectGlobe } from './globe';
 
 const W = 64;
@@ -30,6 +31,23 @@ describe('globe projection', () => {
     const centre = (4 * 8 + 4) * 4;
     expect(out[centre + 3]).toBe(255);
     expect(out[centre]).toBeGreaterThan(150);
+  });
+
+  it('places arrows where the globe shows the same place', () => {
+    const view = { longitude: 120, latitude: 25 };
+    const project = globeProjection(400, view);
+    for (const [lat, lon] of [
+      [10.5, 130.5],
+      [45.5, 100.5],
+      [-20.5, 150.5],
+    ] as const) {
+      const [px, py] = project(lat, lon)!;
+      const cell = globeCell((2 * px) / 400 - 1, 1 - (2 * py) / 400, view, 360, 180);
+      expect(cell % 360).toBe(Math.floor(lon));
+      expect(Math.floor(cell / 360)).toBe(Math.floor(90 - lat));
+    }
+    // The far side is hidden.
+    expect(project(0, 300)).toBeNull();
   });
 
   it('turns and clamps the view when dragged', () => {

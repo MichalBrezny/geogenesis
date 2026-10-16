@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import type { MapLayer } from '../render/mapRenderer';
 import type { ToolId } from '../sim/tools/tools';
-import type { View } from './PlanetView';
+import type { Overlay, View } from './PlanetView';
 
 /**
  * Line icons drawn on a 24-unit grid in the current text colour, so they follow
@@ -124,12 +124,27 @@ export const LAYER_ICONS: Record<MapLayer, ReactNode> = {
       <path d="M11 8h1m-1 4h1m-1 4h1" />
     </Icon>
   ),
+  wind: (
+    <Icon>
+      <path d="M3 8h11a3 3 0 1 0-3-3M3 12h15a3 3 0 1 1-3 3M3 16h7" />
+    </Icon>
+  ),
+  oceanCurrents: (
+    <Icon>
+      <path d="M2 9c2.5-2 4.5-2 7 0s4.5 2 7 0 4.5-2 6 0M2 15c2.5-2 4.5-2 7 0s4.5 2 7 0 4.5-2 6 0" />
+    </Icon>
+  ),
   daisies: (
     <Icon>
       <circle cx="12" cy="12" r="2.5" />
       <path d="M12 9.5a3 3 0 1 1 0-6 3 3 0 1 1 0 6Zm0 5a3 3 0 1 1 0 6 3 3 0 1 1 0-6Zm-2.5-2.5a3 3 0 1 1-6 0 3 3 0 1 1 6 0Zm5 0a3 3 0 1 1 6 0 3 3 0 1 1-6 0Z" />
     </Icon>
   ),
+};
+
+export const OVERLAY_ICONS: Record<Overlay, ReactNode> = {
+  wind: LAYER_ICONS.wind,
+  currents: LAYER_ICONS.oceanCurrents,
 };
 
 export const VIEW_ICONS: Record<View, ReactNode> = {

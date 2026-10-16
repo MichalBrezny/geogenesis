@@ -61,6 +61,7 @@ export function daisyworldFromPlanet(planet: PlanetState, withDaisies = true): W
   components.push(energyIncome, recordHistory);
   const simulation = createSimulation(components, [
     'elevation',
+    'oceanAnomaly',
     'daisyWhite',
     'daisyBlack',
     'biome',

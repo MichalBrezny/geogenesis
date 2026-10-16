@@ -7,6 +7,15 @@ import {
   projectGlobe,
   type GlobeView,
 } from '../render/globe';
+import {
+  drawArrows,
+  globeProjection,
+  mapProjection,
+  type ArrowStyle,
+  type Projection,
+  type VectorField,
+} from '../render/arrows';
+import { createFlowLayer, stepFlow, type FlowLayer, type FlowStyle } from '../render/particles';
 import { layerPixels, renderLayer, type MapLayer } from '../render/mapRenderer';
 import type { Frame } from '../worker/protocol';
 import { CellInspector, type HoveredCell } from './CellInspector';
@@ -20,6 +29,59 @@ const GLOBE_SIZE = 512;
 /** Pointer travel, px, below which a press on the globe counts as a click, not a drag. */
 const CLICK_SLOP = 4;
 
+/** Vector fields that can be drawn over any layer: animated particles, or arrows for reduced motion. */
+export const OVERLAYS = ['wind', 'currents'] as const;
+export type Overlay = (typeof OVERLAYS)[number];
+
+/** Screen pixels between arrows. */
+const ARROW_SPACING = 28;
+const ARROW_STYLES: Record<Overlay, Omit<ArrowStyle, 'spacing'>> = {
+  // Winds: up to ~12 m/s.
+  wind: {
+    pixelsPerUnit: 2.6,
+    maxLength: 24,
+    minSpeed: 0.5,
+    color: 'rgba(240, 244, 250, 0.85)',
+    lineWidth: 1.3,
+  },
+  // Currents: up to ~0.15 m/s.
+  currents: {
+    pixelsPerUnit: 220,
+    maxLength: 26,
+    minSpeed: 0.004,
+    color: 'rgba(20, 28, 40, 0.9)',
+    lineWidth: 1.5,
+  },
+};
+
+const FLOW_STYLES: Record<Overlay, FlowStyle> = {
+  wind: {
+    degreesPerUnit: 0.09,
+    minSpeed: 0.3,
+    color: 'rgba(255, 255, 255, 0.85)',
+    lineWidth: 1.4,
+    density: 2.4,
+  },
+  currents: {
+    degreesPerUnit: 6,
+    minSpeed: 0.003,
+    color: 'rgba(10, 60, 75, 0.9)',
+    lineWidth: 1.3,
+    density: 2,
+  },
+};
+
+function overlayField(frame: Frame, overlay: Overlay): VectorField {
+  const { width, height } = frame.grid;
+  const f = frame.fields;
+  return overlay === 'wind'
+    ? { width, height, u: f.windU, v: f.windV }
+    : { width, height, u: f.oceanCurrentU, v: f.oceanCurrentV };
+}
+
+const prefersReducedMotion = () =>
+  typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
 interface Props {
   frame: Frame;
   layer: MapLayer;
@@ -28,11 +90,23 @@ interface Props {
   toolActive: boolean;
   /** Called with the grid cell the player clicked. */
   onCellClick: (x: number, y: number) => void;
+  /** Arrow overlays to draw. */
+  overlays: readonly Overlay[];
 }
 
 /** The planet as a flat map or a globe, with the cell inspector under the pointer. */
-export function PlanetView({ frame, layer, view, toolActive, onCellClick }: Props) {
+export function PlanetView({ frame, layer, view, toolActive, onCellClick, overlays }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const overlayRef = useRef<HTMLCanvasElement>(null);
+  const [overlaySize, setOverlaySize] = useState({ width: 0, height: 0 });
+  const [reducedMotion] = useState(prefersReducedMotion);
+  // The running particle animation: its layers and the current projection.
+  const flow = useRef<{
+    layers: Map<Overlay, FlowLayer>;
+    project: Projection | null;
+    width: number;
+    height: number;
+  }>({ layers: new Map(), project: null, width: 0, height: 0 });
   const [hovered, setHovered] = useState<HoveredCell | null>(null);
   const [globeView, setGlobeView] = useState<GlobeView>({ longitude: 180, latitude: 20 });
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null);
@@ -55,6 +129,82 @@ export function PlanetView({ frame, layer, view, toolActive, onCellClick }: Prop
     const pixels = projectGlobe(layerPixels(frame, layer), globeLookup);
     canvas.getContext('2d')?.putImageData(new ImageData(pixels, GLOBE_SIZE, GLOBE_SIZE), 0, 0);
   }, [frame, layer, globeLookup]);
+
+  // The arrows are drawn at screen resolution, so they track the canvas's size on the page.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const observer = new ResizeObserver(() =>
+      setOverlaySize({ width: canvas.clientWidth, height: canvas.clientHeight }),
+    );
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, []);
+
+  // Size the overlay to the screen and set its projection; this also clears the trails.
+  useEffect(() => {
+    const overlay = overlayRef.current;
+    if (!overlay) return;
+    const ratio = window.devicePixelRatio || 1;
+    overlay.width = Math.round(overlaySize.width * ratio);
+    overlay.height = Math.round(overlaySize.height * ratio);
+    overlay.getContext('2d')?.scale(ratio, ratio);
+    const { width: w, height: h } = overlaySize;
+    flow.current.project = view === 'globe' ? globeProjection(w, globeView) : mapProjection(w, h);
+    flow.current.width = w;
+    flow.current.height = h;
+  }, [overlaySize, view, globeView]);
+
+  // Keep a particle layer per shown overlay, flowing along the newest fields.
+  useEffect(() => {
+    const { layers } = flow.current;
+    for (const kind of [...layers.keys()]) if (!overlays.includes(kind)) layers.delete(kind);
+    const area = overlaySize.width * overlaySize.height * (view === 'globe' ? 0.785 : 1);
+    for (const kind of overlays) {
+      const field = overlayField(frame, kind);
+      const layer = layers.get(kind);
+      if (layer) layer.field = field;
+      else if (area > 0) layers.set(kind, createFlowLayer(field, FLOW_STYLES[kind], area));
+    }
+  }, [frame, overlays, overlaySize, view]);
+
+  // Animate the particles; with reduced motion, draw still arrows instead.
+  useEffect(() => {
+    const overlay = overlayRef.current;
+    const ctx = overlay?.getContext('2d');
+    if (!overlay || !ctx || reducedMotion) return;
+    let handle = 0;
+    const tick = () => {
+      const { layers, project, width: w, height: h } = flow.current;
+      if (project && layers.size > 0) stepFlow(ctx, [...layers.values()], project, w, h);
+      else ctx.clearRect(0, 0, w, h);
+      handle = requestAnimationFrame(tick);
+    };
+    handle = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(handle);
+  }, [reducedMotion]);
+
+  useEffect(() => {
+    const overlay = overlayRef.current;
+    const ctx = overlay?.getContext('2d');
+    if (!overlay || !ctx || !reducedMotion) return;
+    const { width: w, height: h } = overlaySize;
+    ctx.clearRect(0, 0, w, h);
+    if (overlays.length === 0 || w === 0) return;
+    const project = view === 'globe' ? globeProjection(w, globeView) : mapProjection(w, h);
+    // Degrees between arrows: the map spans 360° across, the globe's disc 180°.
+    const spacing = ((view === 'globe' ? 180 : 360) * ARROW_SPACING) / w;
+    const scale = Math.max(0.6, view === 'globe' ? w / 640 : w / 1100);
+    for (const kind of overlays) {
+      const style = ARROW_STYLES[kind];
+      drawArrows(ctx, overlayField(frame, kind), project, {
+        ...style,
+        spacing,
+        pixelsPerUnit: style.pixelsPerUnit * scale,
+        maxLength: style.maxLength * scale,
+      });
+    }
+  }, [frame, overlays, view, globeView, overlaySize, reducedMotion]);
 
   /** Grid cell under the pointer on the map or the globe, or −1 off the planet. */
   const cellAt = (event: React.MouseEvent<HTMLCanvasElement>): number => {
@@ -108,20 +258,23 @@ export function PlanetView({ frame, layer, view, toolActive, onCellClick }: Prop
 
   return (
     <>
-      <canvas
-        ref={canvasRef}
-        className={[view, toolActive ? 'tool-active' : ''].join(' ')}
-        onMouseDown={(event) => {
-          drag.current = { x: event.clientX, y: event.clientY, moved: false };
-        }}
-        onClick={onClick}
-        onMouseMove={onPointerMove}
-        onMouseLeave={() => {
-          drag.current = null;
-          setHovered(null);
-        }}
-        aria-label={t(view === 'globe' ? 'map.globeLabel' : 'map.label')}
-      />
+      <div className={`planet-canvas ${view}-wrap`}>
+        <canvas
+          ref={canvasRef}
+          className={[view, toolActive ? 'tool-active' : ''].join(' ')}
+          onMouseDown={(event) => {
+            drag.current = { x: event.clientX, y: event.clientY, moved: false };
+          }}
+          onClick={onClick}
+          onMouseMove={onPointerMove}
+          onMouseLeave={() => {
+            drag.current = null;
+            setHovered(null);
+          }}
+          aria-label={t(view === 'globe' ? 'map.globeLabel' : 'map.label')}
+        />
+        <canvas ref={overlayRef} className="overlay-arrows" aria-hidden="true" />
+      </div>
       {hovered && <CellInspector frame={frame} cell={hovered} />}
     </>
   );

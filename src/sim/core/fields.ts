@@ -40,6 +40,14 @@ export const FIELD_SPECS = {
   /** Annual-mean surface wind, eastward and northward components (circulation model). */
   windU: { type: 'f32', unit: 'm/s' },
   windV: { type: 'f32', unit: 'm/s' },
+  /** Wind-driven surface ocean current, eastward and northward (ocean model). */
+  oceanCurrentU: { type: 'f32', unit: 'm/s' },
+  oceanCurrentV: { type: 'f32', unit: 'm/s' },
+  /**
+   * Sea surface temperature anomaly from currents and upwelling (warm and cold
+   * currents), also felt on coasts; the climate model adds it to temperatures.
+   */
+  oceanAnomaly: { type: 'f32', unit: '°C' },
   /** Water leaving the cell as runoff (precipitation minus evapotranspiration). */
   runoff: { type: 'f32', unit: 'mm/yr' },
   /** Crust type: 1 = continental (buoyant, never subducts), 0 = oceanic. */

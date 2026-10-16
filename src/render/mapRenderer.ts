@@ -2,7 +2,14 @@ import type { Fields } from '../sim/core/fields';
 import type { Grid } from '../sim/core/grid';
 import { Biome, BIOMES } from '../sim/data/biomes';
 import { SEA_LEVEL } from '../sim/models/geosphere/flowRouting';
-import { elevationPalette, precipitationPalette, temperaturePalette, type Rgb } from './palettes';
+import {
+  elevationPalette,
+  precipitationPalette,
+  seaAnomalyPalette,
+  temperaturePalette,
+  windSpeedPalette,
+  type Rgb,
+} from './palettes';
 
 /** The fields the map needs; a PlanetState or a snapshot sent from the simulation worker. */
 export const RENDERED_FIELDS = [
@@ -11,6 +18,9 @@ export const RENDERED_FIELDS = [
   'discharge',
   'windU',
   'windV',
+  'oceanCurrentU',
+  'oceanCurrentV',
+  'oceanAnomaly',
   'airTemperature',
   'iceCover',
   'precipitation',
@@ -32,6 +42,8 @@ export const MAP_LAYERS = [
   'plates',
   'airTemperature',
   'precipitation',
+  'wind',
+  'oceanCurrents',
   'biomes',
   'life',
   'civilization',
@@ -122,6 +134,17 @@ const layerColors: Record<MapLayer, CellColor> = {
       Math.round(BARE_GROUND[1] * bare + 245 * white + 22 * black),
       Math.round(BARE_GROUND[2] * bare + 235 * white + 28 * black),
     ];
+  },
+  wind(state, i) {
+    const { windU, windV, elevation } = state.fields;
+    const color = windSpeedPalette(Math.hypot(windU[i]!, windV[i]!));
+    // Land a little darker, so the coastlines stay visible.
+    return elevation[i]! < SEA_LEVEL ? color : mix(color, [40, 40, 40], 0.35);
+  },
+  oceanCurrents(state, i) {
+    const { oceanAnomaly, elevation } = state.fields;
+    if (elevation[i]! >= SEA_LEVEL) return [58, 60, 64];
+    return seaAnomalyPalette(oceanAnomaly[i]!);
   },
   precipitation(state, i) {
     const color = precipitationPalette(state.fields.precipitation[i]!);

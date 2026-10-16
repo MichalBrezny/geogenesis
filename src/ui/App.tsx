@@ -11,7 +11,7 @@ import { ControlsPanel } from './ControlsPanel';
 import { LayerBar } from './LayerBar';
 import { LifePanel } from './LifePanel';
 import { MapLegend } from './MapLegend';
-import { PlanetView, type View } from './PlanetView';
+import { PlanetView, type Overlay, type View } from './PlanetView';
 import { Collapsible, TabbedPanel, type Tab } from './SidePanel';
 import { useShortcuts, type Shortcuts } from './shortcuts';
 import { ToolPalette } from './ToolPalette';
@@ -42,6 +42,8 @@ const SCENARIO_VIEW: Record<
       'plates',
       'airTemperature',
       'precipitation',
+      'wind',
+      'oceanCurrents',
       'biomes',
       'life',
       'civilization',
@@ -61,6 +63,8 @@ const SCENARIO_VIEW: Record<
       'plates',
       'airTemperature',
       'precipitation',
+      'wind',
+      'oceanCurrents',
       'biomes',
       'civilization',
     ],
@@ -74,6 +78,7 @@ const SHORTCUT_HELP = [
   ['S', 'help.keyStep'],
   ['1–9', 'help.keyLayer'],
   ['G', 'help.keyView'],
+  ['W / C', 'help.keyOverlay'],
   ['Esc', 'help.keyEscape'],
   ['?', 'help.keyHelp'],
 ] as const;
@@ -98,6 +103,19 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [layer, setLayer] = useState<MapLayer>('terrain');
   const [view, setView] = useState<View>('map');
+  const [overlays, setOverlays] = useState<Overlay[]>([]);
+  const toggleOverlay = (overlay: Overlay) =>
+    setOverlays((current) =>
+      current.includes(overlay) ? current.filter((o) => o !== overlay) : [...current, overlay],
+    );
+  /** Picking the wind or currents layer shows its arrows too. */
+  const chooseLayer = (next: MapLayer) => {
+    setLayer(next);
+    const arrows: Overlay | null =
+      next === 'wind' ? 'wind' : next === 'oceanCurrents' ? 'currents' : null;
+    if (arrows)
+      setOverlays((current) => (current.includes(arrows) ? current : [...current, arrows]));
+  };
   const [running, setRunning] = useState(false);
   const [speed, setSpeed] = useState<Speed>('fast');
   const [tool, setTool] = useState<ToolId | null>(null);
@@ -167,6 +185,8 @@ export function App() {
     ' ': toggleRunning,
     s: step,
     g: () => setView(view === 'map' ? 'globe' : 'map'),
+    w: () => toggleOverlay('wind'),
+    c: () => toggleOverlay('currents'),
     Escape: () => {
       setTool(null);
       setHelpOpen(false);
@@ -174,7 +194,7 @@ export function App() {
     '?': () => setHelpOpen(!helpOpen),
   };
   scenarioView.layers.forEach((id, index) => {
-    shortcuts[String(index + 1)] = () => setLayer(id);
+    shortcuts[String(index + 1)] = () => chooseLayer(id);
   });
   useShortcuts(shortcuts);
 
@@ -256,7 +276,9 @@ export function App() {
             <LayerBar
               layers={scenarioView.layers}
               layer={shownLayer}
-              onLayerChange={setLayer}
+              onLayerChange={chooseLayer}
+              overlays={overlays}
+              onToggleOverlay={toggleOverlay}
               view={view}
               onViewChange={setView}
             />
@@ -267,6 +289,7 @@ export function App() {
                   layer={shownLayer}
                   view={view}
                   toolActive={tool !== null}
+                  overlays={frame.scenario === 'daisyworld' ? [] : overlays}
                   onCellClick={(x, y) => {
                     if (tool) send({ type: 'tool', use: { tool, x, y, lifeClass } });
                   }}

@@ -25,9 +25,11 @@ are coupled by Gaia-style feedbacks, so life changes the climate that shapes lif
 
 - **Geosphere**: tectonic plates with continental drift, collisions, subduction arcs and mid-ocean
   ridges; flow routing, fluvial erosion (stream power) and hillslope diffusion.
-- **Atmosphere and climate**: a faint young Sun that brightens with age, a 2D energy-balance
-  model with ice–albedo feedback (snowball Earths), precipitation, and a carbon cycle in which
-  volcanic outgassing and rock weathering keep CO₂ in balance.
+- **Atmosphere, ocean and climate**: a faint young Sun that brightens with age, a 2D energy-balance
+  model with ice–albedo feedback (snowball Earths), a three-cell atmospheric circulation, rain
+  carried by the winds (wet ITCZ, dry subtropics, rain shadows), wind-driven ocean gyres with
+  warm and cold currents and upwelling, and a carbon cycle in which volcanic outgassing, rock
+  weathering and organic carbon burial keep CO₂ in balance.
 - **Biosphere**: biomes classified from climate, 15 life classes from prokaryotes to mammals and
   cetaceans that spread, compete and evolve, oxygen from photosynthesis (with a Great Oxidation
   Event) and methane from microbes.
@@ -37,8 +39,9 @@ are coupled by Gaia-style feedbacks, so life changes the climate that shapes lif
   monoliths, and adding or removing CO₂. Model controls for sun brightness, volcanism, drift,
   erosion and mutation rate.
 - **Scenarios**: random planet, Daisyworld (Watson & Lovelock 1983) and Aquarium (a water world).
-- **Views**: map layers (terrain and rivers, plates, temperature, precipitation, biomes, life,
-  civilization, daisies) on a flat map or an optional rotating globe; a cell inspector; history
+- **Views**: map layers (terrain and rivers, plates, temperature, precipitation, wind, ocean
+  currents, biomes, life, civilization, daisies) on a flat map or an optional rotating globe,
+  with animated wind and current particles over any layer; a cell inspector; history
   charts; an event log.
 - **Save and load**: the whole planet in a compact binary file; the same seed always replays the
   same history.

@@ -4,6 +4,7 @@ import { createRng } from './core/rng';
 import { createCarbonCycle } from './models/atmosphere/carbon';
 import { createClimate } from './models/atmosphere/climate';
 import { circulationModel } from './models/atmosphere/circulation';
+import { oceanModel } from './models/atmosphere/ocean';
 import { precipitationModel } from './models/atmosphere/precipitation';
 import { stellarEvolution } from './models/atmosphere/star';
 import { createSurfaceAlbedo } from './models/atmosphere/surfaceAlbedo';
@@ -90,6 +91,7 @@ export function randomWorldFromPlanet(
       createSurfaceAlbedo(),
       createClimate(),
       circulationModel,
+      oceanModel,
       precipitationModel,
       biomeModel,
       withMinInterval(createLife(), EVOLUTION_INTERVAL),
@@ -102,9 +104,11 @@ export function randomWorldFromPlanet(
       eraTracker,
     ],
     [
-      // Geology runs first and uses the last step's climate.
+      // Geology runs first and uses the last step's climate; the climate the last
+      // step's ocean.
       'airTemperature',
       'precipitation',
+      'oceanAnomaly',
       'elevation',
       'upliftRate',
       'plateId',
@@ -133,6 +137,7 @@ function spinUpAtmosphere(planet: PlanetState): void {
     createSurfaceAlbedo(),
     createClimate(),
     circulationModel,
+    oceanModel,
     precipitationModel,
     biomeModel,
     createCarbonCycle(),

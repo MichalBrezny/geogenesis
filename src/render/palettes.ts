@@ -54,3 +54,21 @@ export const precipitationPalette = gradient([
   { value: 2500, color: [40, 110, 170] },
   { value: 4000, color: [30, 50, 140] },
 ]);
+
+/** Wind speed (m/s): calm dark blue to strong pale cyan, on the dark map. */
+export const windSpeedPalette = gradient([
+  { value: 0, color: [22, 32, 58] },
+  { value: 3, color: [36, 82, 140] },
+  { value: 6, color: [57, 135, 229] },
+  { value: 9, color: [120, 190, 236] },
+  { value: 12, color: [215, 240, 250] },
+]);
+
+/** Sea surface temperature anomaly (°C): cold currents blue, warm currents red. */
+export const seaAnomalyPalette = gradient([
+  { value: -6, color: [40, 90, 190] },
+  { value: -2, color: [120, 160, 215] },
+  { value: 0, color: [215, 215, 215] },
+  { value: 2, color: [230, 150, 120] },
+  { value: 6, color: [195, 50, 40] },
+]);

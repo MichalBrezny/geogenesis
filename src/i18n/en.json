@@ -235,5 +235,15 @@
   "inspect.wind": "Wind",
   "inspect.windValue": "{speed} m/s from {from}",
   "inspect.calm": "Calm",
-  "inspect.river": "River"
+  "inspect.river": "River",
+  "layer.wind": "Wind",
+  "layer.oceanCurrents": "Ocean currents",
+  "layerHelp.wind": "Surface wind speed; the arrows show where it blows",
+  "layerHelp.oceanCurrents": "Warm and cold currents: how much warmer or colder the sea surface is than the latitude would make it",
+  "overlay.label": "Arrows",
+  "overlay.wind": "Wind",
+  "overlay.currents": "Currents",
+  "overlayHelp.wind": "Show wind arrows over any map layer",
+  "overlayHelp.currents": "Show ocean current arrows over any map layer",
+  "help.keyOverlay": "Show or hide wind and current arrows"
 }

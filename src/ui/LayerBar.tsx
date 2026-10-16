@@ -1,10 +1,12 @@
 import { t, type MessageKey } from '../i18n/i18n';
 import type { MapLayer } from '../render/mapRenderer';
-import { LAYER_ICONS, VIEW_ICONS } from './icons';
-import { VIEWS, type View } from './PlanetView';
+import { LAYER_ICONS, OVERLAY_ICONS, VIEW_ICONS } from './icons';
+import { OVERLAYS, VIEWS, type Overlay, type View } from './PlanetView';
 
 interface Props {
   layers: readonly MapLayer[];
+  overlays: readonly Overlay[];
+  onToggleOverlay: (overlay: Overlay) => void;
   layer: MapLayer;
   onLayerChange: (layer: MapLayer) => void;
   view: View;
@@ -12,7 +14,8 @@ interface Props {
 }
 
 /** Map layer and view switches above the planet; layers are numbered for the keyboard. */
-export function LayerBar({ layers, layer, onLayerChange, view, onViewChange }: Props) {
+export function LayerBar(props: Props) {
+  const { layers, layer, onLayerChange, view, onViewChange, overlays, onToggleOverlay } = props;
   return (
     <div className="layerbar">
       <div className="segmented wrap" role="radiogroup" aria-label={t('layer.label')}>
@@ -27,6 +30,20 @@ export function LayerBar({ layers, layer, onLayerChange, view, onViewChange }: P
           >
             {LAYER_ICONS[id]}
             {t(`layer.${id}`)}
+          </button>
+        ))}
+      </div>
+      <div className="segmented" role="group" aria-label={t('overlay.label')}>
+        {OVERLAYS.map((id) => (
+          <button
+            key={id}
+            aria-pressed={overlays.includes(id)}
+            className={overlays.includes(id) ? 'selected' : undefined}
+            onClick={() => onToggleOverlay(id)}
+            title={`${t(`overlayHelp.${id}` as MessageKey)} (${id === 'wind' ? 'W' : 'C'})`}
+          >
+            {OVERLAY_ICONS[id]}
+            {t(`overlay.${id}` as MessageKey)}
           </button>
         ))}
       </div>

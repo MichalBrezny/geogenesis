@@ -88,7 +88,7 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
   const iceAlbedo = options.iceAlbedo ?? ICE_ALBEDO;
   return {
     name: 'climate',
-    inputs: ['elevation', 'surfaceAlbedo'],
+    inputs: ['elevation', 'surfaceAlbedo', 'oceanAnomaly'],
     outputs: ['airTemperature', 'iceCover', 'albedo'],
     runOneStep(state, dtYears) {
       const { grid, fields, globals } = state;
@@ -108,7 +108,7 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
 
       for (let iteration = 0; iteration < 12; iteration++) {
         solveCoarse(climate, grid, albedo, globals.solarInput, forcing);
-        interpolateToFine(climate, grid, elevation, airTemperature);
+        interpolateToFine(climate, grid, elevation, fields.oceanAnomaly, airTemperature);
         let maxChange = 0;
         for (let i = 0; i < grid.cellCount; i++) {
           const ice = iceFractionAt(airTemperature[i]!);
@@ -297,11 +297,15 @@ function conjugateGradient(climate: ClimateGrid): void {
   }
 }
 
-/** Bilinear interpolation of coarse sea-level temperatures, then cooling with altitude. */
+/**
+ * Bilinear interpolation of coarse sea-level temperatures, then cooling with
+ * altitude and the warm or cold ocean currents' anomaly.
+ */
 function interpolateToFine(
   climate: ClimateGrid,
   grid: Grid,
   elevation: Float32Array,
+  oceanAnomaly: Float32Array,
   out: Float32Array,
 ): void {
   const { coarse, factor, temperature } = climate;
@@ -320,7 +324,8 @@ function interpolateToFine(
       const top = temperature[y0 * cw + x0]! * (1 - tx) + temperature[y0 * cw + x1]! * tx;
       const bottom = temperature[y1 * cw + x0]! * (1 - tx) + temperature[y1 * cw + x1]! * tx;
       const i = fy * grid.width + fx;
-      out[i] = top * (1 - ty) + bottom * ty - Math.max(0, elevation[i]!) * LAPSE_RATE;
+      out[i] =
+        top * (1 - ty) + bottom * ty - Math.max(0, elevation[i]!) * LAPSE_RATE + oceanAnomaly[i]!;
     }
   }
 }

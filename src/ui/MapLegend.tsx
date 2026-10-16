@@ -4,7 +4,9 @@ import { LIFE_TIERS } from '../sim/data/lifeClasses';
 import {
   elevationPalette,
   precipitationPalette,
+  seaAnomalyPalette,
   temperaturePalette,
+  windSpeedPalette,
   type Rgb,
 } from '../render/palettes';
 import { BIOME_IDS, BIOMES } from '../sim/data/biomes';
@@ -32,6 +34,20 @@ const SCALES: Partial<Record<MapLayer, Scale>> = {
     min: -40,
     max: 40,
     ticks: [-40, -10, 10, 25, 40],
+    unit: '°C',
+  },
+  wind: {
+    palette: windSpeedPalette,
+    min: 0,
+    max: 12,
+    ticks: [0, 3, 6, 9, 12],
+    unit: 'm/s',
+  },
+  oceanCurrents: {
+    palette: seaAnomalyPalette,
+    min: -6,
+    max: 6,
+    ticks: [-6, -3, 0, 3, 6],
     unit: '°C',
   },
   precipitation: {
