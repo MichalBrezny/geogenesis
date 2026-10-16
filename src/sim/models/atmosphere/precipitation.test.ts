@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { cellIndex } from '../../core/grid';
 import { createPlanet, type PlanetState } from '../../core/planet';
 import { createRng } from '../../core/rng';
-import { cellWind, circulationModel } from './circulation';
+import { cellWind, circulationModel, thermalEquator } from './circulation';
 import { precipitationModel } from './precipitation';
 
 const rng = createRng(1);
@@ -107,5 +107,50 @@ describe('precipitation', () => {
     rainAndWind(warm);
     const mean = (p: PlanetState) => zonalMean(p, p.fields.precipitation, -90, 90);
     expect(mean(warm)).toBeGreaterThan(1.5 * mean(cold));
+  });
+
+  it('does not turn a subtropical continental heat low into a wet belt', () => {
+    const planet = aquaplanet();
+    const { grid, fields } = planet;
+    for (let y = 0; y < grid.height; y++) {
+      const latitude = grid.rowLatitude[y]!;
+      if (latitude < 18 || latitude > 34) continue;
+      for (let x = 24; x <= 39; x++) {
+        const i = cellIndex(grid, x, y);
+        fields.elevation[i] = 0;
+        fields.airTemperature[i]! += 12;
+      }
+    }
+    rainAndWind(planet);
+    const interiorMean = () => {
+      let sum = 0;
+      let count = 0;
+      for (let y = 0; y < grid.height; y++) {
+        const latitude = grid.rowLatitude[y]!;
+        if (latitude < 22 || latitude > 30) continue;
+        for (let x = 28; x <= 35; x++) {
+          sum += fields.precipitation[cellIndex(grid, x, y)]!;
+          count++;
+        }
+      }
+      return sum / count;
+    };
+    const withHeatLow = interiorMean();
+
+    // Re-run the same warm climate with just the original three-cell winds.
+    const temperature = Float64Array.from(fields.airTemperature);
+    const itcz = thermalEquator(grid, temperature);
+    const hadleyWidth = planet.globals.circulation!.hadleyWidth;
+    for (let y = 0; y < grid.height; y++) {
+      for (let x = 0; x < grid.width; x++) {
+        const i = cellIndex(grid, x, y);
+        const [u, v] = cellWind(grid.rowLatitude[y]!, itcz[x]!, hadleyWidth);
+        const friction = fields.elevation[i]! >= 0 ? 0.7 : 1;
+        fields.windU[i] = u * friction;
+        fields.windV[i] = v * friction;
+      }
+    }
+    precipitationModel.runOneStep(planet, 0, rng);
+    expect(withHeatLow).toBeLessThan(interiorMean() * 1.15);
   });
 });

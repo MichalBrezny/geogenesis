@@ -9,7 +9,7 @@ import type { PlanetState } from './core/planet';
  */
 // Kept from the project's working title so that older saves still load.
 const MAGIC = 'SIMEARTH';
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 const TYPED_ARRAYS = {
   Float64Array,

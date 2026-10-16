@@ -8,7 +8,7 @@ import {
   sampleCoarse,
   type AtmosphereGrid,
 } from './atmosphereGrid';
-import { computeDivergence } from './circulation';
+import { computeDivergence, thermalEquator } from './circulation';
 
 const SECONDS_PER_YEAR = 365.25 * 86_400;
 /** Precipitable water (mm) of saturated air at 15 °C, and its growth per °C (Clausius–Clapeyron). */
@@ -44,6 +44,10 @@ const ITERATIONS = 150;
 const OROGRAPHIC_CONTRAST = 40;
 /** Temperature drop with altitude, °C per metre. */
 const LAPSE_RATE = 0.0065;
+/** Share of shallow heat-low convergence that becomes rain-producing ascent. */
+const SUBTROPICAL_CONVERGENCE_LIFT = 0.15;
+/** Half-width of the Hadley cell's deep, rain-producing rising branch, degrees. */
+const DEEP_ASCENT_WIDTH = 9;
 
 /** Precipitable water (mm) of saturated air at a temperature (°C). */
 export function saturationWater(temperature: number): number {
@@ -72,7 +76,7 @@ export const precipitationModel: SimComponent = {
   runOneStep(state) {
     const { grid, fields } = state;
     const atmosphere = getAtmosphereGrid(grid);
-    const coarseRain = moistureBudget(atmosphere, grid, fields);
+    const coarseRain = moistureBudget(atmosphere, grid, fields, state.globals.circulation);
     const fine = fields.precipitation;
     if (atmosphere.coarse === grid) {
       for (let i = 0; i < fine.length; i++) fine[i] = coarseRain[i]!;
@@ -86,7 +90,12 @@ export const precipitationModel: SimComponent = {
 type Fields = Parameters<SimComponent['runOneStep']>[0]['fields'];
 
 /** Steady-state precipitation (mm/yr) on the coarse grid. */
-function moistureBudget(atmosphere: AtmosphereGrid, grid: Grid, fields: Fields): Float64Array {
+function moistureBudget(
+  atmosphere: AtmosphereGrid,
+  grid: Grid,
+  fields: Fields,
+  circulation: { hadleyWidth: number; meanItcz: number } | undefined,
+): Float64Array {
   const { coarse } = atmosphere;
   const n = coarse.cellCount;
   const { elevation, airTemperature, iceCover, vegetation, windU, windV } = fields;
@@ -94,6 +103,17 @@ function moistureBudget(atmosphere: AtmosphereGrid, grid: Grid, fields: Fields):
   const isSea = (i: number) => 1 - isLand(i);
 
   const temperature = averageToCoarse(atmosphere, grid, airTemperature, new Float64Array(n));
+  const seaLevelTemperature = new Float64Array(grid.cellCount);
+  for (let i = 0; i < grid.cellCount; i++) {
+    seaLevelTemperature[i] = airTemperature[i]! + Math.max(0, elevation[i]!) * LAPSE_RATE;
+  }
+  const reducedTemperature = averageToCoarse(
+    atmosphere,
+    grid,
+    seaLevelTemperature,
+    new Float64Array(n),
+  );
+  const itcz = thermalEquator(coarse, reducedTemperature);
   const land = averageToCoarse(
     atmosphere,
     grid,
@@ -114,7 +134,19 @@ function moistureBudget(atmosphere: AtmosphereGrid, grid: Grid, fields: Fields):
   const evaporable = new Float64Array(n);
   const recycling = new Float64Array(n);
   for (let c = 0; c < n; c++) {
-    const lifting = -divergence[c]! / CONVERGENCE_SCALE + Math.max(0, lift[c]!) / UPSLOPE_SCALE;
+    const y = Math.floor(c / coarse.width);
+    const x = c % coarse.width;
+    let convergence = -divergence[c]! / CONVERGENCE_SCALE;
+    // Heat lows in the descending half of a Hadley cell are shallow: their air
+    // returns aloft before reaching moist levels. Deep ascent remains effective
+    // near the local ITCZ, and polar-front convergence is unaffected.
+    const distanceFromItcz = Math.abs(coarse.rowLatitude[y]! - itcz[x]!);
+    const inDescendingHadley =
+      convergence > 0 &&
+      distanceFromItcz > DEEP_ASCENT_WIDTH &&
+      distanceFromItcz < (circulation?.hadleyWidth ?? 30);
+    if (inDescendingHadley) convergence *= SUBTROPICAL_CONVERGENCE_LIFT;
+    const lifting = convergence + Math.max(0, lift[c]!) / UPSLOPE_SCALE;
     const factor = lifting >= 0 ? 1 + lifting : 1 / (1 - lifting); // sinking air rains less, never negatively
     rate[c] = Math.min(MAX_RAIN_FACTOR, Math.max(MIN_RAIN_FACTOR, factor)) / RESIDENCE_TIME;
     capacity[c] = saturationWater(temperature[c]!);

@@ -29,6 +29,22 @@ const MAX_ITCZ_LATITUDE = 20;
 const ITCZ_SMOOTHING = 30;
 /** Temperature scale (°C) of the weighting that finds the warmest latitudes. */
 const ITCZ_TEMPERATURE_SCALE = 2;
+/** Mean sea-level pressure around which the circulation's pressure systems vary, hPa. */
+export const STANDARD_PRESSURE = 1013;
+/** Thermal pressure response to a sea-level temperature anomaly, hPa/°C. */
+const LAND_THERMAL_PRESSURE = -0.8;
+const SEA_THERMAL_PRESSURE = -0.12;
+/** Gaussian sigma: 1,880 km full width at half maximum, a continental-scale system. */
+const THERMAL_SMOOTHING = 800_000;
+/** Air density used to turn a sea-level pressure gradient into acceleration, kg/m³. */
+const SURFACE_AIR_DENSITY = 1.225;
+/** Earth's rotation rate, radians/s. */
+const ROTATION_RATE = 7.2921e-5;
+/** Linear boundary-layer drag rates over sea and land, s⁻¹. */
+const SEA_DRAG = 1.5e-5;
+const LAND_DRAG = 3e-5;
+/** Thermal systems steer the broad circulation without overwhelming it. */
+const MAX_THERMAL_WIND = 4.5;
 
 /**
  * General circulation of the atmosphere, as a three-cell model.
@@ -42,13 +58,14 @@ const ITCZ_TEMPERATURE_SCALE = 2;
  * Surface winds follow the cells: trade winds blow west and towards the ITCZ,
  * westerlies east and poleward, polar easterlies west and equatorward. Where
  * they converge (ITCZ, polar front) air rises and rains; where they diverge
- * (subtropical highs, poles) it sinks and dries — the moisture model computes
- * that from the wind fields. Friction slows wind over land.
+ * (subtropical highs, poles) it sinks and dries. Continental temperature
+ * anomalies add broad heat lows or cold highs; their pressure-gradient flow is
+ * frictional-geostrophic, becoming directly down-gradient near the equator.
  */
 export const circulationModel: SimComponent = {
   name: 'circulation',
   inputs: ['elevation', 'airTemperature'],
-  outputs: ['windU', 'windV'],
+  outputs: ['windU', 'windV', 'pressure'],
   runOneStep(state) {
     const { grid, fields } = state;
     const atmosphere = getAtmosphereGrid(grid);
@@ -74,8 +91,10 @@ export const circulationModel: SimComponent = {
     const width = Math.max(20, Math.min(40, hadleyWidth));
     state.globals.circulation = { hadleyWidth: width, meanItcz: mean(itcz) };
 
+    const thermalPressure = thermalPressureAnomaly(coarse, temperature, land);
     const u = new Float64Array(n);
     const v = new Float64Array(n);
+    const pressure = new Float64Array(n);
     for (let y = 0; y < coarse.height; y++) {
       const latitude = coarse.rowLatitude[y]!;
       for (let x = 0; x < coarse.width; x++) {
@@ -84,10 +103,14 @@ export const circulationModel: SimComponent = {
         const friction = 1 - (1 - LAND_WIND_FACTOR) * land[c]!;
         u[c] = eastward * friction;
         v[c] = northward * friction;
+        pressure[c] =
+          STANDARD_PRESSURE + zonalPressureAnomaly(latitude, itcz[x]!, width) + thermalPressure[c]!;
       }
     }
+    addThermalWind(coarse, thermalPressure, land, u, v);
     toFine(atmosphere, grid, u, fields.windU);
     toFine(atmosphere, grid, v, fields.windV);
+    toFine(atmosphere, grid, pressure, fields.pressure);
   },
 };
 
@@ -123,11 +146,138 @@ export function cellWind(latitude: number, itcz: number, width: number): [number
 }
 
 /**
+ * Zonal sea-level pressure relative to 1013 hPa. Smooth interpolation places
+ * the ITCZ trough at −4 hPa, subtropical highs at +6, subpolar lows at −10,
+ * and polar highs at +4, following the same cell boundaries as `cellWind`.
+ */
+export function zonalPressureAnomaly(latitude: number, itcz: number, width: number): number {
+  const north = latitude >= itcz;
+  const distance = Math.abs(latitude - itcz);
+  const toPole = north ? 90 - itcz : 90 + itcz;
+  const hadley = Math.min(width, 0.6 * toPole);
+  const polarFront = (hadley + toPole) / 2;
+  if (distance < hadley) return smoothMix(-4, 6, distance / hadley);
+  if (distance < polarFront) {
+    return smoothMix(6, -10, (distance - hadley) / (polarFront - hadley));
+  }
+  return smoothMix(-10, 4, (distance - polarFront) / Math.max(1, toPole - polarFront));
+}
+
+/** Broad pressure anomaly made by continents departing from their latitude's mean temperature. */
+function thermalPressureAnomaly(
+  coarse: Grid,
+  temperature: Float64Array,
+  land: Float64Array,
+): Float64Array {
+  const { width, height } = coarse;
+  const source = new Float64Array(coarse.cellCount);
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    let zonalMean = 0;
+    for (let x = 0; x < width; x++) zonalMean += temperature[row + x]!;
+    zonalMean /= width;
+    for (let x = 0; x < width; x++) {
+      const c = row + x;
+      const response =
+        SEA_THERMAL_PRESSURE + (LAND_THERMAL_PRESSURE - SEA_THERMAL_PRESSURE) * land[c]!;
+      source[c] = (temperature[c]! - zonalMean) * response;
+    }
+  }
+  return gaussianSmooth(coarse, source, THERMAL_SMOOTHING);
+}
+
+/** Separable physical-distance Gaussian blur; longitude wraps and latitude stops at the poles. */
+function gaussianSmooth(grid: Grid, values: Float64Array, sigma: number): Float64Array {
+  const { width, height, rowDx, dy } = grid;
+  const horizontal = new Float64Array(values.length);
+  for (let y = 0; y < height; y++) {
+    const radius = Math.min(Math.floor((width - 1) / 2), Math.ceil((3 * sigma) / rowDx[y]!));
+    const row = y * width;
+    for (let x = 0; x < width; x++) {
+      let sum = 0;
+      let weight = 0;
+      for (let offset = -radius; offset <= radius; offset++) {
+        const distance = offset * rowDx[y]!;
+        const w = Math.exp(-(distance * distance) / (2 * sigma * sigma));
+        sum += values[row + ((x + offset + width) % width)]! * w;
+        weight += w;
+      }
+      horizontal[row + x] = sum / weight;
+    }
+  }
+  const out = new Float64Array(values.length);
+  const radius = Math.ceil((3 * sigma) / dy);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let sum = 0;
+      let weight = 0;
+      for (let offset = -radius; offset <= radius; offset++) {
+        const row = y + offset;
+        if (row < 0 || row >= height) continue;
+        const distance = offset * dy;
+        const w = Math.exp(-(distance * distance) / (2 * sigma * sigma));
+        sum += horizontal[row * width + x]! * w;
+        weight += w;
+      }
+      out[y * width + x] = sum / weight;
+    }
+  }
+  return out;
+}
+
+/** Adds the boundary-layer solution of f k×v + r v = −∇p/ρ for the thermal pressure. */
+function addThermalWind(
+  grid: Grid,
+  pressure: Float64Array,
+  land: Float64Array,
+  u: Float64Array,
+  v: Float64Array,
+): void {
+  const { width, height, rowDx, dy, rowLatitude } = grid;
+  for (let y = 0; y < height; y++) {
+    const north = Math.max(0, y - 1);
+    const south = Math.min(height - 1, y + 1);
+    const meridionalSpan = (south - north) * dy;
+    const latitude = (rowLatitude[y]! * Math.PI) / 180;
+    const coriolis = 2 * ROTATION_RATE * Math.sin(latitude);
+    for (let x = 0; x < width; x++) {
+      const c = y * width + x;
+      const east = y * width + ((x + 1) % width);
+      const west = y * width + ((x - 1 + width) % width);
+      // hPa to Pa; row 0 is north, hence north minus south for dp/dy.
+      const dpdx = ((pressure[east]! - pressure[west]!) * 100) / (2 * rowDx[y]!);
+      const dpdy =
+        meridionalSpan > 0
+          ? ((pressure[north * width + x]! - pressure[south * width + x]!) * 100) / meridionalSpan
+          : 0;
+      const drag = SEA_DRAG + (LAND_DRAG - SEA_DRAG) * land[c]!;
+      const denominator = SURFACE_AIR_DENSITY * (drag * drag + coriolis * coriolis);
+      let thermalU = (-drag * dpdx + coriolis * dpdy) / denominator;
+      let thermalV = (-drag * dpdy - coriolis * dpdx) / denominator;
+      const speed = Math.hypot(thermalU, thermalV);
+      if (speed > MAX_THERMAL_WIND) {
+        const scale = MAX_THERMAL_WIND / speed;
+        thermalU *= scale;
+        thermalV *= scale;
+      }
+      u[c] = u[c]! + thermalU;
+      v[c] = v[c]! + thermalV;
+    }
+  }
+}
+
+function smoothMix(from: number, to: number, t: number): number {
+  const clamped = Math.max(0, Math.min(1, t));
+  const smooth = clamped * clamped * (3 - 2 * clamped);
+  return from + (to - from) * smooth;
+}
+
+/**
  * Latitude of the warmest air in each column, smoothed in longitude: where the
  * trade winds meet. Weighted towards the warmest rows rather than the single
  * hottest one, so it moves smoothly.
  */
-function thermalEquator(coarse: Grid, temperature: Float64Array): Float64Array {
+export function thermalEquator(coarse: Grid, temperature: Float64Array): Float64Array {
   const { width, height, rowLatitude, rowAreaWeight } = coarse;
   const raw = new Float64Array(width);
   for (let x = 0; x < width; x++) {

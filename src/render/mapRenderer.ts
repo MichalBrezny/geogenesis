@@ -5,6 +5,7 @@ import { SEA_LEVEL } from '../sim/models/geosphere/flowRouting';
 import {
   elevationPalette,
   precipitationPalette,
+  pressurePalette,
   seaAnomalyPalette,
   temperaturePalette,
   windSpeedPalette,
@@ -18,6 +19,7 @@ export const RENDERED_FIELDS = [
   'discharge',
   'windU',
   'windV',
+  'pressure',
   'oceanCurrentU',
   'oceanCurrentV',
   'oceanAnomaly',
@@ -41,6 +43,7 @@ export const MAP_LAYERS = [
   'terrain',
   'plates',
   'airTemperature',
+  'pressure',
   'precipitation',
   'wind',
   'oceanCurrents',
@@ -103,6 +106,9 @@ const layerColors: Record<MapLayer, CellColor> = {
   },
   airTemperature(state, i) {
     return temperaturePalette(state.fields.airTemperature[i]!);
+  },
+  pressure(state, i) {
+    return pressurePalette(state.fields.pressure[i]!);
   },
   biomes(state, i) {
     const { biome, vegetation, elevation } = state.fields;

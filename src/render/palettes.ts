@@ -55,6 +55,15 @@ export const precipitationPalette = gradient([
   { value: 4000, color: [30, 50, 140] },
 ]);
 
+/** Sea-level pressure (hPa): cool lows and warm highs, centred on 1013 hPa. */
+export const pressurePalette = gradient([
+  { value: 997, color: [38, 92, 170] },
+  { value: 1005, color: [105, 164, 210] },
+  { value: 1013, color: [218, 220, 211] },
+  { value: 1021, color: [224, 153, 91] },
+  { value: 1029, color: [177, 62, 47] },
+]);
+
 /** Wind speed (m/s): calm dark blue to strong pale cyan, on the dark map. */
 export const windSpeedPalette = gradient([
   { value: 0, color: [22, 32, 58] },

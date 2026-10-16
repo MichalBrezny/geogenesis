@@ -40,6 +40,8 @@ export const FIELD_SPECS = {
   /** Annual-mean surface wind, eastward and northward components (circulation model). */
   windU: { type: 'f32', unit: 'm/s' },
   windV: { type: 'f32', unit: 'm/s' },
+  /** Sea-level atmospheric pressure. */
+  pressure: { type: 'f32', unit: 'hPa' },
   /** Wind-driven surface ocean current, eastward and northward (ocean model). */
   oceanCurrentU: { type: 'f32', unit: 'm/s' },
   oceanCurrentV: { type: 'f32', unit: 'm/s' },

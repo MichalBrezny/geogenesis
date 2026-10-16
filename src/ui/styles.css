@@ -158,7 +158,8 @@ body {
   align-self: center;
 }
 
-.planet canvas.overlay-arrows {
+.planet canvas.overlay-arrows,
+.planet canvas.overlay-isobars {
   position: absolute;
   inset: 0;
   width: 100%;

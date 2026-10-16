@@ -100,6 +100,11 @@ export const LAYER_ICONS: Record<MapLayer, ReactNode> = {
       <path d="M12 9v7" />
     </Icon>
   ),
+  pressure: (
+    <Icon>
+      <path d="M3 7c3-3 6 3 9 0s6 3 9 0M3 12c3-3 6 3 9 0s6 3 9 0M3 17c3-3 6 3 9 0s6 3 9 0" />
+    </Icon>
+  ),
   precipitation: (
     <Icon>
       <path d="M12 3s-6 7-6 11a6 6 0 0 0 12 0c0-4-6-11-6-11Z" />
@@ -145,6 +150,7 @@ export const LAYER_ICONS: Record<MapLayer, ReactNode> = {
 export const OVERLAY_ICONS: Record<Overlay, ReactNode> = {
   wind: LAYER_ICONS.wind,
   currents: LAYER_ICONS.oceanCurrents,
+  isobars: LAYER_ICONS.pressure,
 };
 
 export const VIEW_ICONS: Record<View, ReactNode> = {

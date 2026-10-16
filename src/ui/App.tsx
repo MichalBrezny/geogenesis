@@ -41,6 +41,7 @@ const SCENARIO_VIEW: Record<
       'terrain',
       'plates',
       'airTemperature',
+      'pressure',
       'precipitation',
       'wind',
       'oceanCurrents',
@@ -62,6 +63,7 @@ const SCENARIO_VIEW: Record<
       'terrain',
       'plates',
       'airTemperature',
+      'pressure',
       'precipitation',
       'wind',
       'oceanCurrents',
@@ -76,9 +78,9 @@ const SCENARIO_VIEW: Record<
 const SHORTCUT_HELP = [
   ['Space', 'help.keyPlay'],
   ['S', 'help.keyStep'],
-  ['1–9', 'help.keyLayer'],
+  ['1–9 / 0', 'help.keyLayer'],
   ['G', 'help.keyView'],
-  ['W / C', 'help.keyOverlay'],
+  ['W / C / P', 'help.keyOverlay'],
   ['Esc', 'help.keyEscape'],
   ['?', 'help.keyHelp'],
 ] as const;
@@ -108,13 +110,19 @@ export function App() {
     setOverlays((current) =>
       current.includes(overlay) ? current.filter((o) => o !== overlay) : [...current, overlay],
     );
-  /** Picking the wind or currents layer shows its arrows too. */
+  /** Picking a flow or pressure layer also shows its matching overlay. */
   const chooseLayer = (next: MapLayer) => {
     setLayer(next);
-    const arrows: Overlay | null =
-      next === 'wind' ? 'wind' : next === 'oceanCurrents' ? 'currents' : null;
-    if (arrows)
-      setOverlays((current) => (current.includes(arrows) ? current : [...current, arrows]));
+    const overlay: Overlay | null =
+      next === 'wind'
+        ? 'wind'
+        : next === 'oceanCurrents'
+          ? 'currents'
+          : next === 'pressure'
+            ? 'isobars'
+            : null;
+    if (overlay)
+      setOverlays((current) => (current.includes(overlay) ? current : [...current, overlay]));
   };
   const [running, setRunning] = useState(false);
   const [speed, setSpeed] = useState<Speed>('fast');
@@ -187,6 +195,7 @@ export function App() {
     g: () => setView(view === 'map' ? 'globe' : 'map'),
     w: () => toggleOverlay('wind'),
     c: () => toggleOverlay('currents'),
+    p: () => toggleOverlay('isobars'),
     Escape: () => {
       setTool(null);
       setHelpOpen(false);
@@ -194,7 +203,7 @@ export function App() {
     '?': () => setHelpOpen(!helpOpen),
   };
   scenarioView.layers.forEach((id, index) => {
-    shortcuts[String(index + 1)] = () => chooseLayer(id);
+    shortcuts[index === 9 ? '0' : String(index + 1)] = () => chooseLayer(id);
   });
   useShortcuts(shortcuts);
 

@@ -26,7 +26,7 @@ export function LayerBar(props: Props) {
             aria-checked={layer === id}
             className={layer === id ? 'selected' : undefined}
             onClick={() => onLayerChange(id)}
-            title={`${t(`layerHelp.${id}` as MessageKey)} (${index + 1})`}
+            title={`${t(`layerHelp.${id}` as MessageKey)} (${index === 9 ? '0' : index + 1})`}
           >
             {LAYER_ICONS[id]}
             {t(`layer.${id}`)}
@@ -40,7 +40,7 @@ export function LayerBar(props: Props) {
             aria-pressed={overlays.includes(id)}
             className={overlays.includes(id) ? 'selected' : undefined}
             onClick={() => onToggleOverlay(id)}
-            title={`${t(`overlayHelp.${id}` as MessageKey)} (${id === 'wind' ? 'W' : 'C'})`}
+            title={`${t(`overlayHelp.${id}` as MessageKey)} (${id === 'wind' ? 'W' : id === 'currents' ? 'C' : 'P'})`}
           >
             {OVERLAY_ICONS[id]}
             {t(`overlay.${id}` as MessageKey)}

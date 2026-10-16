@@ -4,6 +4,7 @@ import { LIFE_TIERS } from '../sim/data/lifeClasses';
 import {
   elevationPalette,
   precipitationPalette,
+  pressurePalette,
   seaAnomalyPalette,
   temperaturePalette,
   windSpeedPalette,
@@ -35,6 +36,13 @@ const SCALES: Partial<Record<MapLayer, Scale>> = {
     max: 40,
     ticks: [-40, -10, 10, 25, 40],
     unit: '°C',
+  },
+  pressure: {
+    palette: pressurePalette,
+    min: 997,
+    max: 1029,
+    ticks: [997, 1005, 1013, 1021, 1029],
+    unit: 'hPa',
   },
   wind: {
     palette: windSpeedPalette,

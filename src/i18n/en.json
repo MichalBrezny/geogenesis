@@ -15,6 +15,7 @@
   "inspect.elevation": "Elevation",
   "inspect.depth": "Depth",
   "inspect.temperature": "Temperature",
+  "inspect.pressure": "Pressure",
   "inspect.precipitation": "Precipitation",
   "inspect.biome": "Biome",
   "inspect.life": "Most advanced life",
@@ -26,6 +27,7 @@
   "layer.terrain": "Terrain and rivers",
   "layer.plates": "Tectonic plates",
   "layer.airTemperature": "Air temperature",
+  "layer.pressure": "Sea-level pressure",
   "layer.precipitation": "Precipitation",
   "layer.daisies": "Daisies",
   "layer.biomes": "Biomes",
@@ -194,6 +196,7 @@
   "layerHelp.terrain": "Elevation, oceans, rivers and ice",
   "layerHelp.plates": "Tectonic plates; they drift and build mountains where they collide",
   "layerHelp.airTemperature": "Annual mean air temperature",
+  "layerHelp.pressure": "Sea-level pressure, with highs, lows and 4 hPa isobars",
   "layerHelp.precipitation": "Annual rain and snow, carried by the winds from the sea",
   "layerHelp.biomes": "Biomes set by temperature and rainfall, shaded by actual plant cover",
   "layerHelp.life": "The most advanced life in each place",
@@ -240,10 +243,12 @@
   "layer.oceanCurrents": "Ocean currents",
   "layerHelp.wind": "Surface wind speed; the arrows show where it blows",
   "layerHelp.oceanCurrents": "Warm and cold currents: how much warmer or colder the sea surface is than the latitude would make it",
-  "overlay.label": "Arrows",
+  "overlay.label": "Map overlays",
   "overlay.wind": "Wind",
   "overlay.currents": "Currents",
+  "overlay.isobars": "Isobars",
   "overlayHelp.wind": "Show wind arrows over any map layer",
   "overlayHelp.currents": "Show ocean current arrows over any map layer",
-  "help.keyOverlay": "Show or hide wind and current arrows"
+  "overlayHelp.isobars": "Show 4 hPa pressure contours and high/low centres over any map layer",
+  "help.keyOverlay": "Show or hide wind, current and isobar overlays"
 }
