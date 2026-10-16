@@ -6,7 +6,7 @@ declare const self: DedicatedWorkerGlobalScope;
 
 const host = new SimHost(
   (message, transfer) => self.postMessage(message, transfer),
-  (callback) => setTimeout(callback, 0),
+  (callback, delayMs) => setTimeout(callback, delayMs),
 );
 
 self.onmessage = (event: MessageEvent<WorkerRequest>) => host.handle(event.data);

@@ -7,11 +7,16 @@ import { HistoryCharts, type ChartSeries } from './charts/HistoryCharts';
 import { formatPpm, formatStep } from './format';
 import { CivilizationPanel, EventLog } from './CivilizationPanel';
 import { LifePanel } from './LifePanel';
+import { CellInspector, type HoveredCell } from './CellInspector';
 import { ControlsPanel } from './ControlsPanel';
 import { MapLegend } from './MapLegend';
 import { ToolPalette } from './ToolPalette';
 import type { LifeClassKey } from '../sim/data/lifeClasses';
 import type { ToolId } from '../sim/tools/tools';
+
+/** Pause between simulation steps for each speed setting, ms. */
+const SPEEDS = { slow: 500, normal: 120, fast: 0 } as const;
+type Speed = keyof typeof SPEEDS;
 
 /** How long a tool notice stays on screen, ms. */
 const NOTICE_DURATION = 3000;
@@ -71,6 +76,8 @@ export function App() {
   const [tool, setTool] = useState<ToolId | null>(null);
   const [lifeClass, setLifeClass] = useState<LifeClassKey>('prokaryotes');
   const [notice, setNotice] = useState<string | null>(null);
+  const [hovered, setHovered] = useState<HoveredCell | null>(null);
+  const [speed, setSpeed] = useState<Speed>('fast');
   const noticeTimer = useRef<number | undefined>(undefined);
 
   const send = useCallback((request: WorkerRequest) => workerRef.current?.postMessage(request), []);
@@ -125,6 +132,22 @@ export function App() {
   const stepTime = frame ? Object.values(frame.timings).reduce((sum, ms) => sum + ms, 0) : 0;
 
   /** Applies the selected tool to the grid cell under the click. */
+  /** Shows the inspector for the cell under the pointer. */
+  const inspectAt = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!frame) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const { width, height } = frame.grid;
+    const x = Math.min(width - 1, Math.floor(((event.clientX - rect.left) / rect.width) * width));
+    const y = Math.min(height - 1, Math.floor(((event.clientY - rect.top) / rect.height) * height));
+    setHovered({
+      index: y * width + x,
+      latitude: 90 - ((y + 0.5) * 180) / height,
+      longitude: ((x + 0.5) * 360) / width,
+      left: event.clientX + 16,
+      top: event.clientY + 16,
+    });
+  };
+
   const applyToolAt = (event: React.MouseEvent<HTMLCanvasElement>) => {
     if (!tool || !frame) return;
     const rect = event.currentTarget.getBoundingClientRect();
@@ -143,6 +166,23 @@ export function App() {
         <button onClick={() => send({ type: 'step' })} disabled={running || !frame}>
           {t('controls.step')}
         </button>
+        <label>
+          {t('controls.speed')}{' '}
+          <select
+            value={speed}
+            onChange={(e) => {
+              const value = e.target.value as Speed;
+              setSpeed(value);
+              send({ type: 'speed', delayMs: SPEEDS[value] });
+            }}
+          >
+            {(Object.keys(SPEEDS) as Speed[]).map((id) => (
+              <option key={id} value={id}>
+                {t(`speed.${id}`)}
+              </option>
+            ))}
+          </select>
+        </label>
         <button
           onClick={() => {
             newPlanet(scenario, resolution);
@@ -210,8 +250,11 @@ export function App() {
         ref={canvasRef}
         className={tool ? 'map tool-active' : 'map'}
         onClick={applyToolAt}
+        onMouseMove={inspectAt}
+        onMouseLeave={() => setHovered(null)}
         aria-label={t('map.label')}
       />
+      {frame && hovered && <CellInspector frame={frame} cell={hovered} />}
       <MapLegend layer={layer} />
       {notice && (
         <p className="notice" role="status">

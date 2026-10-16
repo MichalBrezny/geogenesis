@@ -14,6 +14,8 @@ export type WorkerRequest =
   | { type: 'controls'; controls: Partial<ModelControls> }
   | { type: 'unlimitedEnergy'; enabled: boolean }
   | { type: 'save' }
+  /** Pause between steps while running, ms. */
+  | { type: 'speed'; delayMs: number }
   /** Contents of a save file (gzip-compressed, see sim/serialize.ts). */
   | { type: 'load'; bytes: ArrayBuffer };
 

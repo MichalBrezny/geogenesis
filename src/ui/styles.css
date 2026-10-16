@@ -281,3 +281,36 @@ body {
   font-variant-numeric: tabular-nums;
   color: var(--text-secondary);
 }
+
+.inspector {
+  position: fixed;
+  z-index: 10;
+  pointer-events: none;
+  background: var(--surface-chart);
+  border: 1px solid var(--grid);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 0.8rem;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 40%);
+}
+
+.inspector dl {
+  margin: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.inspector dl div {
+  display: grid;
+  grid-template-columns: 8.5rem auto;
+  gap: 8px;
+}
+
+.inspector dt {
+  color: var(--text-secondary);
+}
+
+.inspector dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}

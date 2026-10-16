@@ -19,10 +19,11 @@ export class SimHost {
   private scenario: ScenarioId = 'random';
   private running = false;
   private scheduled = false;
+  private delayMs = 0;
 
   constructor(
     private readonly post: (message: WorkerResponse, transfer: Transferable[]) => void,
-    private readonly schedule: (callback: () => void) => void,
+    private readonly schedule: (callback: () => void, delayMs: number) => void,
   ) {}
 
   handle(request: WorkerRequest): void {
@@ -55,6 +56,9 @@ export class SimHost {
           if (!this.world) break;
           Object.assign(this.world.planet.controls, request.controls);
           this.sendFrame();
+          break;
+        case 'speed':
+          this.delayMs = Math.max(0, request.delayMs);
           break;
         case 'save':
           void this.save();
@@ -105,7 +109,7 @@ export class SimHost {
       if (!this.running) return;
       this.advance();
       this.scheduleTick();
-    });
+    }, this.delayMs);
   }
 
   private advance(): void {
