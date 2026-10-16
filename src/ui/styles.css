@@ -43,6 +43,26 @@ body {
   border: 1px solid #333;
 }
 
+.globe {
+  width: min(100%, 640px);
+  aspect-ratio: 1;
+  cursor: grab;
+}
+
+.globe:active {
+  cursor: grabbing;
+}
+
+.globe {
+  width: min(100%, 640px);
+  aspect-ratio: 1;
+  cursor: grab;
+}
+
+.globe:active {
+  cursor: grabbing;
+}
+
 .muted {
   color: var(--text-secondary);
 }
@@ -229,7 +249,8 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.map.tool-active {
+.map.tool-active,
+.globe.tool-active {
   cursor: crosshair;
 }
 

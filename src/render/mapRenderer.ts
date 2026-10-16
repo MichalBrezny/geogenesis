@@ -125,28 +125,33 @@ const layerColors: Record<MapLayer, CellColor> = {
   },
 };
 
+/** Colours one layer at native grid resolution as RGBA pixels (1 pixel per cell). */
+export function layerPixels(state: MapSource, layer: MapLayer): Uint8ClampedArray<ArrayBuffer> {
+  const { cellCount } = state.grid;
+  const pixels = new Uint8ClampedArray(cellCount * 4);
+  const color = layerColors[layer];
+  for (let i = 0; i < cellCount; i++) {
+    const [r, g, b] = color(state, i);
+    const p = i * 4;
+    pixels[p] = r;
+    pixels[p + 1] = g;
+    pixels[p + 2] = b;
+    pixels[p + 3] = 255;
+  }
+  return pixels;
+}
+
 /**
  * Draws one layer at native grid resolution (1 pixel per cell) into the canvas.
  * The canvas is scaled up with CSS (`image-rendering: pixelated`).
  */
 export function renderLayer(canvas: HTMLCanvasElement, state: MapSource, layer: MapLayer): void {
-  const { width, height, cellCount } = state.grid;
+  const { width, height } = state.grid;
   if (canvas.width !== width) canvas.width = width;
   if (canvas.height !== height) canvas.height = height;
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
-
-  const image = ctx.createImageData(width, height);
-  const color = layerColors[layer];
-  for (let i = 0; i < cellCount; i++) {
-    const [r, g, b] = color(state, i);
-    const p = i * 4;
-    image.data[p] = r;
-    image.data[p + 1] = g;
-    image.data[p + 2] = b;
-    image.data[p + 3] = 255;
-  }
-  ctx.putImageData(image, 0, 0);
+  ctx.putImageData(new ImageData(layerPixels(state, layer), width, height), 0, 0);
 }
 
 function mix(a: Rgb, b: Rgb, t: number): Rgb {

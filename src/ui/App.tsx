@@ -1,6 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { t } from '../i18n/i18n';
-import { MAP_LAYERS, renderLayer, type MapLayer } from '../render/mapRenderer';
+import {
+  buildGlobeLookup,
+  dragGlobe,
+  globeCell,
+  projectGlobe,
+  type GlobeView,
+} from '../render/globe';
+import { layerPixels, MAP_LAYERS, renderLayer, type MapLayer } from '../render/mapRenderer';
 import type { Frame, WorkerRequest, WorkerResponse } from '../worker/protocol';
 import { SCENARIO_IDS, type ScenarioId } from '../sim/scenarios';
 import { HistoryCharts, type ChartSeries } from './charts/HistoryCharts';
@@ -17,6 +24,14 @@ import type { ToolId } from '../sim/tools/tools';
 /** Pause between simulation steps for each speed setting, ms. */
 const SPEEDS = { slow: 500, normal: 120, fast: 0 } as const;
 type Speed = keyof typeof SPEEDS;
+
+/** Ways to look at the planet. */
+const VIEWS = ['map', 'globe'] as const;
+type View = (typeof VIEWS)[number];
+/** Side of the globe image, pixels. */
+const GLOBE_SIZE = 512;
+/** Pointer travel, px, below which a press on the globe counts as a click, not a drag. */
+const CLICK_SLOP = 4;
 
 /** How long a tool notice stays on screen, ms. */
 const NOTICE_DURATION = 3000;
@@ -82,6 +97,9 @@ export function App() {
   const [notice, setNotice] = useState<string | null>(null);
   const [hovered, setHovered] = useState<HoveredCell | null>(null);
   const [speed, setSpeed] = useState<Speed>('fast');
+  const [view, setView] = useState<View>('map');
+  const [globeView, setGlobeView] = useState<GlobeView>({ longitude: 180, latitude: 20 });
+  const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const noticeTimer = useRef<number | undefined>(undefined);
 
   const send = useCallback((request: WorkerRequest) => workerRef.current?.postMessage(request), []);
@@ -114,9 +132,28 @@ export function App() {
     return () => worker.terminate();
   }, [newPlanet]);
 
+  const gridWidth = frame?.grid.width ?? 0;
+  const gridHeight = frame?.grid.height ?? 0;
+  const globeLookup = useMemo(
+    () =>
+      view === 'globe' && gridWidth > 0
+        ? buildGlobeLookup(GLOBE_SIZE, globeView, gridWidth, gridHeight)
+        : null,
+    [view, globeView, gridWidth, gridHeight],
+  );
+
   useEffect(() => {
-    if (canvasRef.current && frame) renderLayer(canvasRef.current, frame, layer);
-  }, [frame, layer]);
+    const canvas = canvasRef.current;
+    if (!canvas || !frame) return;
+    if (!globeLookup) {
+      renderLayer(canvas, frame, layer);
+      return;
+    }
+    canvas.width = GLOBE_SIZE;
+    canvas.height = GLOBE_SIZE;
+    const pixels = projectGlobe(layerPixels(frame, layer), globeLookup);
+    canvas.getContext('2d')?.putImageData(new ImageData(pixels, GLOBE_SIZE, GLOBE_SIZE), 0, 0);
+  }, [frame, layer, globeLookup]);
 
   const toggleRunning = () => {
     send({ type: 'run', running: !running });
@@ -135,16 +172,44 @@ export function App() {
 
   const stepTime = frame ? Object.values(frame.timings).reduce((sum, ms) => sum + ms, 0) : 0;
 
-  /** Applies the selected tool to the grid cell under the click. */
-  /** Shows the inspector for the cell under the pointer. */
-  const inspectAt = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!frame) return;
+  /** Grid cell under the pointer on the map or the globe, or −1 off the planet. */
+  const cellAt = (event: React.MouseEvent<HTMLCanvasElement>): number => {
+    if (!frame) return -1;
     const rect = event.currentTarget.getBoundingClientRect();
+    const fx = (event.clientX - rect.left) / rect.width;
+    const fy = (event.clientY - rect.top) / rect.height;
     const { width, height } = frame.grid;
-    const x = Math.min(width - 1, Math.floor(((event.clientX - rect.left) / rect.width) * width));
-    const y = Math.min(height - 1, Math.floor(((event.clientY - rect.top) / rect.height) * height));
+    if (view === 'globe') return globeCell(2 * fx - 1, 1 - 2 * fy, globeView, width, height);
+    const x = Math.min(width - 1, Math.floor(fx * width));
+    const y = Math.min(height - 1, Math.floor(fy * height));
+    return y * width + x;
+  };
+
+  /** Shows the inspector for the cell under the pointer; on the globe, a pressed button turns it. */
+  const onPointerMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!frame) return;
+    const start = drag.current;
+    if (view === 'globe' && start && event.buttons & 1) {
+      const dx = event.clientX - start.x;
+      const dy = event.clientY - start.y;
+      if (start.moved || Math.hypot(dx, dy) > CLICK_SLOP) {
+        const radius = event.currentTarget.getBoundingClientRect().width / 2;
+        setGlobeView((current) => dragGlobe(current, dx / radius, dy / radius));
+        drag.current = { x: event.clientX, y: event.clientY, moved: true };
+        setHovered(null);
+        return;
+      }
+    }
+    const index = cellAt(event);
+    if (index < 0) {
+      setHovered(null);
+      return;
+    }
+    const { width, height } = frame.grid;
+    const x = index % width;
+    const y = Math.floor(index / width);
     setHovered({
-      index: y * width + x,
+      index,
       latitude: 90 - ((y + 0.5) * 180) / height,
       longitude: ((x + 0.5) * 360) / width,
       left: event.clientX + 16,
@@ -152,12 +217,15 @@ export function App() {
     });
   };
 
+  /** Applies the selected tool to the grid cell under the click (not at the end of a drag). */
   const applyToolAt = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!tool || !frame) return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    const x = Math.floor(((event.clientX - rect.left) / rect.width) * frame.grid.width);
-    const y = Math.floor(((event.clientY - rect.top) / rect.height) * frame.grid.height);
-    send({ type: 'tool', use: { tool, x, y, lifeClass } });
+    const dragged = drag.current?.moved;
+    drag.current = null;
+    if (!tool || !frame || dragged) return;
+    const index = cellAt(event);
+    if (index < 0) return;
+    const { width } = frame.grid;
+    send({ type: 'tool', use: { tool, x: index % width, y: Math.floor(index / width), lifeClass } });
   };
 
   return (
@@ -236,6 +304,16 @@ export function App() {
             ))}
           </select>
         </label>
+        <label>
+          {t('view.label')}{' '}
+          <select value={view} onChange={(e) => setView(e.target.value as View)}>
+            {VIEWS.map((id) => (
+              <option key={id} value={id}>
+                {t(`view.${id}`)}
+              </option>
+            ))}
+          </select>
+        </label>
         {frame && (
           <>
             <span>{t('time.year', { year: frame.year.toLocaleString('en') })}</span>
@@ -252,11 +330,17 @@ export function App() {
       {error && <p className="error">{error}</p>}
       <canvas
         ref={canvasRef}
-        className={tool ? 'map tool-active' : 'map'}
+        className={[view, tool ? 'tool-active' : ''].join(' ')}
+        onMouseDown={(event) => {
+          drag.current = { x: event.clientX, y: event.clientY, moved: false };
+        }}
         onClick={applyToolAt}
-        onMouseMove={inspectAt}
-        onMouseLeave={() => setHovered(null)}
-        aria-label={t('map.label')}
+        onMouseMove={onPointerMove}
+        onMouseLeave={() => {
+          drag.current = null;
+          setHovered(null);
+        }}
+        aria-label={t(view === 'globe' ? 'map.globeLabel' : 'map.label')}
       />
       {frame && hovered && <CellInspector frame={frame} cell={hovered} />}
       <MapLegend layer={layer} />
