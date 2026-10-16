@@ -4,6 +4,8 @@ export interface PressureField {
   width: number;
   height: number;
   values: ArrayLike<number>;
+  /** Optional terrain used to split fallback labels by land/sea sector and draw coasts. */
+  elevation?: ArrayLike<number>;
 }
 
 export interface GeoPoint {
@@ -34,6 +36,21 @@ interface Segment {
 
 type Edge = 'top' | 'right' | 'bottom' | 'left';
 
+interface ExtremumCandidate extends PressureExtremum {
+  prominence: number;
+  fallback: boolean;
+  belt: number;
+}
+
+/** Weather systems are compared within about 2,500 km of their centre. */
+const EXTREMUM_RADIUS_KM = 2_500;
+/** Labels remain at least this far apart on the surface. */
+export const PRESSURE_LABEL_MIN_SPACING_KM = 3_000;
+const MIN_PROMINENCE = 2.5;
+const MAX_LABELS = 12;
+const EARTH_RADIUS_KM = 6_371;
+const KM_PER_DEGREE = (Math.PI * EARTH_RADIUS_KM) / 180;
+
 /** Extracts pressure contours at absolute multiples of `interval` hPa. */
 export function extractIsobars(field: PressureField, interval = 4): Isobar[] {
   const { values } = field;
@@ -53,74 +70,223 @@ export function extractIsobars(field: PressureField, interval = 4): Isobar[] {
   return contours;
 }
 
-/** Finds prominent two-dimensional highs and lows, suppressing nearby duplicate labels. */
+/**
+ * Finds the main centres along pressure belts, suppressing nearby labels.
+ *
+ * A belt is a meridional extremum of the zonal-mean pressure. Within it, the
+ * finder follows the ridge/trough as its latitude bends and looks for prominent
+ * extrema along that track. This labels a stronger lobe of an otherwise open
+ * zonal band, unlike a conventional closed-extremum search. If a belt has no
+ * 2.5 hPa lobe, its strongest point in each broad land/sea sector is used.
+ */
 export function findPressureExtrema(field: PressureField): PressureExtremum[] {
   const { width, height, values } = field;
-  const radius = Math.max(2, Math.round(width / 32));
-  const candidates: (PressureExtremum & { prominence: number })[] = [];
-  // The top and bottom of an equirectangular raster are boundaries, not samples
-  // beyond the poles, so they cannot establish a closed two-dimensional centre.
-  for (let y = radius; y < height - radius; y++) {
-    for (let x = 0; x < width; x++) {
-      const value = values[y * width + x]!;
-      let high = true;
-      let low = true;
-      let strictHigh = false;
-      let strictLow = false;
-      for (let dy = -1; dy <= 1; dy++) {
-        const row = y + dy;
-        if (row < 0 || row >= height) continue;
-        for (let dx = -1; dx <= 1; dx++) {
-          if (dx === 0 && dy === 0) continue;
-          const neighbor = values[row * width + wrap(x + dx, width)]!;
-          if (value < neighbor) high = false;
-          if (value > neighbor) low = false;
-          if (value > neighbor) strictHigh = true;
-          if (value < neighbor) strictLow = true;
-        }
-      }
-      if ((!high || !strictHigh) && (!low || !strictLow)) continue;
+  if (width < 2 || height < 2 || values.length < width * height) return [];
+  const radiusDegrees = EXTREMUM_RADIUS_KM / KM_PER_DEGREE;
+  const latitudeStep = 180 / height;
+  const beltRadius = Math.max(1, Math.ceil(radiusDegrees / latitudeStep));
+  const trackRadius = Math.max(1, Math.round(beltRadius / 2));
+  const zonalMean = new Float64Array(height);
+  for (let y = 0; y < height; y++) {
+    let sum = 0;
+    for (let x = 0; x < width; x++) sum += values[y * width + x]!;
+    zonalMean[y] = sum / width;
+  }
 
-      let localMinimum = value;
-      let localMaximum = value;
-      let rowMinimum = value;
-      let rowMaximum = value;
-      for (let dy = -radius; dy <= radius; dy++) {
-        const row = y + dy;
-        if (row < 0 || row >= height) continue;
-        for (let dx = -radius; dx <= radius; dx++) {
-          const sample = values[row * width + wrap(x + dx, width)]!;
-          localMinimum = Math.min(localMinimum, sample);
-          localMaximum = Math.max(localMaximum, sample);
-          if (dy === 0) {
-            rowMinimum = Math.min(rowMinimum, sample);
-            rowMaximum = Math.max(rowMaximum, sample);
-          }
-        }
-      }
-      const isHigh = high && strictHigh;
-      const prominence = isHigh ? value - localMinimum : localMaximum - value;
-      const zonalRelief = isHigh ? value - rowMinimum : rowMaximum - value;
-      // Zonal pressure belts are not discrete weather systems and should not be labelled.
-      if (prominence < 1.5 || zonalRelief < 0.5) continue;
-      candidates.push({
-        kind: isHigh ? 'H' : 'L',
-        value,
-        latitude: sampleLatitude(y, height),
-        longitude: sampleLongitude(x, width),
-        prominence,
-      });
+  const candidates: ExtremumCandidate[] = [];
+  // A full-radius neighbourhood must fit on both sides: the raster stops at the poles.
+  for (let y = beltRadius; y < height - beltRadius; y++) {
+    let localMinimum = Infinity;
+    let localMaximum = -Infinity;
+    for (let row = y - beltRadius; row <= y + beltRadius; row++) {
+      localMinimum = Math.min(localMinimum, zonalMean[row]!);
+      localMaximum = Math.max(localMaximum, zonalMean[row]!);
+    }
+    const mean = zonalMean[y]!;
+    if (mean >= localMaximum && mean - localMinimum >= MIN_PROMINENCE) {
+      addBeltCandidates(field, y, trackRadius, 'H', mean - localMinimum, candidates);
+    }
+    if (mean <= localMinimum && localMaximum - mean >= MIN_PROMINENCE) {
+      addBeltCandidates(field, y, trackRadius, 'L', localMaximum - mean, candidates);
     }
   }
 
-  candidates.sort((a, b) => b.prominence - a.prominence);
-  const selected: PressureExtremum[] = [];
+  // Observed lobes take precedence. Interleave fallback belts so a long coastline
+  // cannot fill the label budget before the opposite hemisphere is represented.
+  const observed = candidates
+    .filter((candidate) => !candidate.fallback)
+    .sort((a, b) => b.prominence - a.prominence);
+  const fallbackBelts = new Map<number, ExtremumCandidate[]>();
   for (const candidate of candidates) {
-    if (selected.some((other) => angularDistance(candidate, other) < 18)) continue;
-    selected.push(candidate);
-    if (selected.length >= 12) break;
+    if (!candidate.fallback) continue;
+    const belt = fallbackBelts.get(candidate.belt);
+    if (belt) belt.push(candidate);
+    else fallbackBelts.set(candidate.belt, [candidate]);
+  }
+  const belts = [...fallbackBelts.values()].sort((a, b) => b[0]!.prominence - a[0]!.prominence);
+  for (const belt of belts) {
+    belt.sort((a, b) => (a.kind === 'H' ? b.value - a.value : a.value - b.value));
+  }
+  const candidatesInPriorityOrder = [...observed];
+  for (let rank = 0; belts.some((belt) => rank < belt.length); rank++) {
+    for (const belt of belts) {
+      if (belt[rank]) candidatesInPriorityOrder.push(belt[rank]!);
+    }
+  }
+  const selected: PressureExtremum[] = [];
+  for (const candidate of candidatesInPriorityOrder) {
+    if (
+      selected.some(
+        (other) =>
+          angularDistance(candidate, other) * KM_PER_DEGREE < PRESSURE_LABEL_MIN_SPACING_KM,
+      )
+    ) {
+      continue;
+    }
+    selected.push({
+      kind: candidate.kind,
+      value: candidate.value,
+      latitude: candidate.latitude,
+      longitude: candidate.longitude,
+    });
+    if (selected.length >= MAX_LABELS) break;
   }
   return selected;
+}
+
+function addBeltCandidates(
+  field: PressureField,
+  centreY: number,
+  latitudeRadius: number,
+  kind: PressureExtremum['kind'],
+  beltProminence: number,
+  out: ExtremumCandidate[],
+): void {
+  const { width, height, values } = field;
+  const trackValues = new Float64Array(width);
+  const trackRows = new Int32Array(width);
+  const firstRow = Math.max(0, centreY - latitudeRadius);
+  const lastRow = Math.min(height - 1, centreY + latitudeRadius);
+  for (let x = 0; x < width; x++) {
+    let bestRow = centreY;
+    let best = values[centreY * width + x]!;
+    for (let y = firstRow; y <= lastRow; y++) {
+      const sample = values[y * width + x]!;
+      if ((kind === 'H' && sample > best) || (kind === 'L' && sample < best)) {
+        best = sample;
+        bestRow = y;
+      }
+    }
+    trackValues[x] = best;
+    trackRows[x] = bestRow;
+  }
+
+  const beltCandidates: ExtremumCandidate[] = [];
+  const longitudeStep = 360 / width;
+  const radiusDegrees = EXTREMUM_RADIUS_KM / KM_PER_DEGREE;
+  for (let x = 0; x < width; x++) {
+    const latitude = sampleLatitude(trackRows[x]!, height);
+    const longitudinalRadius = Math.min(
+      Math.floor((width - 1) / 2),
+      Math.max(
+        1,
+        Math.ceil(radiusDegrees / (longitudeStep * Math.max(0.15, Math.cos(toRadians(latitude))))),
+      ),
+    );
+    const value = trackValues[x]!;
+    let localMinimum = value;
+    let localMaximum = value;
+    let tiedEarlier = false;
+    for (let offset = -longitudinalRadius; offset <= longitudinalRadius; offset++) {
+      if (offset === 0) continue;
+      const otherX = wrap(x + offset, width);
+      const sample = trackValues[otherX]!;
+      localMinimum = Math.min(localMinimum, sample);
+      localMaximum = Math.max(localMaximum, sample);
+      if (sample === value && otherX < x) tiedEarlier = true;
+    }
+    const isExtremum = kind === 'H' ? value >= localMaximum : value <= localMinimum;
+    const prominence = kind === 'H' ? value - localMinimum : localMaximum - value;
+    if (!tiedEarlier && isExtremum && prominence >= MIN_PROMINENCE) {
+      beltCandidates.push({
+        kind,
+        value,
+        latitude,
+        longitude: sampleLongitude(x, width),
+        prominence,
+        fallback: false,
+        belt: centreY,
+      });
+    }
+  }
+  if (beltCandidates.length > 0) {
+    out.push(...beltCandidates);
+    return;
+  }
+
+  // A nearly uniform belt still represents a real pressure system. Put one
+  // label in each broad land/ocean sector, choosing that sector's strongest cell.
+  for (const sector of surfaceSectors(field, centreY, latitudeRadius)) {
+    let bestX = sector[0]!;
+    for (const x of sector) {
+      if (
+        (kind === 'H' && trackValues[x]! > trackValues[bestX]!) ||
+        (kind === 'L' && trackValues[x]! < trackValues[bestX]!)
+      ) {
+        bestX = x;
+      }
+    }
+    const row = trackRows[bestX]!;
+    out.push({
+      kind,
+      value: trackValues[bestX]!,
+      latitude: sampleLatitude(row, height),
+      longitude: sampleLongitude(bestX, width),
+      prominence: beltProminence,
+      fallback: true,
+      belt: centreY,
+    });
+  }
+}
+
+/** Contiguous, longitudinal land/sea runs through a pressure belt. */
+function surfaceSectors(field: PressureField, centreY: number, latitudeRadius: number): number[][] {
+  const { width, height, elevation } = field;
+  const all = Array.from({ length: width }, (_, x) => x);
+  if (!elevation || elevation.length < width * height) return [all];
+  const firstRow = Math.max(0, centreY - latitudeRadius);
+  const lastRow = Math.min(height - 1, centreY + latitudeRadius);
+  const land = new Uint8Array(width);
+  for (let x = 0; x < width; x++) {
+    let count = 0;
+    for (let y = firstRow; y <= lastRow; y++) {
+      if (elevation[y * width + x]! >= 0) count++;
+    }
+    land[x] = count * 2 >= lastRow - firstRow + 1 ? 1 : 0;
+  }
+  let boundary = -1;
+  for (let x = 0; x < width; x++) {
+    if (land[x] !== land[wrap(x - 1, width)]) {
+      boundary = x;
+      break;
+    }
+  }
+  if (boundary < 0) return [all];
+  const sectors: number[][] = [];
+  let sector: number[] = [];
+  for (let offset = 0; offset < width; offset++) {
+    const x = wrap(boundary + offset, width);
+    if (sector.length > 0 && land[x] !== land[sector[0]!]!) {
+      sectors.push(sector);
+      sector = [];
+    }
+    sector.push(x);
+  }
+  if (sector.length > 0) sectors.push(sector);
+  // Ignore island-sized runs; they are too narrow to deserve another label.
+  const minimumWidth = Math.max(2, Math.round(width / 24));
+  const broad = sectors.filter((candidate) => candidate.length >= minimumWidth);
+  return broad.length > 0 ? broad : [all];
 }
 
 /** Draws 4 hPa isobars and clear pressure-centre labels through either planet projection. */
@@ -131,12 +297,53 @@ export function drawIsobars(
   viewport: { width: number; height: number },
 ): void {
   ctx.save();
+  const jump = Math.max(viewport.width, viewport.height) * 0.4;
+  if (field.elevation && field.elevation.length >= field.width * field.height) {
+    ctx.strokeStyle = 'rgba(15, 23, 42, 0.72)';
+    ctx.lineWidth = 1;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    drawProjectedContours(
+      ctx,
+      stitchSegments(
+        0,
+        marchingSegments({ width: field.width, height: field.height, values: field.elevation }, 0),
+      ),
+      project,
+      jump,
+    );
+  }
+
   ctx.strokeStyle = 'rgba(248, 250, 252, 0.72)';
   ctx.lineWidth = 1;
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
-  const jump = Math.max(viewport.width, viewport.height) * 0.4;
-  for (const contour of extractIsobars(field)) {
+  drawProjectedContours(ctx, extractIsobars(field), project, jump);
+
+  ctx.font = 'bold 17px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(15, 23, 42, 0.9)';
+  const labels: [number, number][] = [];
+  for (const extremum of findPressureExtrema(field)) {
+    const screen = project(extremum.latitude, extremum.longitude);
+    if (!screen || labels.some(([x, y]) => Math.hypot(screen[0] - x, screen[1] - y) < 36)) continue;
+    ctx.strokeText(extremum.kind, screen[0], screen[1]);
+    ctx.fillStyle = extremum.kind === 'H' ? '#fecaca' : '#bfdbfe';
+    ctx.fillText(extremum.kind, screen[0], screen[1]);
+    labels.push(screen);
+  }
+  ctx.restore();
+}
+
+function drawProjectedContours(
+  ctx: CanvasRenderingContext2D,
+  contours: readonly Isobar[],
+  project: Projection,
+  jump: number,
+): void {
+  for (const contour of contours) {
     ctx.beginPath();
     let previous: [number, number] | null = null;
     for (const point of contour.points) {
@@ -154,22 +361,6 @@ export function drawIsobars(
     }
     ctx.stroke();
   }
-
-  ctx.font = 'bold 17px system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = 'rgba(15, 23, 42, 0.9)';
-  const labels: [number, number][] = [];
-  for (const extremum of findPressureExtrema(field)) {
-    const screen = project(extremum.latitude, extremum.longitude);
-    if (!screen || labels.some(([x, y]) => Math.hypot(screen[0] - x, screen[1] - y) < 36)) continue;
-    ctx.strokeText(extremum.kind, screen[0], screen[1]);
-    ctx.fillStyle = extremum.kind === 'H' ? '#fecaca' : '#bfdbfe';
-    ctx.fillText(extremum.kind, screen[0], screen[1]);
-    labels.push(screen);
-  }
-  ctx.restore();
 }
 
 function marchingSegments(field: PressureField, level: number): Segment[] {
@@ -353,4 +544,8 @@ function angularDistance(a: GeoPoint, b: GeoPoint): number {
   const dLon = (b.longitude - a.longitude) * radians;
   const chord = Math.sin(dLat / 2) ** 2 + Math.cos(latA) * Math.cos(latB) * Math.sin(dLon / 2) ** 2;
   return (2 * Math.asin(Math.min(1, Math.sqrt(chord)))) / radians;
+}
+
+function toRadians(degrees: number): number {
+  return (degrees * Math.PI) / 180;
 }

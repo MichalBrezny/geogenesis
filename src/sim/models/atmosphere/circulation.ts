@@ -32,7 +32,7 @@ const ITCZ_TEMPERATURE_SCALE = 2;
 /** Mean sea-level pressure around which the circulation's pressure systems vary, hPa. */
 export const STANDARD_PRESSURE = 1013;
 /** Thermal pressure response to a sea-level temperature anomaly, hPa/°C. */
-const LAND_THERMAL_PRESSURE = -0.8;
+const LAND_THERMAL_PRESSURE = -2.2;
 const SEA_THERMAL_PRESSURE = -0.12;
 /** Gaussian sigma: 1,880 km full width at half maximum, a continental-scale system. */
 const THERMAL_SMOOTHING = 800_000;

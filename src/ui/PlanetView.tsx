@@ -190,7 +190,12 @@ export function PlanetView({ frame, layer, view, toolActive, onCellClick, overla
     const project = view === 'globe' ? globeProjection(w, globeView) : mapProjection(w, h);
     drawIsobars(
       ctx,
-      { width: frame.grid.width, height: frame.grid.height, values: frame.fields.pressure },
+      {
+        width: frame.grid.width,
+        height: frame.grid.height,
+        values: frame.fields.pressure,
+        elevation: frame.fields.elevation,
+      },
       project,
       { width: w, height: h },
     );

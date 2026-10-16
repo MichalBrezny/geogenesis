@@ -108,7 +108,9 @@ const layerColors: Record<MapLayer, CellColor> = {
     return temperaturePalette(state.fields.airTemperature[i]!);
   },
   pressure(state, i) {
-    return pressurePalette(state.fields.pressure[i]!);
+    const color = pressurePalette(state.fields.pressure[i]!);
+    // Neutral land shading preserves the pressure signal while making continents legible.
+    return state.fields.elevation[i]! < SEA_LEVEL ? color : mix(color, [55, 55, 55], 0.3);
   },
   biomes(state, i) {
     const { biome, vegetation, elevation } = state.fields;
