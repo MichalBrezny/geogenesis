@@ -32,6 +32,28 @@ describe('star', () => {
 });
 
 describe('climate', () => {
+  it('warms gradually after a jump in CO₂ when steps are short (ocean heat capacity)', () => {
+    const planet = oceanPlanet();
+    const climate = createClimate();
+    climate.runOneStep(planet, 0, rng);
+    const before = planet.globals.meanTemperature;
+    planet.globals.atmosphere.co2 *= 4;
+    climate.runOneStep(planet, 10, rng);
+    const afterTenYears = planet.globals.meanTemperature;
+    for (let year = 10; year < 1000; year += 10) climate.runOneStep(planet, 10, rng);
+    const settled = planet.globals.meanTemperature;
+    expect(settled - before).toBeGreaterThan(3);
+    // A decade in, only part of the eventual warming has arrived.
+    expect(afterTenYears - before).toBeGreaterThan(0.1 * (settled - before));
+    expect(afterTenYears - before).toBeLessThan(0.5 * (settled - before));
+    // Long steps reach equilibrium at once.
+    const fresh = oceanPlanet();
+    climate.runOneStep(fresh, 0, rng);
+    fresh.globals.atmosphere.co2 *= 4;
+    climate.runOneStep(fresh, 1e6, rng);
+    expect(fresh.globals.meanTemperature).toBeCloseTo(settled, 0);
+  });
+
   it('gives an Earth-like planet an Earth-like climate', () => {
     const planet = earthLike();
     createClimate().runOneStep(planet, 0, rng);

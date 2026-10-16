@@ -2,6 +2,7 @@ import type { SimComponent } from '../../core/component';
 import type { PlanetState } from '../../core/planet';
 import { Biome, BIOMES } from '../../data/biomes';
 import { SEA_LEVEL } from '../geosphere/flowRouting';
+import { MODERN_PHOTOSYNTHESIS, photosynthesis } from './biogeochemistry';
 
 export interface CarbonCycleOptions {
   /** Multiplier on volcanic CO₂ outgassing (a future player control). */
@@ -38,6 +39,12 @@ const REFERENCE_WEATHERING = 0.42;
  * thousand years.
  */
 const RESERVOIR_TIME = 300_000;
+/**
+ * Organic carbon buried in sediments by a modern Earth-like biosphere, as a share
+ * of the present-day carbon flux (Earth: about a fifth; the rest is silicate
+ * weathering). Burial is what leaves oxygen behind in the air.
+ */
+const MODERN_BURIAL = 0.2;
 /** Global warming per e-fold of CO₂ (°C), used to predict temperature while solving for CO₂. */
 const CLIMATE_SENSITIVITY = 2.6;
 const MIN_CO2 = 1;
@@ -47,14 +54,15 @@ const MAX_CO2 = 1e6;
  * Long-term (geological) carbon cycle: the silicate-weathering thermostat.
  *
  * Volcanoes add CO₂; rain on warm, exposed rock removes it by weathering, which
- * speeds up as the planet warms. The resulting negative feedback keeps the
+ * speeds up as the planet warms. Photosynthesis removes some more by burying
+ * organic carbon (the source of oxygen), so a thriving biosphere cools its planet. The resulting negative feedback keeps the
  * climate habitable as the star brightens, until CO₂ runs out — the
  * self-regulation at the heart of SimEarth's Gaia theme.
  *
  * The reservoir responds faster than one simulation step, so the new CO₂ is
  * found implicitly: temperatures are extrapolated from the last climate
  * solution with a climate sensitivity, and the balance
- *   ΔC/C = (outgassing − weathering(C)) · Δt / RESERVOIR_TIME
+ *   ΔC/C = (outgassing − weathering(C) − burial) · Δt / RESERVOIR_TIME
  * is solved for C by bisection in log space.
  */
 export function createCarbonCycle(options: CarbonCycleOptions = {}): SimComponent {
@@ -80,6 +88,11 @@ export function createCarbonCycle(options: CarbonCycleOptions = {}): SimComponen
         (HOTSPOT_SHARE + (1 - HOTSPOT_SHARE) * plates);
       const atmosphere = state.globals.atmosphere;
       const before = atmosphere.co2;
+      // Burial needs carbon to fix: it fades out as CO₂ runs out, like weathering.
+      const burialAt = (co2: number) =>
+        MODERN_BURIAL *
+        (photosynthesis(state.biota.cover) / MODERN_PHOTOSYNTHESIS) *
+        (co2 / (co2 + WEATHERING_CO2_HALF_SATURATION));
       // One pass over the planet; other CO₂ levels scale it analytically (uniform warming).
       const current = rawWeathering(state, before);
       const weathering = (co2: number) =>
@@ -92,10 +105,10 @@ export function createCarbonCycle(options: CarbonCycleOptions = {}): SimComponen
 
       if (dtYears > 0) {
         const k = dtYears / RESERVOIR_TIME;
-        // (C − C₀)/C₀ − k·(V − W(C)) increases with C, since weathering rises with C.
+        // (C − C₀)/C₀ − k·(V − W(C) − B(C)) increases with C, since weathering and burial rise with C.
         const residual = (logC: number) => {
           const c = Math.exp(logC);
-          return (c - before) / before - k * (outgassing - weathering(c));
+          return (c - before) / before - k * (outgassing - weathering(c) - burialAt(c));
         };
         let low = Math.log(MIN_CO2);
         let high = Math.log(MAX_CO2);
@@ -111,6 +124,7 @@ export function createCarbonCycle(options: CarbonCycleOptions = {}): SimComponen
       state.globals.carbon = {
         outgassing,
         weathering: weathering(atmosphere.co2),
+        burial: burialAt(atmosphere.co2),
       };
     },
   };

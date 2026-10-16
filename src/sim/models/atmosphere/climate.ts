@@ -21,6 +21,12 @@ const LAPSE_RATE = 0.0065;
 /** Pre-industrial greenhouse gas levels the forcing is measured against (ppm). */
 const REFERENCE_CO2 = 280;
 const REFERENCE_CH4 = 0.7;
+/**
+ * E-folding time (years) of the surface climate's response to a change in
+ * forcing, set by the heat capacity of the ocean's mixed layer and upper ocean.
+ * Only short (civilization-era) steps feel it.
+ */
+const OCEAN_RESPONSE_TIME = 40;
 /** Width of the coarse climate grid; heat transport is smooth, so this is plenty. */
 const CLIMATE_GRID_WIDTH = 64;
 
@@ -73,8 +79,9 @@ export function iceFractionAt(temperature: number): number {
  * into snow/ice cover, whose high albedo feeds back into the next iteration —
  * the ice–albedo feedback that can tip a planet into a snowball.
  *
- * Steady state is appropriate because simulation steps (≥ thousands of years)
- * are far longer than the climate's response time.
+ * Steady state suits geological steps, which are far longer than the climate's
+ * response time; in short steps the ocean's heat capacity makes temperatures
+ * approach it over OCEAN_RESPONSE_TIME, so warming lags behind emissions.
  */
 export function createClimate(options: ClimateOptions = {}): SimComponent {
   const diffusivity = options.diffusivity ?? DEFAULT_DIFFUSIVITY;
@@ -83,9 +90,13 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
     name: 'climate',
     inputs: ['elevation', 'surfaceAlbedo'],
     outputs: ['airTemperature', 'iceCover', 'albedo'],
-    runOneStep(state) {
+    runOneStep(state, dtYears) {
       const { grid, fields, globals } = state;
       const { elevation, surfaceAlbedo, airTemperature, iceCover, albedo } = fields;
+      // Last step's temperatures, for the ocean's lag. The first run of a planet has
+      // dt = 0 and goes straight to equilibrium.
+      const lag = dtYears > 0 ? Math.exp(-dtYears / OCEAN_RESPONSE_TIME) : 0;
+      const previous = lag > 1e-6 ? Float32Array.from(airTemperature) : null;
       const climate = getClimateGrid(grid, diffusivity);
       const forcing = greenhouseForcing(globals.atmosphere);
 
@@ -109,6 +120,12 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
           iceCover[i] = ice;
         }
         if (maxChange < 1e-3) break;
+      }
+      if (previous) {
+        for (let i = 0; i < grid.cellCount; i++) {
+          airTemperature[i] = airTemperature[i]! + (previous[i]! - airTemperature[i]!) * lag;
+          iceCover[i] = iceFractionAt(airTemperature[i]!);
+        }
       }
 
       globals.meanTemperature = areaWeightedMean(grid, airTemperature);

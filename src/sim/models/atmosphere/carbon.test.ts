@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { SimComponent } from '../../core/component';
 import { createPlanet, type PlanetState } from '../../core/planet';
 import { createRng } from '../../core/rng';
+import { lifeClassIndex } from '../../data/lifeClasses';
 import { generateTectonicPlanet } from '../geosphere/tectonics';
 import { createCarbonCycle, mantleHeat } from './carbon';
 import { circulationModel } from './circulation';
@@ -75,6 +76,17 @@ describe('carbon cycle', () => {
     expect(thawed).toBe(true);
     // It thawed because CO₂ accumulated while weathering was shut off under the ice.
     expect(planet.globals.atmosphere.co2).toBeGreaterThan(100);
+  });
+
+  it('lets a thriving biosphere draw down CO₂ by burying organic carbon', () => {
+    const barren = planetAt(1);
+    settle(barren, true);
+    const living = planetAt(1);
+    living.biota.cover[lifeClassIndex('eukaryotes')] = 0.6;
+    living.biota.cover[lifeClassIndex('plants')] = 0.3;
+    settle(living, true);
+    expect(living.globals.carbon.burial).toBeGreaterThan(0.1);
+    expect(living.globals.atmosphere.co2).toBeLessThan(barren.globals.atmosphere.co2);
   });
 
   it('has a hotter, more volcanic mantle on young planets', () => {

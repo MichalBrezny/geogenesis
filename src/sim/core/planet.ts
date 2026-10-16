@@ -29,7 +29,7 @@ export interface GlobalState {
   /** Shape of the general circulation (written by the circulation model). */
   circulation?: { hadleyWidth: number; meanItcz: number };
   /** Carbon fluxes relative to present-day Earth (written by the carbon cycle). */
-  carbon: { outgassing: number; weathering: number };
+  carbon: { outgassing: number; weathering: number; burial: number };
   /** Player energy budget (Ω). */
   energy: number;
   /** Experimental mode: tools cost nothing. */
@@ -166,7 +166,7 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
       atmosphere: { co2: 280, ch4: 0.7, o2: 0.21 },
       meanTemperature: 0,
       iceFraction: 0,
-      carbon: { outgassing: 1, weathering: 1 },
+      carbon: { outgassing: 1, weathering: 1, burial: 0 },
       energy: 0,
       unlimitedEnergy: false,
     },

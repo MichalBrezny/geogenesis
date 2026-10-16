@@ -7,7 +7,7 @@ const MODERN_OXYGEN = 0.21;
  * Photosynthesis index of a modern Earth-like biosphere (see `photosynthesis`),
  * at which oxygen settles at the modern level.
  */
-const MODERN_PHOTOSYNTHESIS = 1.0;
+export const MODERN_PHOTOSYNTHESIS = 1.0;
 /**
  * Photosynthesis that is used up oxidising volcanic gases and iron before any
  * oxygen can accumulate; crossing it is the planet's Great Oxidation Event.
