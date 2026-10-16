@@ -17,6 +17,7 @@ export const RENDERED_FIELDS = [
   'biome',
   'vegetation',
   'lifeTier',
+  'civilization',
 ] as const;
 export interface MapSource {
   grid: Pick<Grid, 'width' | 'height' | 'cellCount'>;
@@ -31,6 +32,7 @@ export const MAP_LAYERS = [
   'precipitation',
   'biomes',
   'life',
+  'civilization',
   'daisies',
 ] as const;
 export type MapLayer = (typeof MAP_LAYERS)[number];
@@ -43,6 +45,8 @@ const RIVER_COLOR: Rgb = [40, 90, 200];
 const LAND_ICE_COLOR: Rgb = [238, 242, 246];
 const SEA_ICE_COLOR: Rgb = [200, 215, 230];
 const BARE_GROUND: Rgb = [196, 168, 118];
+/** Settlements on the civilization layer (categorical slot 2, orange). */
+const CIVILIZATION_COLOR: Rgb = [235, 104, 52];
 /** Barren land before plants. */
 export const BARREN_COLOR: Rgb = [120, 105, 95];
 /**
@@ -90,6 +94,15 @@ const layerColors: Record<MapLayer, CellColor> = {
     // Climate says what could grow; plant cover says how much of it actually does.
     if (elevation[i]! < SEA_LEVEL || biome[i] === Biome.Ice) return color;
     return mix(BARREN_COLOR, color, Math.min(1, vegetation[i]! * 1.5));
+  },
+  civilization(state, i) {
+    const { civilization, elevation } = state.fields;
+    const base: Rgb = elevation[i]! < SEA_LEVEL ? [22, 34, 52] : [52, 56, 62];
+    const density = civilization[i]!;
+    if (density <= 0) return base;
+    // Log scale: stone-age bands and industrial cities differ by orders of magnitude.
+    const t = Math.min(1, Math.max(0.15, (Math.log10(density) + 5) / 5));
+    return mix(base, CIVILIZATION_COLOR, t);
   },
   life(state, i) {
     return LIFE_TIER_COLORS[state.fields.lifeTier[i]!]!;

@@ -11,6 +11,7 @@ import {
   PLANT_PRODUCTIVITY,
   type LifeClass,
 } from '../../data/lifeClasses';
+import { recordEvent } from '../../events';
 import { SEA_LEVEL } from '../geosphere/flowRouting';
 
 export interface LifeOptions {
@@ -80,32 +81,46 @@ export function seedPrimordialLife(state: PlanetState): void {
 
 /** Carrying capacity (0..1) of every class in every cell: suitability[c * n + i]. */
 function computeSuitability(state: PlanetState): Float32Array {
+  const n = state.grid.cellCount;
+  const result = new Float32Array(n * LIFE_CLASS_COUNT);
+  for (let c = 0; c < LIFE_CLASS_COUNT; c++) {
+    classSuitability(state, c, result.subarray(c * n, (c + 1) * n));
+  }
+  return result;
+}
+
+/**
+ * Carrying capacity (0..1) of one class in every cell, from habitat,
+ * temperature, oxygen and (for land animals) plant cover.
+ */
+export function classSuitability(
+  state: PlanetState,
+  c: number,
+  out: Float32Array = new Float32Array(state.grid.cellCount),
+): Float32Array {
   const { grid, fields, globals, biota } = state;
   const n = grid.cellCount;
   const { elevation, airTemperature, iceCover, biome } = fields;
   const plants = lifeClassIndex('plants');
-  const result = new Float32Array(n * LIFE_CLASS_COUNT);
-  const o2 = globals.atmosphere.o2;
-
-  LIFE_CLASSES.forEach((lifeClass, c) => {
-    const oxygen = oxygenFactor(lifeClass, o2);
-    if (oxygen === 0) return;
-    for (let i = 0; i < n; i++) {
-      const ocean = elevation[i]! < SEA_LEVEL;
-      if (ocean !== (lifeClass.habitat === 'ocean')) continue;
-      const temperature = ocean
-        ? Math.max(SEA_WATER_MIN_TEMPERATURE, airTemperature[i]!)
-        : airTemperature[i]!;
-      const d = (temperature - lifeClass.optimumTemperature) / lifeClass.temperatureTolerance;
-      let value = Math.max(0, 1 - d * d) * oxygen;
-      // Life under sea ice survives at low density; land ice is uninhabitable.
-      value *= ocean ? 1 - 0.8 * iceCover[i]! : 1 - iceCover[i]!;
-      if (lifeClass.key === 'plants') value *= PLANT_PRODUCTIVITY[biome[i] as Biome];
-      if (lifeClass.needsPlants) value *= biota.populations[plants * n + i]!;
-      result[c * n + i] = value;
-    }
-  });
-  return result;
+  const lifeClass = LIFE_CLASSES[c]!;
+  out.fill(0);
+  const oxygen = oxygenFactor(lifeClass, globals.atmosphere.o2);
+  if (oxygen === 0) return out;
+  for (let i = 0; i < n; i++) {
+    const ocean = elevation[i]! < SEA_LEVEL;
+    if (ocean !== (lifeClass.habitat === 'ocean')) continue;
+    const temperature = ocean
+      ? Math.max(SEA_WATER_MIN_TEMPERATURE, airTemperature[i]!)
+      : airTemperature[i]!;
+    const d = (temperature - lifeClass.optimumTemperature) / lifeClass.temperatureTolerance;
+    let value = Math.max(0, 1 - d * d) * oxygen;
+    // Life under sea ice survives at low density; land ice is uninhabitable.
+    value *= ocean ? 1 - 0.8 * iceCover[i]! : 1 - iceCover[i]!;
+    if (lifeClass.key === 'plants') value *= PLANT_PRODUCTIVITY[biome[i] as Biome];
+    if (lifeClass.needsPlants) value *= biota.populations[plants * n + i]!;
+    out[i] = value;
+  }
+  return out;
 }
 
 function oxygenFactor(lifeClass: LifeClass, o2: number): number {
@@ -192,6 +207,7 @@ function evolve(
     if (rng.next() < 1 - Math.exp(-rate * dtYears)) {
       biota.populations[c * n + bestCell] = FOUNDER_POPULATION;
       if (biota.appeared[c] === null) biota.appeared[c] = globals.year;
+      recordEvent(state, 'classAppeared', lifeClass.key);
     }
   });
 }
@@ -215,7 +231,11 @@ function classTotals(state: PlanetState): number[] {
 function summarize(state: PlanetState): void {
   const { grid, biota, fields } = state;
   const n = grid.cellCount;
+  const before = biota.cover;
   biota.cover = classTotals(state);
+  LIFE_CLASSES.forEach((lifeClass, c) => {
+    if (before[c]! > 0 && biota.cover[c] === 0) recordEvent(state, 'classExtinct', lifeClass.key);
+  });
   const plants = lifeClassIndex('plants');
   fields.vegetation.set(biota.populations.subarray(plants * n, (plants + 1) * n));
   fields.lifeTier.fill(0);

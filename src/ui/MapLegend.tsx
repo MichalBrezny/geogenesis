@@ -63,6 +63,16 @@ export function MapLegend({ layer }: { layer: MapLayer }) {
       </ul>
     );
   }
+  if (layer === 'civilization') {
+    return (
+      <ul className="legend" aria-label={t('legend.label')}>
+        <li>
+          <span className="swatch" style={{ background: 'rgb(235, 104, 52)' }} />
+          {t('legend.settlement')}
+        </li>
+      </ul>
+    );
+  }
   if (layer === 'life') {
     const tiers = ['none', ...LIFE_TIERS] as const;
     return (

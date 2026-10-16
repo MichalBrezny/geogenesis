@@ -1,4 +1,6 @@
 import type { MapSource } from '../render/mapRenderer';
+import type { CivilizationState } from '../sim/core/planet';
+import type { PlanetEvent } from '../sim/events';
 import type { HistorySeries } from '../sim/history';
 import type { ScenarioId } from '../sim/scenarios';
 
@@ -24,6 +26,11 @@ export interface Frame extends MapSource {
   ch4: number;
   /** Planet-wide cover (0..1) and first appearance (year or null) of each life class. */
   life: { cover: number[]; appeared: (number | null)[] };
+  civilization: CivilizationState;
+  /** Most recent notable events, oldest first. */
+  events: PlanetEvent[];
+  /** Simulated years the next step will cover. */
+  stepYears: number;
   /** Milliseconds per simulation component in the last step. */
   timings: Record<string, number>;
   /** The whole recorded history, one array per series. */

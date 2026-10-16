@@ -4,6 +4,9 @@ import { createScenario, type ScenarioId } from '../sim/scenarios';
 import type { World } from '../sim/world';
 import type { Frame, WorkerRequest, WorkerResponse } from './protocol';
 
+/** How many recent events each frame carries. */
+const EVENTS_IN_FRAME = 30;
+
 /**
  * Owns the simulation inside the worker. Kept free of worker globals so it can
  * be unit-tested: `post` sends responses and `schedule` queues the next
@@ -58,7 +61,7 @@ export class SimHost {
 
   private advance(): void {
     if (!this.world) return;
-    this.world.simulation.step(this.world.planet, this.world.yearsPerStep);
+    this.world.simulation.step(this.world.planet, this.world.stepYears(this.world.planet));
     this.sendFrame();
   }
 
@@ -90,6 +93,9 @@ export class SimHost {
       o2: planet.globals.atmosphere.o2,
       ch4: planet.globals.atmosphere.ch4,
       life: { cover: [...planet.biota.cover], appeared: [...planet.biota.appeared] },
+      civilization: { ...planet.civilization },
+      events: planet.events.slice(-EVENTS_IN_FRAME),
+      stepYears: this.world.stepYears(planet),
       timings: Object.fromEntries(simulation.timings),
       history,
     };

@@ -58,5 +58,5 @@ export function createDaisyworld(options: DaisyworldOptions = {}): World {
     'vegetation',
   ]);
   simulation.step(planet, 0);
-  return { planet, simulation, yearsPerStep: 5e6 };
+  return { planet, simulation, stepYears: () => 5e6 };
 }

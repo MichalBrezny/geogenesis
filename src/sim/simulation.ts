@@ -64,3 +64,12 @@ export function createSimulation(
     },
   };
 }
+
+/**
+ * Runs `component` at most once per `years` of simulated time, with the elapsed
+ * time as its step. Slow processes (geology, evolution) use this so they cost
+ * nothing when the simulation runs in short civilization-era steps.
+ */
+export function withMinInterval(component: SimComponent, years: number): SimComponent {
+  return { ...component, minIntervalYears: years };
+}

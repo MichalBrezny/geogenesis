@@ -1,4 +1,5 @@
 import { createFields, type Fields } from './fields';
+import type { PlanetEvent } from '../events';
 import { createHistory, type History } from '../history';
 import { LIFE_CLASS_COUNT } from '../data/lifeClasses';
 import { createGrid, type Grid } from './grid';
@@ -74,6 +75,22 @@ export interface Biota {
   cover: number[];
 }
 
+/** The planet's sentient species and its civilization (see models/civilization). */
+export interface CivilizationState {
+  /** Life class index of the sentient species, or null when there is none. */
+  species: number | null;
+  /** Index into TECH_AGES. */
+  age: number;
+  /** Progress through the current age, 0..1. */
+  progress: number;
+  /** World population in billions. */
+  population: number;
+  /** Year the current species became sentient. */
+  sentientSince: number | null;
+  /** Year a civilization left the planet, if one has. */
+  exodusYear: number | null;
+}
+
 /** Complete simulation state. Must stay plain data so it can be serialized and sent to a worker. */
 export interface PlanetState {
   grid: Grid;
@@ -83,6 +100,9 @@ export interface PlanetState {
   /** Global quantities over time, one sample per step (thinned on long runs). */
   history: History;
   biota: Biota;
+  civilization: CivilizationState;
+  /** Notable moments, most recent last (see events.ts). */
+  events: PlanetEvent[];
   seed: number;
   rngState: number;
 }
@@ -121,6 +141,15 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
       appeared: Array.from({ length: LIFE_CLASS_COUNT }, () => null),
       cover: Array.from({ length: LIFE_CLASS_COUNT }, () => 0),
     },
+    civilization: {
+      species: null,
+      age: 0,
+      progress: 0,
+      population: 0,
+      sentientSince: null,
+      exodusYear: null,
+    },
+    events: [],
     seed,
     rngState: seed,
   };

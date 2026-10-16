@@ -144,6 +144,59 @@ body {
   top: -3px;
 }
 
+.panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+  max-width: 1024px;
+}
+
+.panel {
+  background: var(--surface-chart);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+}
+
+.panel h2 {
+  font-size: 1rem;
+  margin: 0 0 8px;
+}
+
+.civ-stats {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 0;
+}
+
+.civ-stats dt {
+  color: var(--text-secondary);
+}
+
+.civ-stats dd {
+  margin: 0;
+}
+
+.civ-progress {
+  margin-left: 8px;
+  width: 120px;
+  vertical-align: middle;
+  accent-color: var(--series-1);
+}
+
+.event-log {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.event-log li {
+  padding: 2px 0;
+}
+
 .life-panel {
   max-width: 1024px;
   font-size: 0.85rem;

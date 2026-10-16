@@ -5,7 +5,8 @@ import { createDaisyworld } from './daisyworld';
 /** Runs Daisyworld from 4.5 to 8.5 Gyr and returns samples of temperature and daisy cover. */
 function run(withDaisies: boolean) {
   const world = createDaisyworld({ width: 64, height: 32, startYear: 4.5e9, withDaisies });
-  while (world.planet.globals.year < 8.5e9) world.simulation.step(world.planet, world.yearsPerStep);
+  while (world.planet.globals.year < 8.5e9)
+    world.simulation.step(world.planet, world.stepYears(world.planet));
   return world.planet.history;
 }
 

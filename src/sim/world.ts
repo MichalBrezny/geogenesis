@@ -15,7 +15,8 @@ import { flowRouting } from './models/geosphere/flowRouting';
 import { createStreamPowerEroder } from './models/geosphere/streamPower';
 import { generateTectonicPlanet, tectonicUplift } from './models/geosphere/tectonics';
 import { recordHistory } from './history';
-import { createSimulation, type Simulation } from './simulation';
+import { createSimulation, withMinInterval, type Simulation } from './simulation';
+import { civilizationStepYears, createCivilization } from './models/civilization/civilization';
 
 export interface WorldOptions extends PlanetOptions {
   /**
@@ -28,9 +29,15 @@ export interface WorldOptions extends PlanetOptions {
 export interface World {
   planet: PlanetState;
   simulation: Simulation;
-  /** Simulated years per step for this world. */
-  yearsPerStep: number;
+  /** Simulated years the next step should cover (finer once a civilization arises). */
+  stepYears: (planet: PlanetState) => number;
 }
+
+/** Step length before any civilization: the geological and evolutionary time scale. */
+const GEOLOGICAL_STEP = 1e6;
+/** Geology and evolution update at most this often (years) during civilizations. */
+const SLOW_PROCESS_INTERVAL = 1e5;
+const EVOLUTION_INTERVAL = 1e4;
 
 /** Creates a random planet with the standard component pipeline. */
 export function createRandomWorld(options: WorldOptions = {}): World {
@@ -44,20 +51,22 @@ export function createRandomWorld(options: WorldOptions = {}): World {
   const carbonCycle = createCarbonCycle();
   const simulation = createSimulation(
     [
-      createPlateDrift(),
-      tectonicUplift,
-      flowRouting,
-      createStreamPowerEroder(),
-      createLinearDiffuser(),
+      withMinInterval(createPlateDrift(), SLOW_PROCESS_INTERVAL),
+      withMinInterval(tectonicUplift, SLOW_PROCESS_INTERVAL),
+      withMinInterval(flowRouting, SLOW_PROCESS_INTERVAL),
+      withMinInterval(createStreamPowerEroder(), SLOW_PROCESS_INTERVAL),
+      withMinInterval(createLinearDiffuser(), SLOW_PROCESS_INTERVAL),
       stellarEvolution,
       surfaceAlbedo,
       climate,
       precipitationModel,
       biomeModel,
-      createLife(),
+      withMinInterval(createLife(), EVOLUTION_INTERVAL),
+      createCivilization(),
       biogeochemistry,
       carbonCycle,
-      recordHistory,
+      // One sample per geological step keeps the long history readable in the charts.
+      withMinInterval(recordHistory, GEOLOGICAL_STEP),
     ],
     [
       'elevation',
@@ -74,7 +83,11 @@ export function createRandomWorld(options: WorldOptions = {}): World {
   simulation.step(planet, 0);
   spinUpAtmosphere(planet, [surfaceAlbedo, climate, precipitationModel, biomeModel, carbonCycle]);
   recordHistory.runOneStep(planet, 0, createRng(0));
-  return { planet, simulation, yearsPerStep: 1e6 };
+  return {
+    planet,
+    simulation,
+    stepYears: (state) => civilizationStepYears(state, GEOLOGICAL_STEP),
+  };
 }
 
 /**

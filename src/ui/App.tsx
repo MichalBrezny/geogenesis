@@ -4,7 +4,8 @@ import { MAP_LAYERS, renderLayer, type MapLayer } from '../render/mapRenderer';
 import type { Frame, WorkerRequest, WorkerResponse } from '../worker/protocol';
 import { SCENARIO_IDS, type ScenarioId } from '../sim/scenarios';
 import { HistoryCharts, type ChartSeries } from './charts/HistoryCharts';
-import { formatPpm } from './format';
+import { formatPpm, formatStep } from './format';
+import { CivilizationPanel, EventLog } from './CivilizationPanel';
 import { LifePanel } from './LifePanel';
 import { MapLegend } from './MapLegend';
 
@@ -141,6 +142,7 @@ export function App() {
             <span>{t('stats.o2', { value: (frame.o2 * 100).toFixed(1) })}</span>
             <span>{t('stats.ice', { value: (frame.iceFraction * 100).toFixed(0) })}</span>
             <span>{t('stats.sun', { value: (frame.solarInput * 100).toFixed(1) })}</span>
+            <span>{t('time.step', { value: formatStep(frame.stepYears) })}</span>
             <span className="muted">{t('stats.stepTime', { value: stepTime.toFixed(0) })}</span>
           </>
         )}
@@ -150,6 +152,12 @@ export function App() {
       <MapLegend layer={layer} />
       {frame && (
         <HistoryCharts history={frame.history} series={SCENARIO_VIEW[frame.scenario].charts} />
+      )}
+      {frame?.scenario === 'random' && (
+        <div className="panels">
+          <CivilizationPanel civilization={frame.civilization} />
+          <EventLog events={frame.events} />
+        </div>
       )}
       {frame?.scenario === 'random' && <LifePanel life={frame.life} />}
     </main>
