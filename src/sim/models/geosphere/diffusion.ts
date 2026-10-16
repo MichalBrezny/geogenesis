@@ -1,6 +1,5 @@
 import type { SimComponent } from '../../core/component';
 import { getTopology, NEIGHBOR_COUNT } from '../../core/grid';
-import { SEA_LEVEL } from './flowRouting';
 
 export interface DiffusionOptions {
   /** Effective hillslope diffusivity in m²/yr. Must be large on coarse grids to have any effect. */
@@ -34,6 +33,7 @@ export function createLinearDiffuser(options: DiffusionOptions = {}): SimCompone
       const D = baseDiffusivity * state.controls.erosion;
       if (dtYears <= 0 || D <= 0) return;
       const { grid } = state;
+      const seaLevel = state.globals.seaLevel;
       const { neighbors, rowNorthEdge, rowSouthEdge } = getTopology(grid);
       const { width, height, dy } = grid;
       const elevation = state.fields.elevation;
@@ -60,7 +60,7 @@ export function createLinearDiffuser(options: DiffusionOptions = {}): SimCompone
       const surface = new Float64Array(elevation.length);
       const change = new Float64Array(elevation.length);
       for (let s = 0; s < steps; s++) {
-        for (let i = 0; i < elevation.length; i++) surface[i] = Math.max(elevation[i]!, SEA_LEVEL);
+        for (let i = 0; i < elevation.length; i++) surface[i] = Math.max(elevation[i]!, seaLevel);
         change.fill(0);
         for (let y = 0; y < height; y++) {
           for (let x = 0; x < width; x++) {
@@ -83,7 +83,7 @@ export function createLinearDiffuser(options: DiffusionOptions = {}): SimCompone
           const scale = dt / grid.rowCellArea[y]!;
           for (let x = 0; x < width; x++) {
             const i = y * width + x;
-            if (elevation[i]! >= SEA_LEVEL) elevation[i] = elevation[i]! + change[i]! * scale;
+            if (elevation[i]! >= seaLevel) elevation[i] = elevation[i]! + change[i]! * scale;
           }
         }
       }

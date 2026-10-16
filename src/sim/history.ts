@@ -1,7 +1,7 @@
 import type { SimComponent } from './core/component';
 import { Biome } from './data/biomes';
 import type { PlanetState } from './core/planet';
-import { SEA_LEVEL } from './models/geosphere/flowRouting';
+import { isOcean } from './models/geosphere/seaLevel';
 
 /** Global quantities recorded once per step, for graphs. */
 export const HISTORY_SERIES = [
@@ -10,6 +10,7 @@ export const HISTORY_SERIES = [
   'co2',
   'iceFraction',
   'solarInput',
+  'seaLevel',
   'landFraction',
   'whiteDaisies',
   'blackDaisies',
@@ -49,6 +50,7 @@ export const recordHistory: SimComponent = {
       co2: globals.atmosphere.co2,
       iceFraction: globals.iceFraction,
       solarInput: globals.solarInput,
+      seaLevel: globals.seaLevel,
       landFraction: surface.land,
       whiteDaisies: surface.whiteDaisies,
       blackDaisies: surface.blackDaisies,
@@ -89,7 +91,7 @@ function surfaceShares(state: PlanetState) {
     const weight = grid.rowAreaWeight[y]!;
     for (let x = 0; x < grid.width; x++) {
       const i = y * grid.width + x;
-      if (elevation[i]! >= SEA_LEVEL) shares.land += weight;
+      if (!isOcean(elevation[i]!, state.globals.seaLevel)) shares.land += weight;
       const b = biome[i] as Biome;
       if (FOREST_BIOMES.includes(b)) shares.forest += weight * vegetation[i]!;
       else if (b === Biome.Desert) shares.desert += weight;

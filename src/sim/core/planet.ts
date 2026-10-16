@@ -26,6 +26,8 @@ export interface GlobalState {
   meanTemperature: number;
   /** Fraction of the surface covered by ice, 0..1 (written by the climate model). */
   iceFraction: number;
+  /** Ocean surface elevation relative to the ice-free datum, m. */
+  seaLevel: number;
   /** Shape of the general circulation (written by the circulation model). */
   circulation?: { hadleyWidth: number; meanItcz: number };
   /** Carbon fluxes relative to present-day Earth (written by the carbon cycle). */
@@ -166,6 +168,7 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
       atmosphere: { co2: 280, ch4: 0.7, o2: 0.21 },
       meanTemperature: 0,
       iceFraction: 0,
+      seaLevel: 0,
       carbon: { outgassing: 1, weathering: 1, burial: 0 },
       energy: 0,
       unlimitedEnergy: false,

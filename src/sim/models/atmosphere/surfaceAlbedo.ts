@@ -1,6 +1,6 @@
 import type { SimComponent } from '../../core/component';
 import { Biome, BIOMES } from '../../data/biomes';
-import { SEA_LEVEL } from '../geosphere/flowRouting';
+import { isOcean } from '../geosphere/seaLevel';
 
 /** Planetary albedo (surface plus typical cloud cover) of ice-free ocean and bare land. */
 export const OCEAN_ALBEDO = 0.29;
@@ -32,7 +32,7 @@ export function createSurfaceAlbedo(options: SurfaceAlbedoOptions = {}): SimComp
     runOneStep(state) {
       const { elevation, biome, vegetation, daisyWhite, daisyBlack, surfaceAlbedo } = state.fields;
       for (let i = 0; i < elevation.length; i++) {
-        if (elevation[i]! < SEA_LEVEL) {
+        if (isOcean(elevation[i]!, state.globals.seaLevel)) {
           surfaceAlbedo[i] = OCEAN_ALBEDO;
           continue;
         }

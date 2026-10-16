@@ -26,6 +26,29 @@ describe('classifyBiome', () => {
   ] as const)('%o → %i', (overrides, expected) => {
     expect(classifyBiome({ ...temperateLowland, ...overrides })).toBe(expected);
   });
+
+  it.each([4, 15, 30])('classifies low aridity as desert at %i °C', (temperature) => {
+    expect(
+      classifyBiome({
+        ...temperateLowland,
+        temperature,
+        precipitation: 0.1 * 60 * (temperature + 5),
+      }),
+    ).toBe(Biome.Desert);
+  });
+
+  it.each([
+    [10, Biome.TemperateForest],
+    [25, Biome.Jungle],
+  ] as const)('classifies humid climates as forest at %i °C', (temperature, expected) => {
+    expect(
+      classifyBiome({
+        ...temperateLowland,
+        temperature,
+        precipitation: 60 * (temperature + 5),
+      }),
+    ).toBe(expected);
+  });
 });
 
 describe('biome data', () => {

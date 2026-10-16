@@ -195,6 +195,7 @@ export function PlanetView({ frame, layer, view, toolActive, onCellClick, overla
         height: frame.grid.height,
         values: frame.fields.pressure,
         elevation: frame.fields.elevation,
+        seaLevel: frame.seaLevel,
       },
       project,
       { width: w, height: h },

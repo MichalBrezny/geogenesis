@@ -1,7 +1,7 @@
 import type { SimComponent } from '../../core/component';
 import type { PlanetState } from '../../core/planet';
 import { Biome, BIOMES } from '../../data/biomes';
-import { SEA_LEVEL } from '../geosphere/flowRouting';
+import { isOcean } from '../geosphere/seaLevel';
 import { MODERN_PHOTOSYNTHESIS, photosynthesis } from './biogeochemistry';
 
 export interface CarbonCycleOptions {
@@ -32,7 +32,7 @@ const MANTLE_COOLING_TIME = 2.5e9;
  * flux. Calibrated (with the moisture-budget precipitation) so random planets settle
  * at roughly 13–16 °C half a billion years after complex life appears.
  */
-const REFERENCE_WEATHERING = 0.42;
+const REFERENCE_WEATHERING = 0.47;
 /**
  * Years for the atmosphere–ocean CO₂ reservoir to change by its own size under a
  * unit flux imbalance. Earth's exchangeable carbon responds over a few hundred
@@ -170,7 +170,7 @@ export function rawWeathering(state: PlanetState, co2: number, warming = 0): num
     const weight = grid.rowAreaWeight[y]!;
     for (let x = 0; x < grid.width; x++) {
       const i = y * grid.width + x;
-      if (elevation[i]! < SEA_LEVEL) continue;
+      if (isOcean(elevation[i]!, state.globals.seaLevel)) continue;
       const temperature = airTemperature[i]! + warming;
       const ice = Math.max(iceCover[i]!, temperature < -10 ? 1 : 0);
       const runoff = precipitation[i]! / 1000;

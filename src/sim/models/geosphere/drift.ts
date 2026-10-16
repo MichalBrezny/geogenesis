@@ -181,11 +181,11 @@ function accreteContinents(state: PlanetState, dtYears: number, target: number, 
 
   for (let i = 0; i < elevation.length; i++) {
     if (crustType[i]) continue;
-    if (upliftRate[i]! > 0 && elevation[i]! > 0) {
+    if (upliftRate[i]! > 0 && elevation[i]! > state.globals.seaLevel) {
       crustType[i] = 1;
       continue;
     }
-    if (shelfChance <= 0 || elevation[i]! < SHELF_DEPTH) continue;
+    if (shelfChance <= 0 || elevation[i]! < state.globals.seaLevel + SHELF_DEPTH) continue;
     let coastal = false;
     for (let d = 0; d < NEIGHBOR_COUNT; d += 2) {
       const n = neighbors[i * NEIGHBOR_COUNT + d]!;
@@ -194,7 +194,7 @@ function accreteContinents(state: PlanetState, dtYears: number, target: number, 
     if (coastal && rng.next() < shelfChance) {
       crustType[i] = 1;
       // Continental crust is buoyant: the new margin sits just above sea level.
-      elevation[i] = Math.max(elevation[i]!, 100);
+      elevation[i] = Math.max(elevation[i]!, state.globals.seaLevel + 100);
     }
   }
 }

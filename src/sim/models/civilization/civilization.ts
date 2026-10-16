@@ -7,7 +7,7 @@ import { LIFE_CLASSES, lifeClassIndex, PLANT_PRODUCTIVITY } from '../../data/lif
 import { recordEvent } from '../../events';
 import { classSuitability } from '../biosphere/life';
 import { disperse } from '../dispersal';
-import { SEA_LEVEL } from '../geosphere/flowRouting';
+import { isOcean, landSurfaceFraction } from '../geosphere/seaLevel';
 
 export interface CivilizationOptions {
   /** Mean years for a fully established, most capable class to become sentient. */
@@ -166,21 +166,14 @@ function clearLand(state: PlanetState, capacity: Float32Array): void {
   const plants = lifeClassIndex('plants');
   const landUse = TECH_AGES[state.civilization.age]!.landUse;
   for (let i = 0; i < n; i++) {
-    if (fields.elevation[i]! < SEA_LEVEL) continue;
+    if (isOcean(fields.elevation[i]!, state.globals.seaLevel)) continue;
     const settled = capacity[i]! > 0 ? Math.min(1, fields.civilization[i]! / capacity[i]!) : 0;
     fields.vegetation[i] = biota.populations[plants * n + i]! * (1 - landUse * settled);
   }
 }
 
 function landFraction(state: PlanetState): number {
-  const { grid, fields } = state;
-  let land = 0;
-  for (let y = 0; y < grid.height; y++) {
-    for (let x = 0; x < grid.width; x++) {
-      if (fields.elevation[y * grid.width + x]! >= SEA_LEVEL) land += grid.rowAreaWeight[y]!;
-    }
-  }
-  return land;
+  return landSurfaceFraction(state.grid, state.fields.elevation, state.globals.seaLevel);
 }
 
 function worldPopulation(state: PlanetState): number {

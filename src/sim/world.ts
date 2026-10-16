@@ -14,6 +14,7 @@ import { createLife, seedPrimordialLife } from './models/biosphere/life';
 import { createLinearDiffuser } from './models/geosphere/diffusion';
 import { createPlateDrift } from './models/geosphere/drift';
 import { flowRouting } from './models/geosphere/flowRouting';
+import { seaLevelModel } from './models/geosphere/seaLevel';
 import { createStreamPowerEroder } from './models/geosphere/streamPower';
 import { generateTectonicPlanet, tectonicUplift } from './models/geosphere/tectonics';
 import { recordHistory } from './history';
@@ -79,6 +80,7 @@ export function randomWorldFromPlanet(
 ): World {
   const simulation = createSimulation(
     [
+      seaLevelModel,
       withMinInterval(
         createPlateDrift({ continentalFraction: settings.continentalFraction }),
         SLOW_PROCESS_INTERVAL,
@@ -107,6 +109,7 @@ export function randomWorldFromPlanet(
       // Geology runs first and uses the last step's climate; the climate the last
       // step's ocean.
       'airTemperature',
+      'iceCover',
       'precipitation',
       'oceanAnomaly',
       'elevation',
@@ -136,6 +139,7 @@ function spinUpAtmosphere(planet: PlanetState): void {
   const components: SimComponent[] = [
     createSurfaceAlbedo(),
     createClimate(),
+    seaLevelModel,
     circulationModel,
     oceanModel,
     precipitationModel,

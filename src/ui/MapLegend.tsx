@@ -1,5 +1,11 @@
 import { t, type MessageKey } from '../i18n/i18n';
-import { LIFE_TIER_COLORS, type MapLayer } from '../render/mapRenderer';
+import {
+  FRESH_LAKE_COLOR,
+  LIFE_TIER_COLORS,
+  SALT_FLAT_COLOR,
+  SALT_LAKE_COLOR,
+  type MapLayer,
+} from '../render/mapRenderer';
 import { LIFE_TIERS } from '../sim/data/lifeClasses';
 import {
   elevationPalette,
@@ -128,7 +134,7 @@ export function MapLegend({ layer }: { layer: MapLayer }) {
     const value = scale.min + ((scale.max - scale.min) * k) / 11;
     return `${css(scale.palette(value))} ${((k / 11) * 100).toFixed(1)}%`;
   });
-  return (
+  const scaleLegend = (
     <div className="legend-scale" aria-label={t('legend.label')}>
       <div
         className="legend-bar"
@@ -145,6 +151,26 @@ export function MapLegend({ layer }: { layer: MapLayer }) {
         ))}
       </div>
       <span className="legend-unit">{scale.unit}</span>
+    </div>
+  );
+  if (layer !== 'terrain') return scaleLegend;
+  return (
+    <div className="terrain-legend">
+      {scaleLegend}
+      <ul className="legend" aria-label={t('legend.lakes')}>
+        <li>
+          <span className="swatch" style={{ background: css(FRESH_LAKE_COLOR) }} />
+          {t('legend.freshLake')}
+        </li>
+        <li>
+          <span className="swatch" style={{ background: css(SALT_LAKE_COLOR) }} />
+          {t('legend.saltLake')}
+        </li>
+        <li>
+          <span className="swatch" style={{ background: css(SALT_FLAT_COLOR) }} />
+          {t('legend.saltFlat')}
+        </li>
+      </ul>
     </div>
   );
 }

@@ -138,6 +138,7 @@ export class SimHost {
       scenario: this.scenario,
       grid: { width, height, cellCount },
       fields,
+      seaLevel: planet.globals.seaLevel,
       year: planet.globals.year,
       meanTemperature: planet.globals.meanTemperature,
       solarInput: planet.globals.solarInput,

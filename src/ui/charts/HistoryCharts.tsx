@@ -19,6 +19,7 @@ const CHARTS: readonly ChartSpec[] = [
   { series: 'co2', title: 'chart.co2', format: (v) => `${formatPpm(v)} ppm`, log: true },
   { series: 'iceFraction', title: 'chart.ice', scale: 100, format: (v) => `${v.toFixed(1)}%` },
   { series: 'landFraction', title: 'chart.land', scale: 100, format: (v) => `${v.toFixed(1)}%` },
+  { series: 'seaLevel', title: 'chart.seaLevel', format: (v) => `${v.toFixed(0)} m` },
   { series: 'solarInput', title: 'chart.sun', scale: 100, format: (v) => `${v.toFixed(1)}%` },
   { series: 'o2', title: 'chart.o2', scale: 100, format: (v) => `${v.toFixed(1)}%` },
   { series: 'ch4', title: 'chart.ch4', format: (v) => `${v.toFixed(1)} ppm`, log: true },

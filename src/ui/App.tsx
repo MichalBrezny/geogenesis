@@ -35,6 +35,7 @@ const SCENARIO_VIEW: Record<
       'forestFraction',
       'desertFraction',
       'landFraction',
+      'seaLevel',
       'solarInput',
     ],
     layers: [
@@ -57,7 +58,15 @@ const SCENARIO_VIEW: Record<
     layer: 'daisies',
   },
   aquarium: {
-    charts: ['meanTemperature', 'co2', 'o2', 'livingClasses', 'landFraction', 'solarInput'],
+    charts: [
+      'meanTemperature',
+      'co2',
+      'o2',
+      'livingClasses',
+      'landFraction',
+      'seaLevel',
+      'solarInput',
+    ],
     layers: [
       'life',
       'terrain',

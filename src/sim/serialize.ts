@@ -1,4 +1,5 @@
 import type { PlanetState } from './core/planet';
+import { HISTORY_SERIES } from './history';
 
 /**
  * Binary save format:
@@ -76,7 +77,7 @@ export function deserializeGame(bytes: Uint8Array): SavedGame {
   const headerLength = view.getUint32(12, true);
   const header = new TextDecoder().decode(bytes.subarray(16, 16 + headerLength));
   const dataStart = align(16 + headerLength);
-  return JSON.parse(header, (_key, value: unknown) => {
+  const game = JSON.parse(header, (_key, value: unknown) => {
     if (!isArrayRef(value)) return value;
     const Type = TYPED_ARRAYS[value.__typedArray];
     const start = dataStart + value.offset;
@@ -87,6 +88,17 @@ export function deserializeGame(bytes: Uint8Array): SavedGame {
     copy.set(bytes.subarray(start, start + byteLength));
     return new Type(copy.buffer);
   }) as SavedGame;
+  hydrateAddedState(game.planet);
+  return game;
+}
+
+/** Keeps version-2 saves loadable when optional plain-data state is added. */
+function hydrateAddedState(planet: PlanetState): void {
+  planet.globals.seaLevel ??= 0;
+  planet.fields.lakeDepth ??= new Float32Array(planet.grid.cellCount);
+  planet.fields.lakeType ??= new Int32Array(planet.grid.cellCount);
+  const samples = planet.history.year?.length ?? 0;
+  for (const name of HISTORY_SERIES) planet.history[name] ??= Array(samples).fill(0);
 }
 
 function isArrayRef(value: unknown): value is ArrayRef {

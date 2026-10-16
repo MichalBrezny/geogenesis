@@ -13,7 +13,7 @@ import {
 } from '../../data/lifeClasses';
 import { recordEvent } from '../../events';
 import { disperse } from '../dispersal';
-import { SEA_LEVEL } from '../geosphere/flowRouting';
+import { isOcean } from '../geosphere/seaLevel';
 
 export interface LifeOptions {
   /** Multiplier on the rate at which new classes evolve (a future player control). */
@@ -88,7 +88,9 @@ export function seedPrimordialLife(state: PlanetState): void {
   const prokaryotes = lifeClassIndex('prokaryotes');
   const n = state.grid.cellCount;
   for (let i = 0; i < n; i++) {
-    if (state.fields.elevation[i]! < SEA_LEVEL) populations[prokaryotes * n + i] = 0.5;
+    if (isOcean(state.fields.elevation[i]!, state.globals.seaLevel)) {
+      populations[prokaryotes * n + i] = 0.5;
+    }
   }
   appeared[prokaryotes] = state.globals.year;
 }
@@ -140,7 +142,7 @@ export function classSuitability(
   const oxygen = oxygenFactor(lifeClass, globals.atmosphere.o2);
   if (oxygen === 0) return out;
   for (let i = 0; i < n; i++) {
-    const ocean = elevation[i]! < SEA_LEVEL;
+    const ocean = isOcean(elevation[i]!, globals.seaLevel);
     if (ocean !== (lifeClass.habitat === 'ocean')) continue;
     const temperature = ocean
       ? Math.max(SEA_WATER_MIN_TEMPERATURE, airTemperature[i]!)

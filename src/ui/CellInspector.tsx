@@ -3,6 +3,7 @@ import { BIOMES, type Biome } from '../sim/data/biomes';
 import { PEOPLE_PER_KM2 } from '../sim/data/civilization';
 import { LIFE_TIERS } from '../sim/data/lifeClasses';
 import { RIVER_MIN_DISCHARGE } from '../render/mapRenderer';
+import { LakeType } from '../sim/models/geosphere/flowRouting';
 import type { Frame } from '../worker/protocol';
 
 /** Cell under the pointer and where to draw the readout (page coordinates). */
@@ -18,14 +19,12 @@ export interface HoveredCell {
 export function CellInspector({ frame, cell }: { frame: Frame; cell: HoveredCell }) {
   const f = frame.fields;
   const i = cell.index;
-  const ocean = f.elevation[i]! < 0;
+  const ocean = f.elevation[i]! < frame.seaLevel;
+  const height = Math.abs(f.elevation[i]! - frame.seaLevel);
   const tier = f.lifeTier[i]!;
   const rows: [MessageKey, string][] = [
     ['inspect.position', formatPosition(cell.latitude, cell.longitude)],
-    [
-      ocean ? 'inspect.depth' : 'inspect.elevation',
-      `${Math.abs(Math.round(f.elevation[i]!)).toLocaleString('en')} m`,
-    ],
+    [ocean ? 'inspect.depth' : 'inspect.elevation', `${Math.round(height).toLocaleString('en')} m`],
     ['inspect.temperature', `${f.airTemperature[i]!.toFixed(1)} °C`],
     ['inspect.precipitation', `${Math.round(f.precipitation[i]!).toLocaleString('en')} mm/yr`],
     ['inspect.wind', formatWind(f.windU[i]!, f.windV[i]!)],
@@ -34,6 +33,18 @@ export function CellInspector({ frame, cell }: { frame: Frame; cell: HoveredCell
   ];
   if (frame.scenario !== 'daisyworld') {
     rows.splice(3, 0, ['inspect.pressure', `${f.pressure[i]!.toFixed(0)} hPa`]);
+  }
+  const lake = f.lakeType[i]!;
+  if (lake === LakeType.Fresh || lake === LakeType.Salt) {
+    rows.push([
+      'inspect.lake',
+      t('inspect.lakeValue', {
+        kind: t(lake === LakeType.Fresh ? 'lake.fresh' : 'lake.salt'),
+        depth: Math.round(f.lakeDepth[i]!).toLocaleString('en'),
+      }),
+    ]);
+  } else if (lake === LakeType.SaltFlat) {
+    rows.push(['inspect.lake', t('lake.saltFlat')]);
   }
   if (!ocean && f.discharge[i]! >= RIVER_MIN_DISCHARGE) {
     const perSecond = f.discharge[i]! / SECONDS_PER_YEAR;

@@ -1,7 +1,7 @@
 import type { Fields } from '../sim/core/fields';
 import type { Grid } from '../sim/core/grid';
 import { Biome, BIOMES } from '../sim/data/biomes';
-import { SEA_LEVEL } from '../sim/models/geosphere/flowRouting';
+import { LakeType } from '../sim/models/geosphere/flowRouting';
 import {
   elevationPalette,
   precipitationPalette,
@@ -17,6 +17,8 @@ export const RENDERED_FIELDS = [
   'elevation',
   'plateId',
   'discharge',
+  'lakeDepth',
+  'lakeType',
   'windU',
   'windV',
   'pressure',
@@ -36,6 +38,7 @@ export const RENDERED_FIELDS = [
 export interface MapSource {
   grid: Pick<Grid, 'width' | 'height' | 'cellCount'>;
   fields: Pick<Fields, (typeof RENDERED_FIELDS)[number]>;
+  seaLevel: number;
 }
 
 /** Map layers the player can switch between. */
@@ -59,6 +62,9 @@ export const RIVER_MIN_DISCHARGE = 1e11;
 /** Discharge at which rivers reach full colour (~100,000 m³/s, half an Amazon). */
 const RIVER_FULL_DISCHARGE = 3e12;
 const RIVER_COLOR: Rgb = [40, 90, 200];
+export const FRESH_LAKE_COLOR: Rgb = [45, 105, 175];
+export const SALT_LAKE_COLOR: Rgb = [205, 225, 226];
+export const SALT_FLAT_COLOR: Rgb = [181, 171, 150];
 const LAND_ICE_COLOR: Rgb = [238, 242, 246];
 const SEA_ICE_COLOR: Rgb = [200, 215, 230];
 const BARE_GROUND: Rgb = [196, 168, 118];
@@ -83,11 +89,15 @@ type CellColor = (state: MapSource, i: number) => Rgb;
 
 const layerColors: Record<MapLayer, CellColor> = {
   terrain(state, i) {
-    const { elevation, discharge, iceCover } = state.fields;
-    const ocean = elevation[i]! < SEA_LEVEL;
-    let color = elevationPalette(elevation[i]!);
+    const { elevation, discharge, iceCover, lakeType } = state.fields;
+    const ocean = elevation[i]! < state.seaLevel;
+    const lake = lakeType[i]!;
+    let color = elevationPalette(elevation[i]! - state.seaLevel);
+    if (lake === LakeType.Fresh) color = FRESH_LAKE_COLOR;
+    else if (lake === LakeType.Salt) color = SALT_LAKE_COLOR;
+    else if (lake === LakeType.SaltFlat) color = SALT_FLAT_COLOR;
     const flow = discharge[i]!;
-    if (!ocean && flow >= RIVER_MIN_DISCHARGE) {
+    if (!ocean && lake === LakeType.None && flow >= RIVER_MIN_DISCHARGE) {
       const t = Math.min(
         1,
         0.4 +
@@ -102,7 +112,7 @@ const layerColors: Record<MapLayer, CellColor> = {
   plates(state, i) {
     const base = plateColor(state.fields.plateId[i]!);
     // Dim the ocean so continents stay recognisable.
-    return state.fields.elevation[i]! < SEA_LEVEL ? mix(base, [10, 20, 40], 0.45) : base;
+    return state.fields.elevation[i]! < state.seaLevel ? mix(base, [10, 20, 40], 0.45) : base;
   },
   airTemperature(state, i) {
     return temperaturePalette(state.fields.airTemperature[i]!);
@@ -110,18 +120,18 @@ const layerColors: Record<MapLayer, CellColor> = {
   pressure(state, i) {
     const color = pressurePalette(state.fields.pressure[i]!);
     // Neutral land shading preserves the pressure signal while making continents legible.
-    return state.fields.elevation[i]! < SEA_LEVEL ? color : mix(color, [55, 55, 55], 0.3);
+    return state.fields.elevation[i]! < state.seaLevel ? color : mix(color, [55, 55, 55], 0.3);
   },
   biomes(state, i) {
     const { biome, vegetation, elevation } = state.fields;
     const color = BIOMES[biome[i] as Biome].color;
     // Climate says what could grow; plant cover says how much of it actually does.
-    if (elevation[i]! < SEA_LEVEL || biome[i] === Biome.Ice) return color;
+    if (elevation[i]! < state.seaLevel || biome[i] === Biome.Ice) return color;
     return mix(BARREN_COLOR, color, Math.min(1, vegetation[i]! * 1.5));
   },
   civilization(state, i) {
     const { civilization, elevation } = state.fields;
-    const base: Rgb = elevation[i]! < SEA_LEVEL ? [22, 34, 52] : [52, 56, 62];
+    const base: Rgb = elevation[i]! < state.seaLevel ? [22, 34, 52] : [52, 56, 62];
     const density = civilization[i]!;
     if (density <= 0) return base;
     // Log scale: stone-age bands and industrial cities differ by orders of magnitude.
@@ -133,7 +143,7 @@ const layerColors: Record<MapLayer, CellColor> = {
   },
   daisies(state, i) {
     const { daisyWhite, daisyBlack, elevation } = state.fields;
-    if (elevation[i]! < SEA_LEVEL) return [20, 40, 80];
+    if (elevation[i]! < state.seaLevel) return [20, 40, 80];
     const white = daisyWhite[i]!;
     const black = daisyBlack[i]!;
     const bare = Math.max(0, 1 - white - black);
@@ -147,16 +157,16 @@ const layerColors: Record<MapLayer, CellColor> = {
     const { windU, windV, elevation } = state.fields;
     const color = windSpeedPalette(Math.hypot(windU[i]!, windV[i]!));
     // Land a little darker, so the coastlines stay visible.
-    return elevation[i]! < SEA_LEVEL ? color : mix(color, [40, 40, 40], 0.35);
+    return elevation[i]! < state.seaLevel ? color : mix(color, [40, 40, 40], 0.35);
   },
   oceanCurrents(state, i) {
     const { oceanAnomaly, elevation } = state.fields;
-    if (elevation[i]! >= SEA_LEVEL) return [58, 60, 64];
+    if (elevation[i]! >= state.seaLevel) return [58, 60, 64];
     return seaAnomalyPalette(oceanAnomaly[i]!);
   },
   precipitation(state, i) {
     const color = precipitationPalette(state.fields.precipitation[i]!);
-    return state.fields.elevation[i]! < SEA_LEVEL ? mix(color, [10, 20, 40], 0.5) : color;
+    return state.fields.elevation[i]! < state.seaLevel ? mix(color, [10, 20, 40], 0.5) : color;
   },
 };
 

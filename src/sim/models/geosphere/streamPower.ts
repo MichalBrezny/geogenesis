@@ -1,5 +1,5 @@
 import type { SimComponent } from '../../core/component';
-import { SEA_LEVEL, neighborDistance } from './flowRouting';
+import { neighborDistance } from './flowRouting';
 
 export interface StreamPowerOptions {
   /** Erodibility K in yr⁻¹·m^(1-2m). Effective value for coarse cells, not a field measurement. */
@@ -37,12 +37,13 @@ export function createStreamPowerEroder(options: StreamPowerOptions = {}): SimCo
     runOneStep(state, dtYears) {
       if (dtYears <= 0) return;
       const { grid, fields } = state;
+      const seaLevel = state.globals.seaLevel;
       const { elevation, flowReceiver, flowUpstreamOrder, discharge } = fields;
       for (let k = 0; k < flowUpstreamOrder.length; k++) {
         const i = flowUpstreamOrder[k]!;
         const r = flowReceiver[i]!;
         if (r < 0) continue;
-        const base = Math.max(elevation[r]!, SEA_LEVEL);
+        const base = Math.max(elevation[r]!, seaLevel);
         const h = elevation[i]!;
         // Lake floors and flats below their outlet are not incised.
         if (h <= base) continue;

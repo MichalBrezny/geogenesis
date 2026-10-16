@@ -3,7 +3,7 @@ import { cellIndex, getTopology, NEIGHBOR_COUNT } from '../../core/grid';
 import { createPlanet, type PlanetState } from '../../core/planet';
 import { createRng } from '../../core/rng';
 import { createLinearDiffuser } from './diffusion';
-import { flowRouting } from './flowRouting';
+import { flowRouting, LakeType } from './flowRouting';
 import { createStreamPowerEroder } from './streamPower';
 import { generateTectonicPlanet, spreadFromBoundaries } from './tectonics';
 
@@ -22,6 +22,29 @@ function valleyPlanet(): PlanetState {
   // A wet, temperate climate, so the rivers carry water.
   planet.fields.precipitation.fill(1200);
   planet.fields.airTemperature.fill(10);
+  return planet;
+}
+
+/** A broad closed hollow connected to the ocean only across a descending spill channel. */
+function lakeBasin(wet: boolean): PlanetState {
+  const planet = createPlanet({ width: 16, height: 8 });
+  const { elevation, precipitation, airTemperature } = planet.fields;
+  elevation.fill(-1000);
+  precipitation.fill(wet ? 2000 : 0);
+  airTemperature.fill(20);
+  for (let y = 1; y <= 6; y++) {
+    for (let x = 1; x <= 14; x++) elevation[cellIndex(planet.grid, x, y)] = 800;
+  }
+  for (let x = 9; x <= 14; x++) {
+    elevation[cellIndex(planet.grid, x, 4)] = 800 - (x - 8) * 100;
+  }
+  for (let y = 3; y <= 4; y++) {
+    for (let x = 4; x <= 8; x++) {
+      const i = cellIndex(planet.grid, x, y);
+      elevation[i] = 100 + (x - 4) * 100;
+    }
+  }
+  if (!wet) precipitation[cellIndex(planet.grid, 8, 3)] = 8000;
   return planet;
 }
 
@@ -68,6 +91,64 @@ describe('flowRouting', () => {
     flowRouting.runOneStep(planet, 0, rng);
     expect(planet.fields.flowReceiver[5]).toBe(-1);
     expect(planet.fields.drainageArea[5]! / 4).toBeGreaterThan(planet.grid.rowCellArea[0]!);
+  });
+
+  it('fills and drains a deep one-cell pit without making a lake', () => {
+    const planet = createPlanet({ width: 16, height: 8 });
+    const { elevation, precipitation, airTemperature, lakeType, flowReceiver } = planet.fields;
+    elevation.fill(-1000);
+    precipitation.fill(0);
+    airTemperature.fill(20);
+    for (let y = 2; y <= 5; y++) {
+      for (let x = 2; x <= 10; x++) elevation[cellIndex(planet.grid, x, y)] = 500 - x;
+    }
+    const pit = cellIndex(planet.grid, 6, 3);
+    elevation[pit] = elevation[cellIndex(planet.grid, 7, 3)]! - 200;
+
+    flowRouting.runOneStep(planet, 0, rng);
+
+    expect(lakeType[pit]).toBe(LakeType.None);
+    expect(flowReceiver[pit]).not.toBe(-1);
+  });
+
+  it('makes a dry large closed basin endorheic below its rim', () => {
+    const wet = lakeBasin(true);
+    flowRouting.runOneStep(wet, 0, rng);
+    const fresh = Array.from(wet.fields.lakeType, (kind, i) =>
+      kind === LakeType.Fresh ? i : -1,
+    ).filter((i) => i >= 0);
+    const freshSet = new Set(fresh);
+    const exit = fresh.find((i) => {
+      const r = wet.fields.flowReceiver[i]!;
+      return r >= 0 && !freshSet.has(r);
+    });
+    expect(exit).toBeDefined();
+    const downstream = wet.fields.flowReceiver[exit!]!;
+    expect(wet.fields.discharge[downstream]).toBeGreaterThan(0);
+
+    const dry = lakeBasin(false);
+    flowRouting.runOneStep(dry, 0, rng);
+    const salt = dry.fields.lakeType.filter((kind) => kind === LakeType.Salt).length;
+    expect(salt).toBeGreaterThan(0);
+    expect(salt).toBeLessThan(fresh.length);
+    expect(dry.fields.flowReceiver[exit!]).toBe(-1);
+    expect(dry.fields.discharge[downstream]).toBe(0);
+  });
+
+  it('lets a humid closed basin fill as a freshwater lake and overflow', () => {
+    const planet = lakeBasin(true);
+    flowRouting.runOneStep(planet, 0, rng);
+    const lake = Array.from(planet.fields.lakeType, (kind, i) =>
+      kind === LakeType.Fresh ? i : -1,
+    ).filter((i) => i >= 0);
+    expect(lake.length).toBeGreaterThan(1);
+    const lakeSet = new Set(lake);
+    expect(
+      lake.some((i) => {
+        const receiver = planet.fields.flowReceiver[i]!;
+        return receiver >= 0 && !lakeSet.has(receiver);
+      }),
+    ).toBe(true);
   });
 });
 

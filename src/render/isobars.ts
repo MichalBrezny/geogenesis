@@ -6,6 +6,8 @@ export interface PressureField {
   values: ArrayLike<number>;
   /** Optional terrain used to split fallback labels by land/sea sector and draw coasts. */
   elevation?: ArrayLike<number>;
+  /** Current sea-surface elevation used with `elevation`. */
+  seaLevel?: number;
 }
 
 export interface GeoPoint {
@@ -256,11 +258,12 @@ function surfaceSectors(field: PressureField, centreY: number, latitudeRadius: n
   if (!elevation || elevation.length < width * height) return [all];
   const firstRow = Math.max(0, centreY - latitudeRadius);
   const lastRow = Math.min(height - 1, centreY + latitudeRadius);
+  const seaLevel = field.seaLevel ?? 0;
   const land = new Uint8Array(width);
   for (let x = 0; x < width; x++) {
     let count = 0;
     for (let y = firstRow; y <= lastRow; y++) {
-      if (elevation[y * width + x]! >= 0) count++;
+      if (elevation[y * width + x]! >= seaLevel) count++;
     }
     land[x] = count * 2 >= lastRow - firstRow + 1 ? 1 : 0;
   }
@@ -306,8 +309,11 @@ export function drawIsobars(
     drawProjectedContours(
       ctx,
       stitchSegments(
-        0,
-        marchingSegments({ width: field.width, height: field.height, values: field.elevation }, 0),
+        field.seaLevel ?? 0,
+        marchingSegments(
+          { width: field.width, height: field.height, values: field.elevation },
+          field.seaLevel ?? 0,
+        ),
       ),
       project,
       jump,

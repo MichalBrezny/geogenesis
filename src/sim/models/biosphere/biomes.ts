@@ -1,13 +1,17 @@
 import type { SimComponent } from '../../core/component';
 import { Biome } from '../../data/biomes';
-import { SEA_LEVEL } from '../geosphere/flowRouting';
+import { isOcean } from '../geosphere/seaLevel';
+import { potentialEvapotranspiration } from '../hydrology';
 
-/** Above this elevation (m) land is bare alpine rock regardless of climate. */
+/** Above this height over the current sea surface, land is bare alpine rock. */
 const ROCK_ELEVATION = 4500;
 /** Lowlands below this elevation (m) with a big river and plenty of rain become swamps. */
 const SWAMP_MAX_ELEVATION = 300;
 const SWAMP_MIN_PRECIPITATION = 1200;
 const SWAMP_MIN_DRAINAGE_AREA = 5e11;
+const ARID = 0.2;
+const SEMI_ARID = 0.5;
+const DRY_SUBHUMID = 0.65;
 
 export interface BiomeInputs {
   elevation: number;
@@ -19,32 +23,44 @@ export interface BiomeInputs {
   ice: number;
   /** Upstream drainage area, m². */
   drainageArea: number;
+  /** Current sea-surface elevation, m. */
+  seaLevel?: number;
+}
+
+/** Precipitation / potential evapotranspiration; Infinity in climates with no PET. */
+export function aridityIndex(precipitation: number, temperature: number): number {
+  const pet = potentialEvapotranspiration(temperature);
+  return pet > 0 ? Math.max(0, precipitation) / pet : Infinity;
 }
 
 /**
- * Biome of a cell from its climate, after a simplified Whittaker diagram
- * (annual temperature × precipitation), plus alpine rock and river swamps.
+ * Biome of a cell from temperature and the UNEP-style aridity index P / PET,
+ * plus alpine rock and river swamps. Hyper-arid (<0.05) and arid (<0.2)
+ * climates share the desert biome; semi-arid (<0.5), dry sub-humid (<0.65)
+ * and humid climates map to increasingly wooded existing biomes.
  */
 export function classifyBiome(cell: BiomeInputs): Biome {
   const { elevation, temperature: t, precipitation: p } = cell;
-  if (elevation < SEA_LEVEL) return Biome.Ocean;
+  const seaLevel = cell.seaLevel ?? 0;
+  if (isOcean(elevation, seaLevel)) return Biome.Ocean;
   if (cell.ice >= 0.5) return Biome.Ice;
-  if (elevation > ROCK_ELEVATION) return Biome.Rock;
+  if (elevation - seaLevel > ROCK_ELEVATION) return Biome.Rock;
   if (t < -6) return Biome.Tundra;
-  if (t < 3) return p >= 250 ? Biome.BorealForest : Biome.Tundra;
+  const aridity = aridityIndex(p, t);
+  if (t < 3) return aridity >= SEMI_ARID ? Biome.BorealForest : Biome.Tundra;
   if (
-    elevation < SWAMP_MAX_ELEVATION &&
+    elevation - seaLevel < SWAMP_MAX_ELEVATION &&
     p >= SWAMP_MIN_PRECIPITATION &&
     cell.drainageArea >= SWAMP_MIN_DRAINAGE_AREA
   ) {
     return Biome.Swamp;
   }
-  if (p < 250) return Biome.Desert;
+  if (aridity < ARID) return Biome.Desert;
   if (t >= 20) {
-    if (p >= 1800) return Biome.Jungle;
-    return p >= 500 ? Biome.Savanna : Biome.Grassland;
+    if (aridity < SEMI_ARID) return Biome.Grassland;
+    return aridity < DRY_SUBHUMID ? Biome.Savanna : Biome.Jungle;
   }
-  return p >= 750 ? Biome.TemperateForest : Biome.Grassland;
+  return aridity < DRY_SUBHUMID ? Biome.Grassland : Biome.TemperateForest;
 }
 
 /** Assigns every cell its biome from the current climate. */
@@ -62,6 +78,7 @@ export const biomeModel: SimComponent = {
         precipitation: precipitation[i]!,
         ice: iceCover[i]!,
         drainageArea: drainageArea[i]!,
+        seaLevel: state.globals.seaLevel,
       });
     }
   },

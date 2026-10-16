@@ -1,6 +1,5 @@
 import type { SimComponent } from '../../core/component';
 import type { Grid } from '../../core/grid';
-import { SEA_LEVEL } from '../geosphere/flowRouting';
 import {
   averageToCoarse,
   getAtmosphereGrid,
@@ -69,18 +68,19 @@ export const oceanModel: SimComponent = {
   outputs: ['oceanCurrentU', 'oceanCurrentV', 'oceanAnomaly'],
   runOneStep(state) {
     const { grid, fields } = state;
+    const seaLevel = state.globals.seaLevel;
     const atmosphere = getAtmosphereGrid(grid);
     const { coarse } = atmosphere;
     const n = coarse.cellCount;
     const landShare = averageToCoarse(
       atmosphere,
       grid,
-      Array.from(fields.elevation, (e) => (e >= SEA_LEVEL ? 1 : 0)),
+      Array.from(fields.elevation, (e) => (e >= seaLevel ? 1 : 0)),
       new Float64Array(n),
     );
     const sea = new Uint8Array(n);
     for (let c = 0; c < n; c++) sea[c] = landShare[c]! < 0.5 ? 1 : 0;
-    const isSea = (i: number) => (fields.elevation[i]! < SEA_LEVEL ? 1 : 0);
+    const isSea = (i: number) => (fields.elevation[i]! < seaLevel ? 1 : 0);
     const u = averageToCoarse(atmosphere, grid, fields.windU, new Float64Array(n));
     const v = averageToCoarse(atmosphere, grid, fields.windV, new Float64Array(n));
     // The climate's temperatures include the last anomaly; take it out, so the

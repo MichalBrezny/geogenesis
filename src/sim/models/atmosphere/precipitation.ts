@@ -1,6 +1,5 @@
 import type { SimComponent } from '../../core/component';
 import { getTopology, type Grid } from '../../core/grid';
-import { SEA_LEVEL } from '../geosphere/flowRouting';
 import {
   averageToCoarse,
   getAtmosphereGrid,
@@ -24,6 +23,8 @@ const EVAPORATION_TIME = 3 * 86_400;
  */
 const BARE_RECYCLING = 0.25;
 const PLANT_RECYCLING = 0.4;
+/** Inland water evaporates less efficiently than the open ocean at this coarse scale. */
+const LAKE_EVAPORATION_SHARE = 0.55;
 /** Mean time (s) water stays in calm air before it rains out (Earth: about 9 days). */
 const RESIDENCE_TIME = 9 * 86_400;
 /**
@@ -71,19 +72,25 @@ export function saturationWater(temperature: number): number {
  */
 export const precipitationModel: SimComponent = {
   name: 'precipitation',
-  inputs: ['elevation', 'airTemperature', 'iceCover', 'vegetation', 'windU', 'windV'],
+  inputs: ['elevation', 'airTemperature', 'iceCover', 'vegetation', 'windU', 'windV', 'lakeDepth'],
   outputs: ['precipitation'],
   runOneStep(state) {
     const { grid, fields } = state;
     const atmosphere = getAtmosphereGrid(grid);
-    const coarseRain = moistureBudget(atmosphere, grid, fields, state.globals.circulation);
+    const coarseRain = moistureBudget(
+      atmosphere,
+      grid,
+      fields,
+      state.globals.seaLevel,
+      state.globals.circulation,
+    );
     const fine = fields.precipitation;
     if (atmosphere.coarse === grid) {
       for (let i = 0; i < fine.length; i++) fine[i] = coarseRain[i]!;
     } else {
       interpolateToFine(atmosphere, grid, coarseRain, fine);
     }
-    concentrateOnWindwardSlopes(atmosphere, grid, fields, fine);
+    concentrateOnWindwardSlopes(atmosphere, grid, fields, state.globals.seaLevel, fine);
   },
 };
 
@@ -94,18 +101,20 @@ function moistureBudget(
   atmosphere: AtmosphereGrid,
   grid: Grid,
   fields: Fields,
+  seaLevel: number,
   circulation: { hadleyWidth: number; meanItcz: number } | undefined,
 ): Float64Array {
   const { coarse } = atmosphere;
   const n = coarse.cellCount;
-  const { elevation, airTemperature, iceCover, vegetation, windU, windV } = fields;
-  const isLand = (i: number) => (elevation[i]! >= SEA_LEVEL ? 1 : 0);
+  const { elevation, airTemperature, iceCover, vegetation, windU, windV, lakeDepth } = fields;
+  const isLand = (i: number) => (elevation[i]! >= seaLevel ? 1 : 0);
   const isSea = (i: number) => 1 - isLand(i);
 
   const temperature = averageToCoarse(atmosphere, grid, airTemperature, new Float64Array(n));
   const seaLevelTemperature = new Float64Array(grid.cellCount);
   for (let i = 0; i < grid.cellCount; i++) {
-    seaLevelTemperature[i] = airTemperature[i]! + Math.max(0, elevation[i]!) * LAPSE_RATE;
+    seaLevelTemperature[i] =
+      airTemperature[i]! + Math.max(0, elevation[i]! - seaLevel) * LAPSE_RATE;
   }
   const reducedTemperature = averageToCoarse(
     atmosphere,
@@ -117,14 +126,25 @@ function moistureBudget(
   const land = averageToCoarse(
     atmosphere,
     grid,
-    Array.from(elevation, (e) => (e >= SEA_LEVEL ? 1 : 0)),
+    Array.from(elevation, (e) => (e >= seaLevel ? 1 : 0)),
+    new Float64Array(n),
+  );
+  const lakes = averageToCoarse(
+    atmosphere,
+    grid,
+    Array.from(lakeDepth, (depth) => (depth > 0 ? 1 : 0)),
     new Float64Array(n),
   );
   const seaIce = averageToCoarse(atmosphere, grid, iceCover, new Float64Array(n), isSea);
   const plants = averageToCoarse(atmosphere, grid, vegetation, new Float64Array(n), isLand);
   const u = averageToCoarse(atmosphere, grid, windU, new Float64Array(n));
   const v = averageToCoarse(atmosphere, grid, windV, new Float64Array(n));
-  const lift = averageToCoarse(atmosphere, grid, upslopeLift(grid, fields), new Float64Array(n));
+  const lift = averageToCoarse(
+    atmosphere,
+    grid,
+    upslopeLift(grid, fields, seaLevel),
+    new Float64Array(n),
+  );
   // Convergence zones are a few hundred km wide, wider than one coarse row.
   const divergence = smoothNorthSouth(coarse, computeDivergence(coarse, u, v));
 
@@ -150,8 +170,9 @@ function moistureBudget(
     const factor = lifting >= 0 ? 1 + lifting : 1 / (1 - lifting); // sinking air rains less, never negatively
     rate[c] = Math.min(MAX_RAIN_FACTOR, Math.max(MIN_RAIN_FACTOR, factor)) / RESIDENCE_TIME;
     capacity[c] = saturationWater(temperature[c]!);
-    evaporable[c] = (1 - land[c]!) * (1 - seaIce[c]!);
-    recycling[c] = land[c]! * (BARE_RECYCLING + PLANT_RECYCLING * plants[c]!);
+    evaporable[c] = (1 - land[c]!) * (1 - seaIce[c]!) + LAKE_EVAPORATION_SHARE * lakes[c]!;
+    recycling[c] =
+      Math.max(0, land[c]! - lakes[c]!) * (BARE_RECYCLING + PLANT_RECYCLING * plants[c]!);
   }
 
   // Departure points of the semi-Lagrangian advection, in coarse cell units.
@@ -198,16 +219,16 @@ function moistureBudget(
  * Vertical velocity (m/s) forced by the surface wind blowing up (positive) or
  * down (negative) the slope of each fine land cell; 0 at sea.
  */
-function upslopeLift(grid: Grid, fields: Fields): Float32Array {
+function upslopeLift(grid: Grid, fields: Fields, seaLevel: number): Float32Array {
   const { elevation, windU, windV } = fields;
   const { neighbors } = getTopology(grid);
   const lift = new Float32Array(grid.cellCount);
-  const height = (j: number) => Math.max(SEA_LEVEL, elevation[j]!);
+  const height = (j: number) => Math.max(seaLevel, elevation[j]!);
   for (let y = 0; y < grid.height; y++) {
     const dx = grid.rowDx[y]!;
     for (let x = 0; x < grid.width; x++) {
       const i = y * grid.width + x;
-      if (elevation[i]! < SEA_LEVEL) continue;
+      if (elevation[i]! < seaLevel) continue;
       // Neighbours: 0 N, 2 E, 4 S, 6 W.
       const north = neighbors[i * 8]!;
       const east = neighbors[i * 8 + 2]!;
@@ -230,10 +251,11 @@ function concentrateOnWindwardSlopes(
   atmosphere: AtmosphereGrid,
   grid: Grid,
   fields: Fields,
+  seaLevel: number,
   precipitation: Float32Array,
 ): void {
   const { coarseOf, coarse } = atmosphere;
-  const lift = upslopeLift(grid, fields);
+  const lift = upslopeLift(grid, fields, seaLevel);
   const weight = new Float32Array(grid.cellCount);
   const sumWeighted = new Float64Array(coarse.cellCount);
   const sumPlain = new Float64Array(coarse.cellCount);
@@ -241,7 +263,7 @@ function concentrateOnWindwardSlopes(
     const area = grid.rowCellArea[fy]!;
     for (let fx = 0; fx < grid.width; fx++) {
       const i = fy * grid.width + fx;
-      const altitude = Math.max(0, fields.elevation[i]!);
+      const altitude = Math.max(0, fields.elevation[i]! - seaLevel);
       const thinAir = Math.exp(-SATURATION_SENSITIVITY * LAPSE_RATE * altitude * 0.5);
       const w = Math.exp(Math.max(-2, Math.min(2, OROGRAPHIC_CONTRAST * lift[i]!))) * thinAir;
       weight[i] = w;

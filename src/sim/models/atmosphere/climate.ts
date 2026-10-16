@@ -108,7 +108,14 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
 
       for (let iteration = 0; iteration < 12; iteration++) {
         solveCoarse(climate, grid, albedo, globals.solarInput, forcing);
-        interpolateToFine(climate, grid, elevation, fields.oceanAnomaly, airTemperature);
+        interpolateToFine(
+          climate,
+          grid,
+          elevation,
+          fields.oceanAnomaly,
+          globals.seaLevel,
+          airTemperature,
+        );
         let maxChange = 0;
         for (let i = 0; i < grid.cellCount; i++) {
           const ice = iceFractionAt(airTemperature[i]!);
@@ -306,6 +313,7 @@ function interpolateToFine(
   grid: Grid,
   elevation: Float32Array,
   oceanAnomaly: Float32Array,
+  seaLevel: number,
   out: Float32Array,
 ): void {
   const { coarse, factor, temperature } = climate;
@@ -325,7 +333,10 @@ function interpolateToFine(
       const bottom = temperature[y1 * cw + x0]! * (1 - tx) + temperature[y1 * cw + x1]! * tx;
       const i = fy * grid.width + fx;
       out[i] =
-        top * (1 - ty) + bottom * ty - Math.max(0, elevation[i]!) * LAPSE_RATE + oceanAnomaly[i]!;
+        top * (1 - ty) +
+        bottom * ty -
+        Math.max(0, elevation[i]! - seaLevel) * LAPSE_RATE +
+        oceanAnomaly[i]!;
     }
   }
 }

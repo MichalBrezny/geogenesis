@@ -1,6 +1,6 @@
 import type { SimComponent } from '../../core/component';
 import { getTopology, NEIGHBOR_COUNT, type Grid } from '../../core/grid';
-import { SEA_LEVEL } from '../geosphere/flowRouting';
+import { isOcean } from '../geosphere/seaLevel';
 import { BLACK_DAISY_ALBEDO, LAND_ALBEDO, WHITE_DAISY_ALBEDO } from '../atmosphere/surfaceAlbedo';
 
 /** Temperature (°C) at which daisies grow fastest, and the half-width of their range. */
@@ -60,7 +60,7 @@ export function createDaisies(options: DaisyOptions = {}): SimComponent {
     runOneStep(state) {
       const { elevation, airTemperature, iceCover, daisyWhite, daisyBlack } = state.fields;
       for (let i = 0; i < elevation.length; i++) {
-        if (elevation[i]! < SEA_LEVEL) {
+        if (isOcean(elevation[i]!, state.globals.seaLevel)) {
           daisyWhite[i] = 0;
           daisyBlack[i] = 0;
           continue;
@@ -90,23 +90,28 @@ export function createDaisies(options: DaisyOptions = {}): SimComponent {
         daisyWhite[i] = daisyWhite[i]! + RELAXATION * (white - daisyWhite[i]!);
         daisyBlack[i] = daisyBlack[i]! + RELAXATION * (black - daisyBlack[i]!);
       }
-      disperse(state.grid, elevation, daisyWhite);
-      disperse(state.grid, elevation, daisyBlack);
+      disperse(state.grid, elevation, state.globals.seaLevel, daisyWhite);
+      disperse(state.grid, elevation, state.globals.seaLevel, daisyBlack);
     },
   };
 }
 
 /** Moves part of each land cell's cover towards the mean of its land neighbours. */
-function disperse(grid: Grid, elevation: Float32Array, cover: Float32Array): void {
+function disperse(
+  grid: Grid,
+  elevation: Float32Array,
+  seaLevel: number,
+  cover: Float32Array,
+): void {
   const { neighbors } = getTopology(grid);
   const source = Float32Array.from(cover);
   for (let i = 0; i < cover.length; i++) {
-    if (elevation[i]! < SEA_LEVEL) continue;
+    if (isOcean(elevation[i]!, seaLevel)) continue;
     let sum = 0;
     let count = 0;
     for (let d = 0; d < NEIGHBOR_COUNT; d += 2) {
       const n = neighbors[i * NEIGHBOR_COUNT + d]!;
-      if (n < 0 || elevation[n]! < SEA_LEVEL) continue;
+      if (n < 0 || isOcean(elevation[n]!, seaLevel)) continue;
       sum += source[n]!;
       count++;
     }

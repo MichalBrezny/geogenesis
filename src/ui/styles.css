@@ -516,6 +516,13 @@ kbd {
   top: -3px;
 }
 
+.terrain-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 2px 20px;
+}
+
 .panel {
   background: var(--surface-chart);
   border-radius: 6px;

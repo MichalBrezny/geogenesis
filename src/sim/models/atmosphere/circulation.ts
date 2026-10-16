@@ -1,6 +1,5 @@
 import type { SimComponent } from '../../core/component';
 import type { Grid } from '../../core/grid';
-import { SEA_LEVEL } from '../geosphere/flowRouting';
 import {
   averageToCoarse,
   getAtmosphereGrid,
@@ -72,16 +71,18 @@ export const circulationModel: SimComponent = {
     const { coarse } = atmosphere;
     const n = coarse.cellCount;
     const { elevation, airTemperature } = fields;
+    const seaLevel = state.globals.seaLevel;
 
     const seaLevelTemperature = new Float64Array(grid.cellCount);
     for (let i = 0; i < grid.cellCount; i++) {
-      seaLevelTemperature[i] = airTemperature[i]! + Math.max(0, elevation[i]!) * LAPSE_RATE;
+      seaLevelTemperature[i] =
+        airTemperature[i]! + Math.max(0, elevation[i]! - seaLevel) * LAPSE_RATE;
     }
     const temperature = averageToCoarse(atmosphere, grid, seaLevelTemperature, new Float64Array(n));
     const land = averageToCoarse(
       atmosphere,
       grid,
-      Array.from(elevation, (e) => (e >= SEA_LEVEL ? 1 : 0)),
+      Array.from(elevation, (e) => (e >= seaLevel ? 1 : 0)),
       new Float64Array(n),
     );
 

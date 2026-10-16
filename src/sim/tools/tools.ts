@@ -6,7 +6,6 @@ import { LIFE_CLASSES, lifeClassIndex, type LifeClassKey } from '../data/lifeCla
 import { recordEvent } from '../events';
 import { classSuitability } from '../models/biosphere/life';
 import { makeSentient } from '../models/civilization/civilization';
-import { SEA_LEVEL } from '../models/geosphere/flowRouting';
 
 /** Player interventions and their cost in Ω, after SimEarth's tool palette. */
 export const TOOLS = {
@@ -145,7 +144,7 @@ function shapeTerrain(state: PlanetState, centre: number, amount: number, scale:
   const { elevation, crustType } = state.fields;
   for (const [i, falloff] of brush(state, centre, scale)) {
     elevation[i] = elevation[i]! + amount * falloff;
-    if (elevation[i]! >= SEA_LEVEL) crustType[i] = 1;
+    if (elevation[i]! >= state.globals.seaLevel) crustType[i] = 1;
   }
   return true;
 }

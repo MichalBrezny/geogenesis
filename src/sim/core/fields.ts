@@ -13,7 +13,7 @@ interface FieldSpec {
 }
 
 export const FIELD_SPECS = {
-  /** Height above sea level (negative = ocean floor). */
+  /** Absolute terrain elevation relative to the ice-free sea-level datum. */
   elevation: { type: 'f32', unit: 'm' },
   /** Surface air temperature. */
   airTemperature: { type: 'f32', unit: '°C' },
@@ -66,6 +66,10 @@ export const FIELD_SPECS = {
   drainageArea: { type: 'f32', unit: 'm²' },
   /** River discharge: runoff of the cell and everything upstream of it. */
   discharge: { type: 'f32', unit: 'm³/yr' },
+  /** Lake water depth; 0 for dry land, salt flats and the ocean. */
+  lakeDepth: { type: 'f32', unit: 'm' },
+  /** Lake kind: 0 none, 1 fresh/open, 2 salt/closed, 3 salt flat. */
+  lakeType: { type: 'i32', unit: '' },
 } as const satisfies Record<string, FieldSpec>;
 
 export type FieldName = keyof typeof FIELD_SPECS;
