@@ -6,6 +6,10 @@ swings between hothouse and snowball, life evolves from microbes to sentient spe
 civilization may rise, wreck its world or leave it for the stars. You can watch, or step in with
 tools that reshape the land, the air and the living world.
 
+> **Status: alpha 0.1.** All core models work and the planet evolves from microbes to
+> civilization, but there is not much of a game yet and the UI is rough. See the
+> [road to beta](#road-to-beta).
+
 The models are simplified but grounded in real Earth-system science: an energy-balance climate, the
 silicate-weathering carbon thermostat, Whittaker biomes, Daisyworld, Landlab-style erosion. They
 are coupled by Gaia-style feedbacks, so life changes the climate that shapes life.
@@ -98,25 +102,41 @@ src/i18n/     UI strings
 
 ## Milestones
 
-| Milestone           | Content                                                                                                                            | Status         |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | -------------- |
-| **M0** Scaffold     | Vite + React + TypeScript, grid and field model, component pipeline, seeded RNG, tests                                             | ✅ Done        |
-| **M1** Geosphere    | Plate-based terrain, continental drift, tectonic uplift, flow routing, stream-power erosion, diffusion; simulation in a Web Worker | ✅ Done        |
-| **M2** Climate      | Stellar evolution, energy-balance climate with ice–albedo feedback, precipitation, carbon cycle, history charts, Daisyworld        | ✅ Done        |
-| **M3** Biomes       | Whittaker biome classification; biomes feed back on albedo and weathering; map legends                                             | ✅ Done        |
-| **M4** Life         | 15 life classes, spreading and evolution, oxygen and methane, Great Oxidation Event                                                | ✅ Done        |
-| **M5** Civilization | Sentience, tech ages, settlements, emissions, plagues, nuclear war, Exodus; variable time step; event log                          | ✅ Done        |
-| **M6** Player       | Tools with the Ω energy budget, model controls, save and load, Aquarium scenario, cell inspector, speed setting                    | ✅ Done        |
-| **M7** Presentation | Optional globe view, CI, GitHub Pages deployment, README                                                                           | 🚧 In progress |
+| Milestone           | Content                                                                                                                            | Status       |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| **M0** Scaffold     | Vite + React + TypeScript, grid and field model, component pipeline, seeded RNG, tests                                             | ✅ Done      |
+| **M1** Geosphere    | Plate-based terrain, continental drift, tectonic uplift, flow routing, stream-power erosion, diffusion; simulation in a Web Worker | ✅ Done      |
+| **M2** Climate      | Stellar evolution, energy-balance climate with ice–albedo feedback, precipitation, carbon cycle, history charts, Daisyworld        | ✅ Done      |
+| **M3** Biomes       | Whittaker biome classification; biomes feed back on albedo and weathering; map legends                                             | ✅ Done      |
+| **M4** Life         | 15 life classes, spreading and evolution, oxygen and methane, Great Oxidation Event                                                | ✅ Done      |
+| **M5** Civilization | Sentience, tech ages, settlements, emissions, plagues, nuclear war, Exodus; variable time step; event log                          | ✅ Done      |
+| **M6** Player       | Tools with the Ω energy budget, model controls, save and load, Aquarium scenario, cell inspector, speed setting                    | ✅ Done      |
+| **M7** Presentation | Optional globe view, CI, GitHub Pages deployment, README                                                                           | ✅ Alpha 0.1 |
 
-### Ideas for later
+## Road to beta
 
-- Random natural disasters (earthquakes, storms, meteor showers) that can be switched on or off.
-- More scenarios with goals, such as terraforming or guiding a species to sentience.
-- A short in-game guide to the models and their feedbacks.
-- Mars and Venus, which need surface water and atmospheric pressure in the model first.
+Alpha 0.1 is a working model. The beta should be a game: clear to pick up, with goals, tension
+and feedback that shows what your actions did. Each milestone ends with a minor release.
 
-### Known limitations
+| Milestone                      | Content                                                                                                                                                                                                                                                                      | Release  |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| **M8** Interface               | Reorganise the screen: the planet in the middle, a compact top bar with time controls and key stats, tools on the side, collapsible panels for charts, life, civilization and events. Keyboard shortcuts, tooltips on every control, a layout that works on smaller screens. | 0.2      |
+| **M9** Feedback                | Show what is happening and why: notifications for important events, visible effects of tools on the map, readouts that explain the climate and carbon balance (where CO₂ comes from, why it is cold), alerts when a trend turns dangerous.                                   | 0.3      |
+| **M10** Goals                  | Scenarios with objectives and an end: thaw a snowball planet, keep life alive as the Sun brightens, guide a species to sentience, reach Exodus. Win and loss conditions and a score.                                                                                         | 0.4      |
+| **M11** Challenge              | Natural disasters that can be switched on or off (earthquakes, storms, meteor showers, supervolcanoes); civilization choices in the spirit of SimEarth (energy sources, research, population policy) that trade growth against the planet.                                   | 0.5      |
+| **M12** Onboarding and balance | A first-game guide and an in-game guide to the models; pacing so that no stretch of a game is empty (quiet billions of years pass quickly); balancing the energy budget, tool costs and civilization; performance on the finest grid.                                        | 0.6 beta |
+
+The beta is reached when:
+
+- a new player can start, understand and finish a scenario without reading the source or this README;
+- every scenario has a goal, and a typical game takes 20–60 minutes;
+- the save format and the controls are stable;
+- there are no known crashes, and a step on the default grid stays well under 100 ms.
+
+After the beta: Mars and Venus (which need surface water and atmospheric pressure in the model),
+sound, and translations.
+
+## Known limitations
 
 - Mean land elevation swings with tectonic history.
 - Finer grids show many small islands and ragged coasts.
