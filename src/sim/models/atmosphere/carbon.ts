@@ -79,8 +79,14 @@ export function createCarbonCycle(options: CarbonCycleOptions = {}): SimComponen
         (HOTSPOT_SHARE + (1 - HOTSPOT_SHARE) * plates);
       const atmosphere = state.globals.atmosphere;
       const before = atmosphere.co2;
+      // One pass over the planet; other CO₂ levels scale it analytically (uniform warming).
+      const current = rawWeathering(state, before);
       const weathering = (co2: number) =>
-        rawWeathering(state, co2, CLIMATE_SENSITIVITY * Math.log(co2 / before)) /
+        (current *
+          Math.exp(
+            WEATHERING_TEMPERATURE_SENSITIVITY * CLIMATE_SENSITIVITY * Math.log(co2 / before),
+          ) *
+          (co2Factor(co2) / co2Factor(before))) /
         REFERENCE_WEATHERING;
 
       if (dtYears > 0) {
@@ -144,10 +150,6 @@ export function tectonicActivity(state: PlanetState): number {
 export function rawWeathering(state: PlanetState, co2: number, warming = 0): number {
   const { grid, fields } = state;
   const { elevation, airTemperature, precipitation, iceCover, biome, vegetation } = fields;
-  const co2Factor =
-    (Math.pow(co2 / 280, WEATHERING_CO2_EXPONENT) *
-      ((co2 / (co2 + WEATHERING_CO2_HALF_SATURATION)) * (280 + WEATHERING_CO2_HALF_SATURATION))) /
-    280;
   let total = 0;
   for (let y = 0; y < grid.height; y++) {
     const weight = grid.rowAreaWeight[y]!;
@@ -171,5 +173,14 @@ export function rawWeathering(state: PlanetState, co2: number, warming = 0): num
         Math.exp(WEATHERING_TEMPERATURE_SENSITIVITY * (temperature - 15));
     }
   }
-  return total * co2Factor;
+  return total * co2Factor(co2);
+}
+
+/** CO₂ dependence of weathering: acid soil water, fading out when CO₂ runs out. */
+function co2Factor(co2: number): number {
+  return (
+    (Math.pow(co2 / 280, WEATHERING_CO2_EXPONENT) *
+      ((co2 / (co2 + WEATHERING_CO2_HALF_SATURATION)) * (280 + WEATHERING_CO2_HALF_SATURATION))) /
+    280
+  );
 }
