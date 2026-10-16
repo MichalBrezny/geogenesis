@@ -22,7 +22,7 @@ body {
 /* Screen layout: top bar over tools | planet | details. */
 .app {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr) 380px;
+  grid-template-columns: 290px minmax(0, 1fr) 380px;
   grid-template-rows: auto minmax(0, 1fr);
   grid-template-areas:
     'top top top'
@@ -44,6 +44,13 @@ body {
   font-size: 1.25rem;
   margin: 0;
   white-space: nowrap;
+}
+
+.topbar h1 .logo {
+  width: 26px;
+  height: 26px;
+  margin-right: 8px;
+  vertical-align: -6px;
 }
 
 .topbar h1 .subtitle {
@@ -182,6 +189,10 @@ button {
   cursor: pointer;
 }
 
+.icon {
+  flex: none;
+}
+
 button:hover:not(:disabled) {
   background: var(--surface-control-hover);
 }
@@ -228,6 +239,12 @@ button.primary:hover:not(:disabled) {
 
 .segmented button:last-child {
   border-radius: 0 4px 4px 0;
+}
+
+.segmented button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .segmented button.selected {
@@ -592,11 +609,26 @@ kbd {
 }
 
 .tool-buttons button {
-  display: flex;
-  justify-content: space-between;
-  gap: 4px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas: 'icon label' 'icon cost';
+  align-items: center;
+  gap: 0 8px;
   padding: 5px 8px;
   text-align: left;
+}
+
+.tool-buttons .icon {
+  grid-area: icon;
+}
+
+.tool-buttons .label {
+  grid-area: label;
+  line-height: 1.2;
+}
+
+.tool-buttons .cost {
+  grid-area: cost;
 }
 
 .tool-buttons button.selected {

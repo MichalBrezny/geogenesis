@@ -1,5 +1,6 @@
 import { t, type MessageKey } from '../i18n/i18n';
 import type { MapLayer } from '../render/mapRenderer';
+import { LAYER_ICONS, VIEW_ICONS } from './icons';
 import { VIEWS, type View } from './PlanetView';
 
 interface Props {
@@ -24,6 +25,7 @@ export function LayerBar({ layers, layer, onLayerChange, view, onViewChange }: P
             onClick={() => onLayerChange(id)}
             title={`${t(`layerHelp.${id}` as MessageKey)} (${index + 1})`}
           >
+            {LAYER_ICONS[id]}
             {t(`layer.${id}`)}
           </button>
         ))}
@@ -38,6 +40,7 @@ export function LayerBar({ layers, layer, onLayerChange, view, onViewChange }: P
             onClick={() => onViewChange(id)}
             title={`${t(`viewHelp.${id}` as MessageKey)} (G)`}
           >
+            {VIEW_ICONS[id]}
             {t(`view.${id}`)}
           </button>
         ))}

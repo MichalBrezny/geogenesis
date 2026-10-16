@@ -2,6 +2,7 @@ import { t, type MessageKey } from '../i18n/i18n';
 import { LIFE_CLASSES, type LifeClassKey } from '../sim/data/lifeClasses';
 import { TOOL_IDS, TOOLS, type ToolId } from '../sim/tools/tools';
 import type { Frame } from '../worker/protocol';
+import { TOOL_ICONS } from './icons';
 
 interface Props {
   frame: Frame;
@@ -32,7 +33,9 @@ export function ToolPalette(props: Props) {
             onClick={() => props.onToolChange(tool === id ? null : id)}
             title={t(`toolHelp.${id}` as MessageKey)}
           >
-            {t(`tool.${id}` as MessageKey)} <span className="cost">Ω{TOOLS[id].cost}</span>
+            {TOOL_ICONS[id]}
+            <span className="label">{t(`tool.${id}` as MessageKey)}</span>
+            <span className="cost">Ω{TOOLS[id].cost}</span>
           </button>
         ))}
       </div>

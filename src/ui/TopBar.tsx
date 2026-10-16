@@ -34,6 +34,7 @@ export function TopBar(props: Props) {
   return (
     <header className="topbar">
       <h1>
+        <img className="logo" src={`${import.meta.env.BASE_URL}icon-180.png`} alt="" />
         {t('app.title')} <span className="subtitle">{t('app.subtitle')}</span>
       </h1>
       <div className="group" role="group" aria-label={t('controls.time')}>
