@@ -11,7 +11,6 @@ import { formatGyr } from './format';
 export function LifePanel({ life }: { life: Frame['life'] }) {
   return (
     <section className="life-panel" aria-label={t('life.title')}>
-      <h2>{t('life.title')}</h2>
       <table>
         <thead>
           <tr>

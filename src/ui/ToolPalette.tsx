@@ -21,15 +21,7 @@ export function ToolPalette(props: Props) {
   const affordable = (id: ToolId) => frame.unlimitedEnergy || frame.energy >= TOOLS[id].cost;
   const evolved = LIFE_CLASSES.filter((_, c) => frame.life.appeared[c] != null);
   return (
-    <section className="panel tools" aria-label={t('tools.title')}>
-      <h2>
-        {t('tools.title')}{' '}
-        <span className="energy">
-          {frame.unlimitedEnergy
-            ? t('tools.unlimited')
-            : t('tools.energy', { value: Math.floor(frame.energy) })}
-        </span>
-      </h2>
+    <div className="tools">
       <div className="tool-buttons" role="group" aria-label={t('tools.title')}>
         {TOOL_IDS.map((id) => (
           <button
@@ -68,6 +60,6 @@ export function ToolPalette(props: Props) {
         />{' '}
         {t('tools.experimental')}
       </label>
-    </section>
+    </div>
   );
 }

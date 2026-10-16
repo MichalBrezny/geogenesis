@@ -8,8 +8,7 @@ import { formatGyr, formatYear } from './format';
 export function CivilizationPanel({ civilization }: { civilization: Frame['civilization'] }) {
   const { species, age, progress, population, exodusYear } = civilization;
   return (
-    <section className="panel" aria-label={t('civ.title')}>
-      <h2>{t('civ.title')}</h2>
+    <section aria-label={t('civ.title')}>
       {species === null ? (
         <p className="muted">
           {exodusYear === null
@@ -48,8 +47,8 @@ function formatPopulation(billions: number): string {
 export function EventLog({ events }: { events: Frame['events'] }) {
   if (events.length === 0) return null;
   return (
-    <section className="panel" aria-label={t('events.title')}>
-      <h2>{t('events.title')}</h2>
+    <section aria-label={t('events.title')}>
+      <h3>{t('events.title')}</h3>
       <ol className="event-log">
         {[...events].reverse().map((event, k) => (
           <li key={`${event.year}-${k}`}>

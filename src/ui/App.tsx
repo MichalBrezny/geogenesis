@@ -1,50 +1,30 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { t } from '../i18n/i18n';
-import {
-  buildGlobeLookup,
-  dragGlobe,
-  globeCell,
-  projectGlobe,
-  type GlobeView,
-} from '../render/globe';
-import { layerPixels, MAP_LAYERS, renderLayer, type MapLayer } from '../render/mapRenderer';
+import type { MapLayer } from '../render/mapRenderer';
 import type { Frame, WorkerRequest, WorkerResponse } from '../worker/protocol';
-import { SCENARIO_IDS, type ScenarioId } from '../sim/scenarios';
-import { HistoryCharts, type ChartSeries } from './charts/HistoryCharts';
-import { formatPpm, formatStep } from './format';
-import { CivilizationPanel, EventLog } from './CivilizationPanel';
-import { LifePanel } from './LifePanel';
-import { CellInspector, type HoveredCell } from './CellInspector';
-import { ControlsPanel } from './ControlsPanel';
-import { MapLegend } from './MapLegend';
-import { ToolPalette } from './ToolPalette';
+import type { ScenarioId } from '../sim/scenarios';
 import type { LifeClassKey } from '../sim/data/lifeClasses';
 import type { ToolId } from '../sim/tools/tools';
-
-/** Pause between simulation steps for each speed setting, ms. */
-const SPEEDS = { slow: 500, normal: 120, fast: 0 } as const;
-type Speed = keyof typeof SPEEDS;
-
-/** Ways to look at the planet. */
-const VIEWS = ['map', 'globe'] as const;
-type View = (typeof VIEWS)[number];
-/** Side of the globe image, pixels. */
-const GLOBE_SIZE = 512;
-/** Pointer travel, px, below which a press on the globe counts as a click, not a drag. */
-const CLICK_SLOP = 4;
+import { HistoryCharts, type ChartSeries } from './charts/HistoryCharts';
+import { CivilizationPanel, EventLog } from './CivilizationPanel';
+import { ControlsPanel } from './ControlsPanel';
+import { LayerBar } from './LayerBar';
+import { LifePanel } from './LifePanel';
+import { MapLegend } from './MapLegend';
+import { PlanetView, type View } from './PlanetView';
+import { Collapsible, TabbedPanel, type Tab } from './SidePanel';
+import { useShortcuts, type Shortcuts } from './shortcuts';
+import { ToolPalette } from './ToolPalette';
+import { RESOLUTIONS, SPEEDS, TopBar, type Speed } from './TopBar';
 
 /** How long a tool notice stays on screen, ms. */
 const NOTICE_DURATION = 3000;
 
-/** Grid resolutions offered for a new planet, as [width, height]. */
-const RESOLUTIONS = [
-  [128, 64],
-  [256, 128],
-  [512, 256],
-] as const;
-
-/** Charts and the initial map layer that suit each scenario. */
-const SCENARIO_VIEW: Record<ScenarioId, { charts: ChartSeries[]; layer: MapLayer }> = {
+/** Charts, map layers and the initial layer that suit each scenario. */
+const SCENARIO_VIEW: Record<
+  ScenarioId,
+  { charts: ChartSeries[]; layers: MapLayer[]; layer: MapLayer }
+> = {
   random: {
     charts: [
       'meanTemperature',
@@ -57,17 +37,46 @@ const SCENARIO_VIEW: Record<ScenarioId, { charts: ChartSeries[]; layer: MapLayer
       'landFraction',
       'solarInput',
     ],
+    layers: [
+      'terrain',
+      'plates',
+      'airTemperature',
+      'precipitation',
+      'biomes',
+      'life',
+      'civilization',
+    ],
     layer: 'terrain',
   },
   daisyworld: {
     charts: ['meanTemperature', 'whiteDaisies', 'blackDaisies', 'solarInput'],
+    layers: ['daisies', 'airTemperature', 'terrain'],
     layer: 'daisies',
   },
   aquarium: {
     charts: ['meanTemperature', 'co2', 'o2', 'livingClasses', 'landFraction', 'solarInput'],
+    layers: [
+      'life',
+      'terrain',
+      'plates',
+      'airTemperature',
+      'precipitation',
+      'biomes',
+      'civilization',
+    ],
     layer: 'life',
   },
 };
+
+/** Keys listed in the shortcut help, with their descriptions. */
+const SHORTCUT_HELP = [
+  ['Space', 'help.keyPlay'],
+  ['S', 'help.keyStep'],
+  ['1–9', 'help.keyLayer'],
+  ['G', 'help.keyView'],
+  ['Esc', 'help.keyEscape'],
+  ['?', 'help.keyHelp'],
+] as const;
 
 /** Offers bytes from the worker as a file download. */
 function download(bytes: ArrayBuffer, fileName: string): void {
@@ -84,33 +93,33 @@ function randomSeed(): number {
 }
 
 export function App() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const workerRef = useRef<Worker | null>(null);
   const [frame, setFrame] = useState<Frame | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [layer, setLayer] = useState<MapLayer>('terrain');
+  const [view, setView] = useState<View>('map');
   const [running, setRunning] = useState(false);
-  const [resolution, setResolution] = useState(1);
-  const [scenario, setScenario] = useState<ScenarioId>('random');
+  const [speed, setSpeed] = useState<Speed>('fast');
   const [tool, setTool] = useState<ToolId | null>(null);
   const [lifeClass, setLifeClass] = useState<LifeClassKey>('prokaryotes');
   const [notice, setNotice] = useState<string | null>(null);
-  const [hovered, setHovered] = useState<HoveredCell | null>(null);
-  const [speed, setSpeed] = useState<Speed>('fast');
-  const [view, setView] = useState<View>('map');
-  const [globeView, setGlobeView] = useState<GlobeView>({ longitude: 180, latitude: 20 });
-  const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
   const noticeTimer = useRef<number | undefined>(undefined);
 
   const send = useCallback((request: WorkerRequest) => workerRef.current?.postMessage(request), []);
 
-  const newPlanet = useCallback(
-    (scenarioId: ScenarioId, resolutionIndex: number) => {
+  const createPlanet = useCallback(
+    (scenario: ScenarioId, resolutionIndex: number) => {
       const [width, height] = RESOLUTIONS[resolutionIndex]!;
-      send({ type: 'create', scenario: scenarioId, seed: randomSeed(), width, height });
+      send({ type: 'create', scenario, seed: randomSeed(), width, height });
     },
     [send],
   );
+  const newPlanet = (scenario: ScenarioId, resolutionIndex: number) => {
+    createPlanet(scenario, resolutionIndex);
+    setLayer(SCENARIO_VIEW[scenario].layer);
+    setError(null);
+  };
 
   useEffect(() => {
     const worker = new Worker(new URL('../worker/sim.worker.ts', import.meta.url), {
@@ -128,258 +137,187 @@ export function App() {
       }
     };
     workerRef.current = worker;
-    newPlanet('random', 1);
+    createPlanet('random', 1);
     return () => worker.terminate();
-  }, [newPlanet]);
+  }, [createPlanet]);
 
-  const gridWidth = frame?.grid.width ?? 0;
-  const gridHeight = frame?.grid.height ?? 0;
-  const globeLookup = useMemo(
-    () =>
-      view === 'globe' && gridWidth > 0
-        ? buildGlobeLookup(GLOBE_SIZE, globeView, gridWidth, gridHeight)
-        : null,
-    [view, globeView, gridWidth, gridHeight],
-  );
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !frame) return;
-    if (!globeLookup) {
-      renderLayer(canvas, frame, layer);
-      return;
-    }
-    canvas.width = GLOBE_SIZE;
-    canvas.height = GLOBE_SIZE;
-    const pixels = projectGlobe(layerPixels(frame, layer), globeLookup);
-    canvas.getContext('2d')?.putImageData(new ImageData(pixels, GLOBE_SIZE, GLOBE_SIZE), 0, 0);
-  }, [frame, layer, globeLookup]);
+  const scenarioView = SCENARIO_VIEW[frame?.scenario ?? 'random'];
+  // A loaded game may be another scenario than the layer was chosen for.
+  const shownLayer = scenarioView.layers.includes(layer) ? layer : scenarioView.layer;
 
   const toggleRunning = () => {
+    if (!frame) return;
     send({ type: 'run', running: !running });
     setRunning(!running);
   };
-
-  const fileInput = useRef<HTMLInputElement>(null);
-  const loadFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
+  const step = () => {
+    if (frame && !running) send({ type: 'step' });
+  };
+  const changeSpeed = (value: Speed) => {
+    setSpeed(value);
+    send({ type: 'speed', delayMs: SPEEDS[value] });
+  };
+  const load = async (file: File) => {
     setError(null);
     const bytes = await file.arrayBuffer();
     workerRef.current?.postMessage({ type: 'load', bytes } satisfies WorkerRequest, [bytes]);
   };
 
-  const stepTime = frame ? Object.values(frame.timings).reduce((sum, ms) => sum + ms, 0) : 0;
-
-  /** Grid cell under the pointer on the map or the globe, or −1 off the planet. */
-  const cellAt = (event: React.MouseEvent<HTMLCanvasElement>): number => {
-    if (!frame) return -1;
-    const rect = event.currentTarget.getBoundingClientRect();
-    const fx = (event.clientX - rect.left) / rect.width;
-    const fy = (event.clientY - rect.top) / rect.height;
-    const { width, height } = frame.grid;
-    if (view === 'globe') return globeCell(2 * fx - 1, 1 - 2 * fy, globeView, width, height);
-    const x = Math.min(width - 1, Math.floor(fx * width));
-    const y = Math.min(height - 1, Math.floor(fy * height));
-    return y * width + x;
+  const shortcuts: Shortcuts = {
+    ' ': toggleRunning,
+    s: step,
+    g: () => setView(view === 'map' ? 'globe' : 'map'),
+    Escape: () => {
+      setTool(null);
+      setHelpOpen(false);
+    },
+    '?': () => setHelpOpen(!helpOpen),
   };
+  scenarioView.layers.forEach((id, index) => {
+    shortcuts[String(index + 1)] = () => setLayer(id);
+  });
+  useShortcuts(shortcuts);
 
-  /** Shows the inspector for the cell under the pointer; on the globe, a pressed button turns it. */
-  const onPointerMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!frame) return;
-    const start = drag.current;
-    if (view === 'globe' && start && event.buttons & 1) {
-      const dx = event.clientX - start.x;
-      const dy = event.clientY - start.y;
-      if (start.moved || Math.hypot(dx, dy) > CLICK_SLOP) {
-        const radius = event.currentTarget.getBoundingClientRect().width / 2;
-        setGlobeView((current) => dragGlobe(current, dx / radius, dy / radius));
-        drag.current = { x: event.clientX, y: event.clientY, moved: true };
-        setHovered(null);
-        return;
-      }
-    }
-    const index = cellAt(event);
-    if (index < 0) {
-      setHovered(null);
-      return;
-    }
-    const { width, height } = frame.grid;
-    const x = index % width;
-    const y = Math.floor(index / width);
-    setHovered({
-      index,
-      latitude: 90 - ((y + 0.5) * 180) / height,
-      longitude: ((x + 0.5) * 360) / width,
-      left: event.clientX + 16,
-      top: event.clientY + 16,
-    });
-  };
-
-  /** Applies the selected tool to the grid cell under the click (not at the end of a drag). */
-  const applyToolAt = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    const dragged = drag.current?.moved;
-    drag.current = null;
-    if (!tool || !frame || dragged) return;
-    const index = cellAt(event);
-    if (index < 0) return;
-    const { width } = frame.grid;
-    send({
-      type: 'tool',
-      use: { tool, x: index % width, y: Math.floor(index / width), lifeClass },
-    });
-  };
+  const tabs: Tab[] = frame
+    ? [
+        {
+          id: 'charts',
+          label: 'panel.charts',
+          content: <HistoryCharts history={frame.history} series={scenarioView.charts} />,
+        },
+      ]
+    : [];
+  if (frame && frame.scenario !== 'daisyworld') {
+    tabs.push(
+      { id: 'life', label: 'panel.life', content: <LifePanel life={frame.life} /> },
+      {
+        id: 'civilization',
+        label: 'panel.civilization',
+        content: (
+          <>
+            <CivilizationPanel civilization={frame.civilization} />
+            <EventLog events={frame.events} />
+          </>
+        ),
+      },
+    );
+  }
 
   return (
-    <main className="app">
-      <header className="toolbar">
-        <h1>
-          {t('app.title')} <span className="subtitle">{t('app.subtitle')}</span>
-        </h1>
-        <button onClick={toggleRunning} disabled={!frame}>
-          {running ? t('controls.pause') : t('controls.play')}
-        </button>
-        <button onClick={() => send({ type: 'step' })} disabled={running || !frame}>
-          {t('controls.step')}
-        </button>
-        <label>
-          {t('controls.speed')}{' '}
-          <select
-            value={speed}
-            onChange={(e) => {
-              const value = e.target.value as Speed;
-              setSpeed(value);
-              send({ type: 'speed', delayMs: SPEEDS[value] });
-            }}
+    <div className="app">
+      <TopBar
+        frame={frame}
+        running={running}
+        onToggleRunning={toggleRunning}
+        onStep={step}
+        speed={speed}
+        onSpeedChange={changeSpeed}
+        onNewPlanet={newPlanet}
+        onSave={() => send({ type: 'save' })}
+        onLoad={(file) => void load(file)}
+        onShowHelp={() => setHelpOpen(true)}
+      />
+      {frame && (
+        <aside className="sidebar left">
+          <Collapsible
+            title={
+              <>
+                {t('tools.title')}{' '}
+                <span className="energy">
+                  {frame.unlimitedEnergy
+                    ? t('tools.unlimited')
+                    : t('tools.energy', { value: Math.floor(frame.energy) })}
+                </span>
+              </>
+            }
           >
-            {(Object.keys(SPEEDS) as Speed[]).map((id) => (
-              <option key={id} value={id}>
-                {t(`speed.${id}`)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          onClick={() => {
-            newPlanet(scenario, resolution);
-            setLayer(SCENARIO_VIEW[scenario].layer);
-          }}
-        >
-          {t('controls.newPlanet')}
-        </button>
-        <button onClick={() => send({ type: 'save' })} disabled={!frame}>
-          {t('controls.save')}
-        </button>
-        <button onClick={() => fileInput.current?.click()}>{t('controls.load')}</button>
-        <input
-          ref={fileInput}
-          type="file"
-          accept=".geogenesis,.simearth"
-          hidden
-          onChange={(event) => void loadFile(event)}
-        />
-        <label>
-          {t('controls.scenario')}{' '}
-          <select value={scenario} onChange={(e) => setScenario(e.target.value as ScenarioId)}>
-            {SCENARIO_IDS.map((id) => (
-              <option key={id} value={id}>
-                {t(`scenario.${id}`)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          {t('controls.resolution')}{' '}
-          <select value={resolution} onChange={(e) => setResolution(Number(e.target.value))}>
-            {RESOLUTIONS.map(([w, h], index) => (
-              <option key={index} value={index}>
-                {w} × {h}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          {t('layer.label')}{' '}
-          <select value={layer} onChange={(e) => setLayer(e.target.value as MapLayer)}>
-            {MAP_LAYERS.map((l) => (
-              <option key={l} value={l}>
-                {t(`layer.${l}`)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          {t('view.label')}{' '}
-          <select value={view} onChange={(e) => setView(e.target.value as View)}>
-            {VIEWS.map((id) => (
-              <option key={id} value={id}>
-                {t(`view.${id}`)}
-              </option>
-            ))}
-          </select>
-        </label>
+            <ToolPalette
+              frame={frame}
+              tool={tool}
+              onToolChange={setTool}
+              lifeClass={lifeClass}
+              onLifeClassChange={setLifeClass}
+              onUnlimitedEnergyChange={(enabled) => send({ type: 'unlimitedEnergy', enabled })}
+            />
+          </Collapsible>
+          <Collapsible title={t('controlsPanel.title')}>
+            <ControlsPanel
+              controls={frame.controls}
+              onChange={(controls) => send({ type: 'controls', controls })}
+            />
+          </Collapsible>
+        </aside>
+      )}
+      <main className="stage">
+        {error && <p className="error">{error}</p>}
+        {!frame && !error && <p className="loading">{t('app.creating')}</p>}
         {frame && (
           <>
-            <span>{t('time.year', { year: frame.year.toLocaleString('en') })}</span>
-            <span>{t('stats.meanTemperature', { value: frame.meanTemperature.toFixed(1) })}</span>
-            <span>{t('stats.co2', { value: formatPpm(frame.co2) })}</span>
-            <span>{t('stats.o2', { value: (frame.o2 * 100).toFixed(1) })}</span>
-            <span>{t('stats.ice', { value: (frame.iceFraction * 100).toFixed(0) })}</span>
-            <span>{t('stats.sun', { value: (frame.solarInput * 100).toFixed(1) })}</span>
-            <span>{t('time.step', { value: formatStep(frame.stepYears) })}</span>
-            <span className="muted">{t('stats.stepTime', { value: stepTime.toFixed(0) })}</span>
+            <LayerBar
+              layers={scenarioView.layers}
+              layer={shownLayer}
+              onLayerChange={setLayer}
+              view={view}
+              onViewChange={setView}
+            />
+            <div className="planet">
+              <figure>
+                <PlanetView
+                  frame={frame}
+                  layer={shownLayer}
+                  view={view}
+                  toolActive={tool !== null}
+                  onCellClick={(x, y) => {
+                    if (tool) send({ type: 'tool', use: { tool, x, y, lifeClass } });
+                  }}
+                />
+                <MapLegend layer={shownLayer} />
+              </figure>
+              {notice && (
+                <p className="notice" role="status">
+                  {notice}
+                </p>
+              )}
+            </div>
           </>
         )}
-      </header>
-      {error && <p className="error">{error}</p>}
-      <canvas
-        ref={canvasRef}
-        className={[view, tool ? 'tool-active' : ''].join(' ')}
-        onMouseDown={(event) => {
-          drag.current = { x: event.clientX, y: event.clientY, moved: false };
-        }}
-        onClick={applyToolAt}
-        onMouseMove={onPointerMove}
-        onMouseLeave={() => {
-          drag.current = null;
-          setHovered(null);
-        }}
-        aria-label={t(view === 'globe' ? 'map.globeLabel' : 'map.label')}
-      />
-      {frame && hovered && <CellInspector frame={frame} cell={hovered} />}
-      <MapLegend layer={layer} />
-      {notice && (
-        <p className="notice" role="status">
-          {notice}
-        </p>
-      )}
+      </main>
       {frame && (
-        <div className="panels">
-          <ToolPalette
-            frame={frame}
-            tool={tool}
-            onToolChange={setTool}
-            lifeClass={lifeClass}
-            onLifeClassChange={setLifeClass}
-            onUnlimitedEnergyChange={(enabled) => send({ type: 'unlimitedEnergy', enabled })}
-          />
-          <ControlsPanel
-            controls={frame.controls}
-            onChange={(controls) => send({ type: 'controls', controls })}
-          />
-        </div>
+        <aside className="sidebar right">
+          <TabbedPanel tabs={tabs} label="panel.label" />
+        </aside>
       )}
-      {frame && (
-        <HistoryCharts history={frame.history} series={SCENARIO_VIEW[frame.scenario].charts} />
-      )}
-      {frame && frame.scenario !== 'daisyworld' && (
-        <div className="panels">
-          <CivilizationPanel civilization={frame.civilization} />
-          <EventLog events={frame.events} />
-        </div>
-      )}
-      {frame && frame.scenario !== 'daisyworld' && <LifePanel life={frame.life} />}
-    </main>
+      {helpOpen && <ShortcutHelp onClose={() => setHelpOpen(false)} />}
+    </div>
+  );
+}
+
+function ShortcutHelp({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="overlay" onClick={onClose}>
+      <section
+        className="help"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('help.shortcuts')}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <h2>{t('help.shortcuts')}</h2>
+        <dl>
+          {SHORTCUT_HELP.map(([key, label]) => (
+            <div key={key}>
+              <dt>
+                <kbd>{key}</kbd>
+              </dt>
+              <dd>{t(label)}</dd>
+            </div>
+          ))}
+        </dl>
+        <p className="muted">{t('help.mouse')}</p>
+        <button className="primary" onClick={onClose} autoFocus>
+          {t('help.close')}
+        </button>
+      </section>
+    </div>
   );
 }

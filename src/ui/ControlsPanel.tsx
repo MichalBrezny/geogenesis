@@ -22,24 +22,21 @@ export function ControlsPanel(props: {
   onChange: (controls: Partial<ModelControls>) => void;
 }) {
   return (
-    <section className="panel" aria-label={t('controlsPanel.title')}>
-      <h2>{t('controlsPanel.title')}</h2>
-      <div className="sliders">
-        {SLIDERS.map(({ key, min, max, step }) => (
-          <label key={key}>
-            <span>{t(`control.${key}` as MessageKey)}</span>
-            <input
-              type="range"
-              min={min}
-              max={max}
-              step={step}
-              value={props.controls[key]}
-              onChange={(e) => props.onChange({ [key]: Number(e.target.value) })}
-            />
-            <span className="slider-value">×{props.controls[key].toFixed(2)}</span>
-          </label>
-        ))}
-      </div>
-    </section>
+    <div className="sliders">
+      {SLIDERS.map(({ key, min, max, step }) => (
+        <label key={key} title={t(`controlHelp.${key}` as MessageKey)}>
+          <span>{t(`control.${key}` as MessageKey)}</span>
+          <input
+            type="range"
+            min={min}
+            max={max}
+            step={step}
+            value={props.controls[key]}
+            onChange={(e) => props.onChange({ [key]: Number(e.target.value) })}
+          />
+          <span className="slider-value">×{props.controls[key].toFixed(2)}</span>
+        </label>
+      ))}
+    </div>
   );
 }
