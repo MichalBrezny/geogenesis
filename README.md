@@ -8,9 +8,10 @@ swings between hothouse and snowball, life evolves from microbes to sentient spe
 civilization may rise, wreck its world or leave it for the stars. You can watch, or step in with
 tools that reshape the land, the air and the living world.
 
-> **Status: alpha 0.2.** All core models work and the planet evolves from microbes to
-> civilization, and the screen is organised around the planet. There is not much of a game
-> yet: goals, feedback and balance come next. See the [road to beta](#road-to-beta).
+> **Status: alpha 0.3.** All core models work and the planet evolves from microbes to
+> civilization, with an Earth-system climate: winds and monsoons, ocean currents, glaciers,
+> clouds and seasons. There is not much of a game yet: a deeper physical core comes first,
+> then goals, graphics and feedback. See the [roadmap](#roadmap).
 
 ![A planet 900 million years after the first cells: biomes on the map, tools on the left, history charts on the right](docs/screenshot.jpg)
 
@@ -123,28 +124,35 @@ src/i18n/     UI strings
 | **M6** Player       | Tools with the Ω energy budget, model controls, save and load, Aquarium scenario, cell inspector, speed setting                    | ✅ Done      |
 | **M7** Presentation | Optional globe view, CI, GitHub Pages deployment, README                                                                           | ✅ Alpha 0.1 |
 
-## Road to beta
+## Roadmap
 
-Alpha 0.1 is a working model. The beta should be a game: clear to pick up, with goals, tension
-and feedback that shows what your actions did. Each milestone ends with a minor release.
+Alpha 0.1 is a working model. The aim is a game: clear to pick up, with goals, tension
+and feedback that shows what your actions did. The physical core comes first — the planet's
+abiotic layers (tectonics, volcanism, atmosphere), then life's great turning points — and the
+game layers are built on top of it once it is tuned. Each milestone ends with a minor release.
 
-| Milestone                      | Content                                                                                                                                                                                                                                                                      | Release  |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| **M8** Interface ✅            | Reorganise the screen: the planet in the middle, a compact top bar with time controls and key stats, tools on the side, collapsible panels for charts, life, civilization and events. Keyboard shortcuts, tooltips on every control, a layout that works on smaller screens. | 0.2      |
-| **M9** Feedback                | Show what is happening and why: notifications for important events (with optional auto-pause at a new era and at key moments such as the first life, the Great Oxidation, a snowball or a mass extinction), visible effects of tools on the map, readouts that explain the climate and carbon balance (where CO₂ comes from, why it is cold), alerts when a trend turns dangerous.                                   | 0.3      |
-| **M10** Goals                  | Scenarios with objectives and an end: thaw a snowball planet, keep life alive as the Sun brightens, guide a species to sentience, reach Exodus. Win and loss conditions and a score.                                                                                         | 0.4      |
-| **M11** Challenge              | Natural disasters that can be switched on or off (earthquakes, storms, meteor showers, supervolcanoes); civilization choices in the spirit of SimEarth (energy sources, research, population policy) that trade growth against the planet.                                   | 0.5      |
-| **M12** Onboarding and balance | A first-game guide and an in-game guide to the models; pacing so that no stretch of a game is empty (quiet billions of years pass quickly); balancing the energy budget, tool costs and civilization; performance on the finest grid.                                        | 0.6 beta |
+| Milestone                      | Content                                                                                                                                                                                                                                                                                                                                                                                                                                | Release |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| **M8** Interface ✅            | Reorganise the screen: the planet in the middle, a compact top bar with time controls and key stats, tools on the side, collapsible panels for charts, life, civilization and events. Keyboard shortcuts, tooltips on every control, a layout that works on smaller screens.                                                                                                                                                           | 0.2     |
+| **M9** Earth system ✅         | Eras with SimEarth-like time scales; three-cell circulation, monsoons, moisture-budget precipitation; wind-driven ocean currents and upwelling; sea level from land ice, aridity biomes, lakes; glaciers, glacial erosion, sediments, clouds; axial tilt and seasons. Wind, current, pressure, cloud and season views.                                                                                                                 | 0.3     |
+| **M10** Plates and volcanism   | Plates that stay whole: no fragments, rifting that splits continents into new plates, dying plates merged, so a supercontinent cycle can emerge. Volcanism where it belongs: arcs, ridges, rifts and mantle hotspots that build island chains; outgassing from these sources; eruptions, aerosol cooling and rare large igneous provinces.                                                                                             | 0.4     |
+| **M11** Young planet           | Start on a young planet without life (a quick start later in history stays available): the origin of life, slower microbial evolution, a late heavy bombardment that brings water and can sterilise the surface, continents that grow over billions of years while the mantle cools and plates slow down.                                                                                                                              | 0.5     |
+| **M12** Atmosphere and planets | Surface pressure and nitrogen, water vapour feedback, runaway greenhouse and loss of the oceans, a variable water inventory; planet size, distance and type of star (including tidally locked worlds), rotation rate; atmospheric escape and a magnetic field that fades as the core cools; optionally a moon that steadies the tilt. Calibrated on Earth, Mars and Venus.                                                             | 0.6     |
+| **M13** Turning points of life | The Cambrian explosion and mass extinctions with their causes: large igneous provinces, ocean anoxia (oxygen and phosphorus in the sea), ocean acidification, methane from clathrates and permafrost, rapid climate change. A biodiversity index with recovery and adaptive radiation afterwards.                                                                                                                                      | 0.7     |
+| **M14** Goals                  | Scenarios with objectives and an end, after SimEarth: terraform Mars and Venus, thaw a snowball planet, keep life alive as the Sun brightens, guide a species to sentience, reach Exodus. Win and loss conditions and a score.                                                                                                                                                                                                         | 0.8     |
+| **M15** Challenge              | Natural disasters that can be switched on or off (earthquakes and tsunamis at plate boundaries, cyclones, droughts, dust storms, asteroid impacts, supervolcanoes); civilization choices in the spirit of SimEarth (energy sources, research, population policy) that trade growth against the planet.                                                                                                                                 | 0.9     |
+| **M16** Graphics               | A consistent visual style: icons for events, tools, layers and charts, clearer and better-looking charts (axes, units, hover readouts, era bands), redesigned menus and dialogs, map markers for events; SimEarth-style icon overlays on the terrain showing where each life class lives and where the cities are (styled by tech age); a Walter–Lieth climate diagram for the selected place (monthly temperature and precipitation). | 0.10    |
+| **M17** Feedback               | Show what is happening and why: notifications for important events (with optional auto-pause at a new era and at key moments such as the first life, the Great Oxidation, a snowball or a mass extinction), visible effects of tools on the map, readouts that explain the climate and carbon balance (where CO₂ comes from, why it is cold), alerts when a trend turns dangerous.                                                     | 0.11    |
+| **M18** Onboarding and balance | A first-game guide and an in-game guide to the models; pacing so that no stretch of a game is empty (quiet billions of years pass quickly); balancing the energy budget, tool costs and civilization; performance on the finest grid.                                                                                                                                                                                                  | 0.12    |
 
-The beta is reached when:
+The game is ready for a wider audience when:
 
 - a new player can start, understand and finish a scenario without reading the source or this README;
 - every scenario has a goal, and a typical game takes 20–60 minutes;
 - the save format and the controls are stable;
 - there are no known crashes, and a step on the default grid stays well under 100 ms.
 
-After the beta: Mars and Venus (which need surface water and atmospheric pressure in the model),
-sound, and translations.
+Later: sound, music and translations.
 
 ## Known limitations
 
