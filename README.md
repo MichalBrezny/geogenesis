@@ -8,9 +8,9 @@ swings between hothouse and snowball, life evolves from microbes to sentient spe
 civilization may rise, wreck its world or leave it for the stars. You can watch, or step in with
 tools that reshape the land, the air and the living world.
 
-> **Status: alpha 0.3.** All core models work and the planet evolves from microbes to
-> civilization, with an Earth-system climate: winds and monsoons, ocean currents, glaciers,
-> clouds and seasons. There is not much of a game yet: a deeper physical core comes first,
+> **Status: alpha 0.5.** All core models work and a young, lifeless planet evolves through
+> the origin of life and microbes to civilization, with drifting plates, volcanism and an
+> Earth-system climate: winds and monsoons, ocean currents, glaciers, clouds and seasons. There is not much of a game yet: a deeper physical core comes first,
 > then goals, graphics and feedback. See the [roadmap](#roadmap).
 
 ![A planet 900 million years after the first cells: biomes on the map, tools on the left, history charts on the right](docs/screenshot.jpg)
