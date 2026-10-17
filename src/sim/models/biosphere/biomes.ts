@@ -1,7 +1,8 @@
 import type { SimComponent } from '../../core/component';
-import { Biome } from '../../data/biomes';
+import { BOREAL_COLDEST_MONTH, Biome, TUNDRA_WARMEST_MONTH } from '../../data/biomes';
 import { isOcean } from '../geosphere/seaLevel';
 import { potentialEvapotranspiration } from '../hydrology';
+import { coldestMonth, warmestMonth } from '../atmosphere/seasons';
 
 /** Above this height over the current sea surface, land is bare alpine rock. */
 const ROCK_ELEVATION = 4500;
@@ -17,6 +18,8 @@ export interface BiomeInputs {
   elevation: number;
   /** Annual mean temperature, °C. */
   temperature: number;
+  /** Annual temperature-cycle amplitude, °C. */
+  seasonalAmplitude?: number;
   /** Annual precipitation, mm/yr. */
   precipitation: number;
   /** Snow/ice cover, 0..1. */
@@ -45,9 +48,14 @@ export function classifyBiome(cell: BiomeInputs): Biome {
   if (isOcean(elevation, seaLevel)) return Biome.Ocean;
   if (cell.ice >= 0.5) return Biome.Ice;
   if (elevation - seaLevel > ROCK_ELEVATION) return Biome.Rock;
-  if (t < -6) return Biome.Tundra;
+  const amplitude = cell.seasonalAmplitude ?? 0;
+  const warmest = warmestMonth(t, amplitude);
+  const coldest = coldestMonth(t, amplitude);
+  if (warmest < TUNDRA_WARMEST_MONTH) return Biome.Tundra;
   const aridity = aridityIndex(p, t);
-  if (t < 3) return aridity >= SEMI_ARID ? Biome.BorealForest : Biome.Tundra;
+  if (coldest < BOREAL_COLDEST_MONTH) {
+    return aridity >= SEMI_ARID ? Biome.BorealForest : Biome.Tundra;
+  }
   if (
     elevation - seaLevel < SWAMP_MAX_ELEVATION &&
     p >= SWAMP_MIN_PRECIPITATION &&
@@ -66,15 +74,30 @@ export function classifyBiome(cell: BiomeInputs): Biome {
 /** Assigns every cell its biome from the current climate. */
 export const biomeModel: SimComponent = {
   name: 'biomes',
-  inputs: ['elevation', 'airTemperature', 'precipitation', 'iceCover', 'drainageArea'],
+  inputs: [
+    'elevation',
+    'airTemperature',
+    'seasonalAmplitude',
+    'precipitation',
+    'iceCover',
+    'drainageArea',
+  ],
   outputs: ['biome'],
   runOneStep(state) {
-    const { elevation, airTemperature, precipitation, iceCover, drainageArea, biome } =
-      state.fields;
+    const {
+      elevation,
+      airTemperature,
+      seasonalAmplitude,
+      precipitation,
+      iceCover,
+      drainageArea,
+      biome,
+    } = state.fields;
     for (let i = 0; i < biome.length; i++) {
       biome[i] = classifyBiome({
         elevation: elevation[i]!,
         temperature: airTemperature[i]!,
+        seasonalAmplitude: seasonalAmplitude[i]!,
         precipitation: precipitation[i]!,
         ice: iceCover[i]!,
         drainageArea: drainageArea[i]!,

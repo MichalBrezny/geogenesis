@@ -1,4 +1,4 @@
-import type { PlanetState } from './core/planet';
+import { DEFAULT_CONTROLS, type PlanetState } from './core/planet';
 import { HISTORY_SERIES } from './history';
 
 /**
@@ -97,8 +97,10 @@ function hydrateAddedState(planet: PlanetState): void {
   planet.globals.seaLevel ??= 0;
   planet.globals.sedimentExport ??= 0;
   planet.fields.iceThickness ??= new Float32Array(planet.grid.cellCount);
+  planet.fields.seasonalAmplitude ??= new Float32Array(planet.grid.cellCount);
   planet.fields.lakeDepth ??= new Float32Array(planet.grid.cellCount);
   planet.fields.lakeType ??= new Int32Array(planet.grid.cellCount);
+  planet.controls.obliquity ??= DEFAULT_CONTROLS.obliquity;
   const samples = planet.history.year?.length ?? 0;
   for (const name of HISTORY_SERIES) planet.history[name] ??= Array(samples).fill(0);
 }

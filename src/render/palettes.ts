@@ -46,6 +46,16 @@ export const temperaturePalette = gradient([
   { value: 40, color: [200, 40, 30] },
 ]);
 
+/** Seasonal monthly-mean temperature amplitude (°C), calm to strongly continental. */
+export const seasonalRangePalette = gradient([
+  { value: 0, color: [28, 48, 82] },
+  { value: 2, color: [42, 105, 150] },
+  { value: 6, color: [72, 166, 172] },
+  { value: 12, color: [210, 198, 105] },
+  { value: 20, color: [224, 126, 61] },
+  { value: 30, color: [160, 42, 45] },
+]);
+
 export const precipitationPalette = gradient([
   { value: 0, color: [150, 100, 50] },
   { value: 250, color: [210, 180, 110] },

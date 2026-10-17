@@ -3,8 +3,14 @@ import { areaWeightedMean } from '../../core/grid';
 import { createPlanet, type PlanetState } from '../../core/planet';
 import { createRng } from '../../core/rng';
 import { generateTectonicPlanet } from '../geosphere/tectonics';
-import { annualInsolation, createClimate, greenhouseForcing } from './climate';
-import { stellarLuminosity, SUN_AGE } from './star';
+import {
+  annualInsolation,
+  createClimate,
+  firstAnnualInsolationHarmonic,
+  greenhouseForcing,
+  seasonalTemperatureAmplitude,
+} from './climate';
+import { SOLAR_CONSTANT, stellarLuminosity, SUN_AGE } from './star';
 import { createSurfaceAlbedo } from './surfaceAlbedo';
 
 const rng = createRng(1);
@@ -33,6 +39,47 @@ describe('star', () => {
 });
 
 describe('climate', () => {
+  it('integrates Earth-obliquity insolation close to the former North fit', () => {
+    for (const latitude of [0, 15, 30, 45, 60, 75, 89.9]) {
+      const x = Math.sin((latitude * Math.PI) / 180);
+      const p2 = (3 * x * x - 1) / 2;
+      const northFit = (SOLAR_CONSTANT / 4) * (1 - 0.482 * p2);
+      expect(Math.abs(annualInsolation(latitude, 1, 23.44) - northFit)).toBeLessThan(8);
+    }
+  });
+
+  it('conserves global sunlight and responds physically to obliquity', () => {
+    expect(firstAnnualInsolationHarmonic(60, 1, 0)).toBeCloseTo(0, 10);
+    expect(annualInsolation(89.999, 1, 90)).toBeGreaterThan(annualInsolation(0, 1, 90));
+    for (const obliquity of [0, 23.44, 45, 90]) {
+      let mean = 0;
+      const rows = 720;
+      for (let y = 0; y < rows; y++) {
+        const north = Math.PI / 2 - (y * Math.PI) / rows;
+        const south = Math.PI / 2 - ((y + 1) * Math.PI) / rows;
+        const latitude = 90 - ((y + 0.5) * 180) / rows;
+        mean +=
+          (annualInsolation(latitude, 1, obliquity) * (Math.sin(north) - Math.sin(south))) / 2;
+      }
+      expect(mean).toBeCloseTo(SOLAR_CONSTANT / 4, 1);
+    }
+  });
+
+  it('makes oceans maritime, coasts intermediate and interiors continental', () => {
+    const args = [60, 1, 23.44, 0.3] as const;
+    const ocean = seasonalTemperatureAmplitude(...args, true, 0, 0);
+    const coast = seasonalTemperatureAmplitude(...args, false, 0.5, 0);
+    const interior = seasonalTemperatureAmplitude(...args, false, 1, 0);
+    expect(ocean).toBeGreaterThan(3);
+    expect(ocean).toBeLessThan(6);
+    expect(coast).toBeGreaterThan(ocean);
+    expect(interior).toBeGreaterThan(coast);
+    expect(interior).toBeGreaterThan(15);
+    expect(interior).toBeLessThan(30);
+    expect(seasonalTemperatureAmplitude(60, 1, 0, 0.3, false, 1, 0)).toBeCloseTo(0, 10);
+    expect(seasonalTemperatureAmplitude(60, 1, 45, 0.3, false, 1, 0)).toBeGreaterThan(interior);
+  });
+
   it('warms gradually after a jump in CO₂ when steps are short (ocean heat capacity)', () => {
     const planet = oceanPlanet();
     const climate = createClimate();
@@ -78,7 +125,9 @@ describe('climate', () => {
     const absorbed = new Float32Array(grid.cellCount);
     for (let i = 0; i < grid.cellCount; i++) {
       const latitude = grid.rowLatitude[Math.floor(i / grid.width)]!;
-      absorbed[i] = annualInsolation(latitude, globals.solarInput) * (1 - fields.albedo[i]!);
+      absorbed[i] =
+        annualInsolation(latitude, globals.solarInput, planet.controls.obliquity) *
+        (1 - fields.albedo[i]!);
     }
     const outgoing = 203.3 + 2.09 * globals.meanTemperature - greenhouseForcing(globals.atmosphere);
     expect(areaWeightedMean(grid, absorbed)).toBeCloseTo(outgoing, 0);

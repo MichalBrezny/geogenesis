@@ -12,6 +12,7 @@ import {
   elevationPalette,
   precipitationPalette,
   pressurePalette,
+  seasonalRangePalette,
   seaAnomalyPalette,
   temperaturePalette,
   windSpeedPalette,
@@ -42,6 +43,13 @@ const SCALES: Partial<Record<MapLayer, Scale>> = {
     min: -40,
     max: 40,
     ticks: [-40, -10, 10, 25, 40],
+    unit: '°C',
+  },
+  seasons: {
+    palette: seasonalRangePalette,
+    min: 0,
+    max: 30,
+    ticks: [0, 2, 6, 12, 20, 30],
     unit: '°C',
   },
   pressure: {

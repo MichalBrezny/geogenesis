@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { t } from '../i18n/i18n';
-import type { MapLayer } from '../render/mapRenderer';
+import type { MapLayer, TemperatureMonth } from '../render/mapRenderer';
 import type { Frame, WorkerRequest, WorkerResponse } from '../worker/protocol';
 import type { ScenarioId } from '../sim/scenarios';
 import type { LifeClassKey } from '../sim/data/lifeClasses';
@@ -42,6 +42,7 @@ const SCENARIO_VIEW: Record<
       'terrain',
       'plates',
       'airTemperature',
+      'seasons',
       'pressure',
       'precipitation',
       'clouds',
@@ -55,7 +56,7 @@ const SCENARIO_VIEW: Record<
   },
   daisyworld: {
     charts: ['meanTemperature', 'whiteDaisies', 'blackDaisies', 'solarInput'],
-    layers: ['daisies', 'airTemperature', 'terrain'],
+    layers: ['daisies', 'airTemperature', 'seasons', 'terrain'],
     layer: 'daisies',
   },
   aquarium: {
@@ -73,6 +74,7 @@ const SCENARIO_VIEW: Record<
       'terrain',
       'plates',
       'airTemperature',
+      'seasons',
       'pressure',
       'precipitation',
       'clouds',
@@ -116,6 +118,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [layer, setLayer] = useState<MapLayer>('terrain');
   const [view, setView] = useState<View>('map');
+  const [temperatureMonth, setTemperatureMonth] = useState<TemperatureMonth>('annual');
   const [overlays, setOverlays] = useState<Overlay[]>([]);
   const toggleOverlay = (overlay: Overlay) =>
     setOverlays((current) =>
@@ -301,6 +304,8 @@ export function App() {
               onToggleOverlay={toggleOverlay}
               view={view}
               onViewChange={setView}
+              temperatureMonth={temperatureMonth}
+              onTemperatureMonthChange={setTemperatureMonth}
             />
             <div className="planet">
               <figure>
@@ -310,6 +315,7 @@ export function App() {
                   view={view}
                   toolActive={tool !== null}
                   overlays={frame.scenario === 'daisyworld' ? [] : overlays}
+                  temperatureMonth={temperatureMonth}
                   onCellClick={(x, y) => {
                     if (tool) send({ type: 'tool', use: { tool, x, y, lifeClass } });
                   }}

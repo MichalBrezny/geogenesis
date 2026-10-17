@@ -1,6 +1,6 @@
 import type { SimComponent } from './core/component';
 import { createPlanet, type PlanetOptions, type PlanetState } from './core/planet';
-import { createRng } from './core/rng';
+import { createRng, type Rng } from './core/rng';
 import { createCarbonCycle } from './models/atmosphere/carbon';
 import { createClimate } from './models/atmosphere/climate';
 import { circulationModel } from './models/atmosphere/circulation';
@@ -60,6 +60,9 @@ const HISTORY_INTERVAL = 1e6;
 /** Creates a random planet with the standard component pipeline. */
 export function createRandomWorld(options: WorldOptions = {}): World {
   const planet = createPlanet(options);
+  const parameterRng = createRng(planet.rngState);
+  planet.controls.obliquity = randomObliquity(parameterRng);
+  planet.rngState = parameterRng.state;
   planet.globals.year = options.startYear ?? 4.0e9;
   generateTectonicPlanet(planet, { oceanFraction: options.oceanFraction ?? 0.7 });
   seedPrimordialLife(planet);
@@ -73,6 +76,18 @@ export function createRandomWorld(options: WorldOptions = {}): World {
   spinUpAtmosphere(planet);
   recordHistory.runOneStep(planet, 0, createRng(0));
   return world;
+}
+
+/** Triangular 15–35° distribution, with Earth-like tilts the most likely. */
+function randomObliquity(rng: Rng): number {
+  const minimum = 15;
+  const maximum = 35;
+  const mode = 23.44;
+  const u = rng.next();
+  const split = (mode - minimum) / (maximum - minimum);
+  return u < split
+    ? minimum + Math.sqrt(u * (maximum - minimum) * (mode - minimum))
+    : maximum - Math.sqrt((1 - u) * (maximum - minimum) * (maximum - mode));
 }
 
 /** Builds the random-planet simulation around an existing planet (new or loaded). */
@@ -113,6 +128,7 @@ export function randomWorldFromPlanet(
       // Geology runs first and uses the last step's climate; the climate the last
       // step's ocean.
       'airTemperature',
+      'seasonalAmplitude',
       'iceCover',
       'iceThickness',
       'lowCloud',

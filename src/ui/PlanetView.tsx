@@ -17,7 +17,12 @@ import {
 } from '../render/arrows';
 import { createFlowLayer, stepFlow, type FlowLayer, type FlowStyle } from '../render/particles';
 import { drawIsobars } from '../render/isobars';
-import { layerPixels, renderLayer, type MapLayer } from '../render/mapRenderer';
+import {
+  layerPixels,
+  renderLayer,
+  type MapLayer,
+  type TemperatureMonth,
+} from '../render/mapRenderer';
 import type { Frame } from '../worker/protocol';
 import { CellInspector, type HoveredCell } from './CellInspector';
 
@@ -98,10 +103,19 @@ interface Props {
   onCellClick: (x: number, y: number) => void;
   /** Flow and pressure overlays to draw. */
   overlays: readonly Overlay[];
+  temperatureMonth: TemperatureMonth;
 }
 
 /** The planet as a flat map or a globe, with the cell inspector under the pointer. */
-export function PlanetView({ frame, layer, view, toolActive, onCellClick, overlays }: Props) {
+export function PlanetView({
+  frame,
+  layer,
+  view,
+  toolActive,
+  onCellClick,
+  overlays,
+  temperatureMonth,
+}: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const isobarRef = useRef<HTMLCanvasElement>(null);
@@ -128,14 +142,14 @@ export function PlanetView({ frame, layer, view, toolActive, onCellClick, overla
     const canvas = canvasRef.current;
     if (!canvas) return;
     if (!globeLookup) {
-      renderLayer(canvas, frame, layer);
+      renderLayer(canvas, frame, layer, temperatureMonth);
       return;
     }
     canvas.width = GLOBE_SIZE;
     canvas.height = GLOBE_SIZE;
-    const pixels = projectGlobe(layerPixels(frame, layer), globeLookup);
+    const pixels = projectGlobe(layerPixels(frame, layer, temperatureMonth), globeLookup);
     canvas.getContext('2d')?.putImageData(new ImageData(pixels, GLOBE_SIZE, GLOBE_SIZE), 0, 0);
-  }, [frame, layer, globeLookup]);
+  }, [frame, layer, globeLookup, temperatureMonth]);
 
   // The arrows are drawn at screen resolution, so they track the canvas's size on the page.
   useEffect(() => {

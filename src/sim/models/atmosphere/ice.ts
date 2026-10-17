@@ -1,13 +1,14 @@
 import type { SimComponent } from '../../core/component';
 import { areaWeightedMean } from '../../core/grid';
 import { isOcean } from '../geosphere/seaLevel';
+import { fractionOfYearBelow, positiveDegreeDays } from './seasons';
 
 /** Annual-mean temperatures bounding the smooth snow-fall transition. */
 const ALL_SNOW_TEMPERATURE = -2;
 const ALL_RAIN_TEMPERATURE = 2;
 /** Slow loss from wind scour and sublimation, metres of ice per year. */
 export const SUBLIMATION_RATE = 0.01;
-/** Positive-degree ablation, metres of ice per year per degree above freezing. */
+/** Positive-degree ablation, metres of ice per °C·yr of positive degree days. */
 export const MELT_RATE = 0.3;
 /** E-folding time for a land ice sheet to approach its mass-balance thickness. */
 export const ICE_RESPONSE_TIME = 20_000;
@@ -39,6 +40,49 @@ export function snowFractionAt(temperature: number): number {
   return x * x * (3 - 2 * x);
 }
 
+/** Mean snowfall share over a sinusoidal year with precipitation spread evenly through it. */
+export function seasonalSnowFractionAt(temperature: number, amplitude: number): number {
+  if (amplitude <= 0) return snowFractionAt(temperature);
+  let snow = 0;
+  for (const cosine of SEASONAL_COSINES) {
+    snow += snowFractionAt(temperature + amplitude * cosine);
+  }
+  return snow / SEASONAL_COSINES.length;
+}
+
+/** Albedo-relevant seasonal ice from the sunlit fraction of the year below the ice ramp. */
+function seasonalThermalIceCover(temperature: number, amplitude: number): number {
+  if (amplitude <= 0) return iceFractionAt(temperature);
+  let ice = 0;
+  for (let sample = 0; sample < ICE_QUADRATURE_NODES.length; sample++) {
+    const threshold = -10 + 5 * ICE_QUADRATURE_NODES[sample]!;
+    ice +=
+      0.5 *
+      ICE_QUADRATURE_WEIGHTS[sample]! *
+      sunlitFractionBelow(temperature, amplitude, threshold);
+  }
+  const seasonal = Math.max(0, Math.min(1, ice));
+  const blend = Math.min(1, amplitude / 0.5);
+  return iceFractionAt(temperature) * (1 - blend) + seasonal * blend;
+}
+
+/** Threshold-crossing fraction weighted by 1 + s cos(phase), with phase zero in summer. */
+function sunlitFractionBelow(temperature: number, amplitude: number, threshold: number): number {
+  const fraction = fractionOfYearBelow(temperature, amplitude, threshold);
+  const x = (threshold - temperature) / amplitude;
+  if (x <= -1 || x >= 1) return fraction;
+  return Math.max(0, fraction - (SUMMER_SUN_WEIGHT * Math.sqrt(1 - x * x)) / Math.PI);
+}
+
+const SUMMER_SUN_WEIGHT = 0.65;
+/** Eight midpoint samples; constants avoid trigonometry in the climate's albedo iteration. */
+const SEASONAL_COSINES = [
+  0.9238795325, 0.3826834324, -0.3826834324, -0.9238795325, -0.9238795325, -0.3826834324,
+  0.3826834324, 0.9238795325,
+] as const;
+const ICE_QUADRATURE_NODES = [-Math.sqrt(3 / 5), 0, Math.sqrt(3 / 5)] as const;
+const ICE_QUADRATURE_WEIGHTS = [5 / 9, 8 / 9, 5 / 9] as const;
+
 /**
  * Snow or ice cover used by albedo, biomes and life. Sea ice is thermal;
  * grounded land ice comes from thickness, with precipitation-limited seasonal
@@ -49,12 +93,14 @@ export function surfaceIceCover(
   temperature: number,
   precipitation: number,
   thickness: number,
+  seasonalAmplitude = 0,
 ): number {
-  if (ocean) return iceFractionAt(temperature);
+  const thermalIce = seasonalThermalIceCover(temperature, seasonalAmplitude);
+  if (ocean) return thermalIce;
   const glacier = Math.min(1, Math.max(0, thickness / FULL_GLACIER_COVER_THICKNESS));
   // Lasting snow cover needs a cold climate (the same ramp as sea ice), and enough snowfall.
   const snow =
-    iceFractionAt(temperature) *
+    thermalIce *
     (Math.max(0, precipitation) / (Math.max(0, precipitation) + SNOW_COVER_HALF_SATURATION));
   return 1 - (1 - glacier) * (1 - snow);
 }
@@ -72,11 +118,12 @@ export function surfaceIceCover(
  */
 export const landIceMassBalance: SimComponent = {
   name: 'landIceMassBalance',
-  inputs: ['elevation', 'airTemperature', 'precipitation', 'iceThickness'],
+  inputs: ['elevation', 'airTemperature', 'seasonalAmplitude', 'precipitation', 'iceThickness'],
   outputs: ['iceThickness', 'iceCover'],
   runOneStep(state, dtYears) {
     const { grid, fields, globals } = state;
-    const { elevation, airTemperature, precipitation, iceThickness, iceCover } = fields;
+    const { elevation, airTemperature, seasonalAmplitude, precipitation, iceThickness, iceCover } =
+      fields;
     const balance = new Float32Array(grid.cellCount);
     let landArea = 0;
     let viableArea = 0;
@@ -93,8 +140,8 @@ export const landIceMassBalance: SimComponent = {
         const snowfall =
           (Math.max(0, precipitation[i]!) / 1000) *
           WATER_TO_ICE *
-          snowFractionAt(airTemperature[i]!);
-        const melt = MELT_RATE * Math.max(0, airTemperature[i]!);
+          seasonalSnowFractionAt(airTemperature[i]!, seasonalAmplitude[i]!);
+        const melt = MELT_RATE * positiveDegreeDays(airTemperature[i]!, seasonalAmplitude[i]!);
         const net = snowfall - melt - SUBLIMATION_RATE;
         balance[i] = net;
         if (net > 0) viableArea += area;
@@ -125,6 +172,7 @@ export const landIceMassBalance: SimComponent = {
         airTemperature[i]!,
         precipitation[i]!,
         iceThickness[i]!,
+        seasonalAmplitude[i]!,
       );
     }
     globals.iceFraction = areaWeightedMean(grid, iceCover);

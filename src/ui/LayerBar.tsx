@@ -1,5 +1,5 @@
 import { t, type MessageKey } from '../i18n/i18n';
-import type { MapLayer } from '../render/mapRenderer';
+import { TEMPERATURE_MONTHS, type MapLayer, type TemperatureMonth } from '../render/mapRenderer';
 import { LAYER_ICONS, OVERLAY_ICONS, VIEW_ICONS } from './icons';
 import { OVERLAYS, VIEWS, type Overlay, type View } from './PlanetView';
 
@@ -11,6 +11,8 @@ interface Props {
   onLayerChange: (layer: MapLayer) => void;
   view: View;
   onViewChange: (view: View) => void;
+  temperatureMonth: TemperatureMonth;
+  onTemperatureMonthChange: (month: TemperatureMonth) => void;
 }
 
 /** Map layer and view switches above the planet; layers are numbered for the keyboard. */
@@ -33,6 +35,23 @@ export function LayerBar(props: Props) {
           </button>
         ))}
       </div>
+      {layer === 'airTemperature' && (
+        <label className="temperature-month" title={t('temperatureMonth.hint')}>
+          <span>{t('temperatureMonth.label')}</span>
+          <select
+            value={props.temperatureMonth}
+            onChange={(event) =>
+              props.onTemperatureMonthChange(event.target.value as TemperatureMonth)
+            }
+          >
+            {TEMPERATURE_MONTHS.map((month) => (
+              <option key={month} value={month}>
+                {t(`temperatureMonth.${month}` as MessageKey)}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <div className="segmented" role="group" aria-label={t('overlay.label')}>
         {OVERLAYS.map((id) => (
           <button

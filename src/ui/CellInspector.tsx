@@ -26,6 +26,8 @@ export function CellInspector({ frame, cell }: { frame: Frame; cell: HoveredCell
     ['inspect.position', formatPosition(cell.latitude, cell.longitude)],
     [ocean ? 'inspect.depth' : 'inspect.elevation', `${Math.round(height).toLocaleString('en')} m`],
     ['inspect.temperature', `${f.airTemperature[i]!.toFixed(1)} °C`],
+    ['inspect.warmestMonth', `${(f.airTemperature[i]! + f.seasonalAmplitude[i]!).toFixed(1)} °C`],
+    ['inspect.coldestMonth', `${(f.airTemperature[i]! - f.seasonalAmplitude[i]!).toFixed(1)} °C`],
     ['inspect.precipitation', `${Math.round(f.precipitation[i]!).toLocaleString('en')} mm/yr`],
     ['inspect.wind', formatWind(f.windU[i]!, f.windV[i]!)],
     ['inspect.clouds', `${Math.round(f.cloudCover[i]! * 100)}%`],

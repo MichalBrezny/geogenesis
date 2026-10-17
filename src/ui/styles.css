@@ -193,6 +193,14 @@ body {
   gap: 8px;
 }
 
+.temperature-month {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
 /* Controls */
 button,
 select {

@@ -16,7 +16,8 @@ describe('classifyBiome', () => {
     [{ ice: 0.8 }, Biome.Ice],
     [{ elevation: 5000 }, Biome.Rock],
     [{ temperature: -10 }, Biome.Tundra],
-    [{ temperature: 0 }, Biome.BorealForest],
+    [{ temperature: 0 }, Biome.Tundra],
+    [{ temperature: 5, seasonalAmplitude: 12 }, Biome.BorealForest],
     [{}, Biome.TemperateForest],
     [{ precipitation: 400 }, Biome.Grassland],
     [{ precipitation: 100 }, Biome.Desert],
@@ -27,7 +28,7 @@ describe('classifyBiome', () => {
     expect(classifyBiome({ ...temperateLowland, ...overrides })).toBe(expected);
   });
 
-  it.each([4, 15, 30])('classifies low aridity as desert at %i °C', (temperature) => {
+  it.each([15, 30])('classifies low aridity as desert at %i °C', (temperature) => {
     expect(
       classifyBiome({
         ...temperateLowland,
@@ -48,6 +49,15 @@ describe('classifyBiome', () => {
         precipitation: 60 * (temperature + 5),
       }),
     ).toBe(expected);
+  });
+
+  it('uses warmest and coldest months for tundra and boreal forest', () => {
+    expect(classifyBiome({ ...temperateLowland, temperature: 2, seasonalAmplitude: 6 })).toBe(
+      Biome.Tundra,
+    );
+    expect(classifyBiome({ ...temperateLowland, temperature: 4, seasonalAmplitude: 10 })).toBe(
+      Biome.BorealForest,
+    );
   });
 });
 

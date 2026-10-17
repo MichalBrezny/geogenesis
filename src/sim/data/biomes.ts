@@ -17,6 +17,11 @@ export const Biome = {
 } as const;
 export type Biome = (typeof Biome)[keyof typeof Biome];
 
+/** Köppen ET: no month averaging at least this warm means tundra rather than forest. */
+export const TUNDRA_WARMEST_MONTH = 10;
+/** A forest with a colder coldest month is classified as boreal. */
+export const BOREAL_COLDEST_MONTH = -5;
+
 export interface BiomeInfo {
   /** Key used for UI strings (`biome.<key>`). */
   key: string;

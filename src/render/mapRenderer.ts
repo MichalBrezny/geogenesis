@@ -6,6 +6,7 @@ import {
   elevationPalette,
   precipitationPalette,
   pressurePalette,
+  seasonalRangePalette,
   seaAnomalyPalette,
   temperaturePalette,
   windSpeedPalette,
@@ -27,6 +28,7 @@ export const RENDERED_FIELDS = [
   'oceanAnomaly',
   'cloudCover',
   'airTemperature',
+  'seasonalAmplitude',
   'iceCover',
   'precipitation',
   'daisyWhite',
@@ -47,6 +49,7 @@ export const MAP_LAYERS = [
   'terrain',
   'plates',
   'airTemperature',
+  'seasons',
   'pressure',
   'precipitation',
   'clouds',
@@ -58,6 +61,8 @@ export const MAP_LAYERS = [
   'daisies',
 ] as const;
 export type MapLayer = (typeof MAP_LAYERS)[number];
+export const TEMPERATURE_MONTHS = ['annual', 'january', 'july'] as const;
+export type TemperatureMonth = (typeof TEMPERATURE_MONTHS)[number];
 
 /** Discharge (m³/yr) above which a land cell is drawn as a river (~3,000 m³/s; Earth has ~50). */
 export const RIVER_MIN_DISCHARGE = 1e11;
@@ -87,7 +92,7 @@ export const LIFE_TIER_COLORS: readonly Rgb[] = [
   [183, 211, 246],
 ];
 
-type CellColor = (state: MapSource, i: number) => Rgb;
+type CellColor = (state: MapSource, i: number, temperatureMonth: TemperatureMonth) => Rgb;
 
 const layerColors: Record<MapLayer, CellColor> = {
   terrain(state, i) {
@@ -116,8 +121,11 @@ const layerColors: Record<MapLayer, CellColor> = {
     // Dim the ocean so continents stay recognisable.
     return state.fields.elevation[i]! < state.seaLevel ? mix(base, [10, 20, 40], 0.45) : base;
   },
-  airTemperature(state, i) {
-    return temperaturePalette(state.fields.airTemperature[i]!);
+  airTemperature(state, i, temperatureMonth) {
+    return temperaturePalette(displayedTemperature(state, i, temperatureMonth));
+  },
+  seasons(state, i) {
+    return seasonalRangePalette(state.fields.seasonalAmplitude[i]!);
   },
   pressure(state, i) {
     const color = pressurePalette(state.fields.pressure[i]!);
@@ -179,12 +187,16 @@ const layerColors: Record<MapLayer, CellColor> = {
 };
 
 /** Colours one layer at native grid resolution as RGBA pixels (1 pixel per cell). */
-export function layerPixels(state: MapSource, layer: MapLayer): Uint8ClampedArray<ArrayBuffer> {
+export function layerPixels(
+  state: MapSource,
+  layer: MapLayer,
+  temperatureMonth: TemperatureMonth = 'annual',
+): Uint8ClampedArray<ArrayBuffer> {
   const { cellCount } = state.grid;
   const pixels = new Uint8ClampedArray(cellCount * 4);
   const color = layerColors[layer];
   for (let i = 0; i < cellCount; i++) {
-    const [r, g, b] = color(state, i);
+    const [r, g, b] = color(state, i, temperatureMonth);
     const p = i * 4;
     pixels[p] = r;
     pixels[p + 1] = g;
@@ -198,13 +210,28 @@ export function layerPixels(state: MapSource, layer: MapLayer): Uint8ClampedArra
  * Draws one layer at native grid resolution (1 pixel per cell) into the canvas.
  * The canvas is scaled up with CSS (`image-rendering: pixelated`).
  */
-export function renderLayer(canvas: HTMLCanvasElement, state: MapSource, layer: MapLayer): void {
+export function renderLayer(
+  canvas: HTMLCanvasElement,
+  state: MapSource,
+  layer: MapLayer,
+  temperatureMonth: TemperatureMonth = 'annual',
+): void {
   const { width, height } = state.grid;
   if (canvas.width !== width) canvas.width = width;
   if (canvas.height !== height) canvas.height = height;
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
-  ctx.putImageData(new ImageData(layerPixels(state, layer), width, height), 0, 0);
+  ctx.putImageData(new ImageData(layerPixels(state, layer, temperatureMonth), width, height), 0, 0);
+}
+
+/** Temperature displayed for annual, January or July maps (no ocean phase lag). */
+export function displayedTemperature(state: MapSource, i: number, month: TemperatureMonth): number {
+  const mean = state.fields.airTemperature[i]!;
+  if (month === 'annual') return mean;
+  const y = Math.floor(i / state.grid.width);
+  const northern = y < state.grid.height / 2;
+  const warmMonth = northern ? 'july' : 'january';
+  return mean + (month === warmMonth ? 1 : -1) * state.fields.seasonalAmplitude[i]!;
 }
 
 function mix(a: Rgb, b: Rgb, t: number): Rgb {

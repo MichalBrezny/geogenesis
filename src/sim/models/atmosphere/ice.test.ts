@@ -1,11 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { createPlanet } from '../../core/planet';
 import { createRng } from '../../core/rng';
-import { landIceMassBalance } from './ice';
+import { landIceMassBalance, seasonalSnowFractionAt, snowFractionAt, surfaceIceCover } from './ice';
 
 const rng = createRng(1);
 
 describe('landIceMassBalance', () => {
+  it('keeps the annual-mean snow and cover behavior when amplitude is zero', () => {
+    for (const temperature of [-20, -10, -2, 0, 2, 10]) {
+      expect(seasonalSnowFractionAt(temperature, 0)).toBe(snowFractionAt(temperature));
+      expect(surfaceIceCover(true, temperature, 500, 0, 0)).toBe(
+        surfaceIceCover(true, temperature, 500, 0),
+      );
+    }
+  });
+
   it('grows ice on snowy cold land but leaves a dry polar desert bare', () => {
     const planet = createPlanet({ width: 8, height: 4 });
     planet.fields.elevation.fill(200);

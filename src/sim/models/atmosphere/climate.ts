@@ -1,5 +1,11 @@
 import type { SimComponent } from '../../core/component';
-import { areaWeightedMean, createGrid, type Grid } from '../../core/grid';
+import {
+  areaWeightedMean,
+  createGrid,
+  getTopology,
+  NEIGHBOR_COUNT,
+  type Grid,
+} from '../../core/grid';
 import type { Atmosphere } from '../../core/planet';
 import { isOcean } from '../geosphere/seaLevel';
 import { LOW_CLOUD_ALBEDO, REFERENCE_LOW_CLOUD } from './clouds';
@@ -31,6 +37,21 @@ const REFERENCE_CH4 = 0.7;
 const OCEAN_RESPONSE_TIME = 40;
 /** Width of the coarse climate grid; heat transport is smooth, so this is plenty. */
 const CLIMATE_GRID_WIDTH = 64;
+/** Solar longitudes used for the annual mean and first harmonic. */
+const ORBIT_SAMPLES = 96;
+/** Effective damping by longwave radiation and seasonal atmospheric heat transport. */
+const SEASONAL_DAMPING = 4.5;
+const SECONDS_PER_YEAR = 365.25 * 86_400;
+/** Heat capacities expressed as W·yr·m⁻²·K⁻¹ for use with omega in yr⁻¹. */
+const LAND_HEAT_CAPACITY = 0.5;
+const WATER_VOLUMETRIC_HEAT_CAPACITY = 4.1e6;
+const OCEAN_MIXED_LAYER_DEPTH = 50;
+const OCEAN_HEAT_CAPACITY =
+  (WATER_VOLUMETRIC_HEAT_CAPACITY * OCEAN_MIXED_LAYER_DEPTH) / SECONDS_PER_YEAR;
+const SEA_ICE_HEAT_CAPACITY_FACTOR = 0.2;
+const LAND_ICE_HEAT_CAPACITY_FACTOR = 0.25;
+/** Distance from the sea (m) over which maritime air loses its hold on the seasons. */
+const MARITIME_LENGTH = 1_000_000;
 
 export interface ClimateOptions {
   /** Heat transport coefficient; larger values even out the pole-equator contrast. */
@@ -56,14 +77,65 @@ export function greenhouseForcing(atmosphere: Atmosphere): number {
   return co2 + ch4;
 }
 
+interface InsolationHarmonics {
+  annualMean: number;
+  /** Signed sine harmonic: positive for northern summer, negative for southern summer. */
+  firstAnnual: number;
+}
+
+const insolationCache = new Map<string, InsolationHarmonics>();
+
 /**
- * Annual-mean insolation (W/m²) at a latitude for Earth's obliquity, using the
- * second Legendre polynomial fit of North (1975).
+ * Annual-mean daily insolation (W/m²) for a circular orbit. Daily means include
+ * polar day/night and are integrated over equally spaced solar longitudes.
  */
-export function annualInsolation(latitudeDeg: number, solarInput: number): number {
-  const x = Math.sin((latitudeDeg * Math.PI) / 180);
-  const p2 = (3 * x * x - 1) / 2;
-  return ((SOLAR_CONSTANT * solarInput) / 4) * (1 - 0.482 * p2);
+export function annualInsolation(
+  latitudeDeg: number,
+  solarInput: number,
+  obliquityDeg = 23.44,
+): number {
+  return insolationHarmonics(latitudeDeg, obliquityDeg).annualMean * solarInput;
+}
+
+/** Signed amplitude of the first annual insolation harmonic (W/m²). */
+export function firstAnnualInsolationHarmonic(
+  latitudeDeg: number,
+  solarInput: number,
+  obliquityDeg = 23.44,
+): number {
+  return insolationHarmonics(latitudeDeg, obliquityDeg).firstAnnual * solarInput;
+}
+
+function insolationHarmonics(latitudeDeg: number, obliquityDeg: number): InsolationHarmonics {
+  const latitude = Math.max(-90, Math.min(90, latitudeDeg));
+  const obliquity = Math.max(0, Math.min(90, obliquityDeg));
+  const key = `${latitude.toFixed(8)}:${obliquity.toFixed(6)}`;
+  const cached = insolationCache.get(key);
+  if (cached) return cached;
+
+  const phi = (latitude * Math.PI) / 180;
+  const epsilon = (obliquity * Math.PI) / 180;
+  let annualMean = 0;
+  let sine = 0;
+  for (let sample = 0; sample < ORBIT_SAMPLES; sample++) {
+    const longitude = (2 * Math.PI * (sample + 0.5)) / ORBIT_SAMPLES;
+    const declination = Math.asin(Math.sin(epsilon) * Math.sin(longitude));
+    const sunsetCosine = -Math.tan(phi) * Math.tan(declination);
+    const sunsetHourAngle =
+      sunsetCosine >= 1 ? 0 : sunsetCosine <= -1 ? Math.PI : Math.acos(sunsetCosine);
+    const dailyMean =
+      (SOLAR_CONSTANT / Math.PI) *
+      (sunsetHourAngle * Math.sin(phi) * Math.sin(declination) +
+        Math.cos(phi) * Math.cos(declination) * Math.sin(sunsetHourAngle));
+    annualMean += dailyMean;
+    sine += dailyMean * Math.sin(longitude);
+  }
+  const result = {
+    annualMean: annualMean / ORBIT_SAMPLES,
+    firstAnnual: (2 * sine) / ORBIT_SAMPLES,
+  };
+  insolationCache.set(key, result);
+  return result;
 }
 
 /**
@@ -93,13 +165,14 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
       'iceThickness',
       'lowCloud',
     ],
-    outputs: ['airTemperature', 'iceCover', 'albedo'],
+    outputs: ['airTemperature', 'seasonalAmplitude', 'iceCover', 'albedo'],
     runOneStep(state, dtYears) {
       const { grid, fields, globals } = state;
       const {
         elevation,
         surfaceAlbedo,
         airTemperature,
+        seasonalAmplitude,
         precipitation,
         iceThickness,
         iceCover,
@@ -111,6 +184,20 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
       const previous = lag > 1e-6 ? Float32Array.from(airTemperature) : null;
       const hasClouds = globals.cloudCover !== undefined;
       const climate = getClimateGrid(grid, diffusivity);
+      const hasSeasons = state.controls.obliquity > 1e-6;
+      const continentality = hasSeasons
+        ? continentalityField(grid, elevation, globals.seaLevel)
+        : null;
+      const seasonalForcing = new Float64Array(grid.height);
+      for (let y = 0; y < grid.height; y++) {
+        seasonalForcing[y] = Math.abs(
+          firstAnnualInsolationHarmonic(
+            grid.rowLatitude[y]!,
+            globals.solarInput,
+            state.controls.obliquity,
+          ),
+        );
+      }
       const forcing = greenhouseForcing(globals.atmosphere);
 
       // Start from last step's albedo where it exists, so the ice state persists (hysteresis).
@@ -120,7 +207,7 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
       }
 
       for (let iteration = 0; iteration < 12; iteration++) {
-        solveCoarse(climate, grid, albedo, globals.solarInput, forcing);
+        solveCoarse(climate, grid, albedo, globals.solarInput, state.controls.obliquity, forcing);
         interpolateToFine(
           climate,
           grid,
@@ -131,11 +218,19 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
         );
         let maxChange = 0;
         for (let i = 0; i < grid.cellCount; i++) {
+          seasonalAmplitude[i] = seasonalAmplitudeFromHarmonic(
+            seasonalForcing[Math.floor(i / grid.width)]!,
+            albedo[i]!,
+            isOcean(elevation[i]!, globals.seaLevel),
+            continentality?.[i] ?? 0,
+            iceCover[i]!,
+          );
           const ice = surfaceIceCover(
             isOcean(elevation[i]!, globals.seaLevel),
             airTemperature[i]!,
             precipitation[i]!,
             iceThickness[i]!,
+            seasonalAmplitude[i]!,
           );
           // Low cloud above the reference brightens the ice-free part (the last step's
           // clouds); planets without a cloud model keep the typical clouds of the albedos.
@@ -162,6 +257,7 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
             airTemperature[i]!,
             precipitation[i]!,
             iceThickness[i]!,
+            seasonalAmplitude[i]!,
           );
         }
       }
@@ -244,11 +340,154 @@ function buildClimateGrid(grid: Grid, diffusivity: number): ClimateGrid {
   };
 }
 
+/**
+ * Linear response of a surface layer to the first annual insolation harmonic.
+ * Ocean heat capacity represents a 50 m mixed layer; land receives an oceanic
+ * contribution near coasts, and snow/sea ice decouple the active layer below.
+ */
+export function seasonalTemperatureAmplitude(
+  latitude: number,
+  solarInput: number,
+  obliquity: number,
+  albedo: number,
+  ocean: boolean,
+  continentality: number,
+  iceCover: number,
+): number {
+  return seasonalAmplitudeFromHarmonic(
+    Math.abs(firstAnnualInsolationHarmonic(latitude, solarInput, obliquity)),
+    albedo,
+    ocean,
+    continentality,
+    iceCover,
+  );
+}
+
+function seasonalAmplitudeFromHarmonic(
+  firstHarmonic: number,
+  albedo: number,
+  ocean: boolean,
+  continentality: number,
+  iceCover: number,
+): number {
+  const forcing = firstHarmonic * (1 - Math.max(0, Math.min(1, albedo)));
+  const ice = Math.max(0, Math.min(1, iceCover));
+  if (ocean) {
+    return responseAmplitude(
+      forcing,
+      OCEAN_HEAT_CAPACITY * (1 - (1 - SEA_ICE_HEAT_CAPACITY_FACTOR) * ice),
+    );
+  }
+  // Maritime air carries the ocean's small cycle inland: mix the two responses, not the heat
+  // capacities (a capacity mix lets a little nearby sea swamp a continent's cycle).
+  const land = responseAmplitude(
+    forcing,
+    LAND_HEAT_CAPACITY * (1 - (1 - LAND_ICE_HEAT_CAPACITY_FACTOR) * ice),
+  );
+  const sea = responseAmplitude(forcing, OCEAN_HEAT_CAPACITY);
+  const c = Math.max(0, Math.min(1, continentality));
+  return sea + (land - sea) * c;
+}
+
+function responseAmplitude(forcing: number, capacity: number): number {
+  return forcing / Math.hypot(SEASONAL_DAMPING, capacity * 2 * Math.PI);
+}
+
+/**
+ * Continentality 0..1 from the distance to the nearest sea, 1 − exp(−d / MARITIME_LENGTH):
+ * coasts take the ocean's mild seasons, interiors far from any sea the land's full cycle.
+ * Distances run through the 8-neighbour graph in metres (Dijkstra), so the scale does not
+ * depend on the grid.
+ */
+function continentalityField(grid: Grid, elevation: Float32Array, seaLevel: number): Float32Array {
+  const { neighbors, rowDistance } = getTopology(grid);
+  const n = grid.cellCount;
+  const distance = new Float64Array(n).fill(Infinity);
+  const heap = new MinHeap();
+  for (let i = 0; i < n; i++) {
+    if (isOcean(elevation[i]!, seaLevel)) {
+      distance[i] = 0;
+      heap.push(i, 0);
+    }
+  }
+  while (heap.size > 0) {
+    const [i, d] = heap.pop();
+    if (d > distance[i]!) continue;
+    const row = Math.floor(i / grid.width);
+    for (let k = 0; k < NEIGHBOR_COUNT; k++) {
+      const j = neighbors[i * NEIGHBOR_COUNT + k]!;
+      if (j < 0) continue;
+      const next = d + rowDistance[row * NEIGHBOR_COUNT + k]!;
+      if (next < distance[j]!) {
+        distance[j] = next;
+        heap.push(j, next);
+      }
+    }
+  }
+  const out = new Float32Array(n);
+  // A planet with no sea at all is fully continental.
+  for (let i = 0; i < n; i++) {
+    out[i] = Number.isFinite(distance[i]!) ? 1 - Math.exp(-distance[i]! / MARITIME_LENGTH) : 1;
+  }
+  return out;
+}
+
+/** Binary min-heap of (cell, key) pairs for the coast-distance search. */
+class MinHeap {
+  private cells: number[] = [];
+  private keys: number[] = [];
+
+  get size(): number {
+    return this.cells.length;
+  }
+
+  push(cell: number, key: number): void {
+    const { cells, keys } = this;
+    let i = cells.length;
+    cells.push(cell);
+    keys.push(key);
+    while (i > 0) {
+      const parent = (i - 1) >> 1;
+      if (keys[parent]! <= key) break;
+      cells[i] = cells[parent]!;
+      keys[i] = keys[parent]!;
+      i = parent;
+    }
+    cells[i] = cell;
+    keys[i] = key;
+  }
+
+  pop(): [number, number] {
+    const { cells, keys } = this;
+    const top: [number, number] = [cells[0]!, keys[0]!];
+    const lastCell = cells.pop()!;
+    const lastKey = keys.pop()!;
+    const n = cells.length;
+    if (n > 0) {
+      let i = 0;
+      for (;;) {
+        const left = 2 * i + 1;
+        if (left >= n) break;
+        const right = left + 1;
+        const child = right < n && keys[right]! < keys[left]! ? right : left;
+        if (keys[child]! >= lastKey) break;
+        cells[i] = cells[child]!;
+        keys[i] = keys[child]!;
+        i = child;
+      }
+      cells[i] = lastCell;
+      keys[i] = lastKey;
+    }
+    return top;
+  }
+}
+
 function solveCoarse(
   climate: ClimateGrid,
   grid: Grid,
   albedo: Float32Array,
   solarInput: number,
+  obliquity: number,
   forcing: number,
 ): void {
   const { coarse, factor, coarseAlbedo, rhs, rowArea } = climate;
@@ -266,7 +505,7 @@ function solveCoarse(
     }
   }
   for (let y = 0; y < coarse.height; y++) {
-    const insolation = annualInsolation(coarse.rowLatitude[y]!, solarInput);
+    const insolation = annualInsolation(coarse.rowLatitude[y]!, solarInput, obliquity);
     for (let x = 0; x < coarse.width; x++) {
       const c = y * coarse.width + x;
       coarseAlbedo[c] = coarseAlbedo[c]! / weight[c]!;

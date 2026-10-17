@@ -12,6 +12,8 @@ import type { World } from '../world';
 
 /** Albedo of Daisyworld's bare ground: brighter than Earth's land, as in the original model. */
 export const DAISYWORLD_GROUND_ALBEDO = 0.4;
+/** Classic Daisyworld isolates albedo feedback, so it has no axial seasons. */
+export const DAISYWORLD_OBLIQUITY = 0;
 
 export interface DaisyworldOptions extends PlanetOptions {
   /** Star age at the start; the default begins while the star is still too faint for daisies. */
@@ -28,6 +30,7 @@ export interface DaisyworldOptions extends PlanetOptions {
  */
 export function createDaisyworld(options: DaisyworldOptions = {}): World {
   const planet = createPlanet(options);
+  planet.controls.obliquity = DAISYWORLD_OBLIQUITY;
   planet.globals.year = options.startYear ?? 2.5e9;
   planet.globals.atmosphere.co2 = 280;
   planet.globals.energy = STARTING_ENERGY;
@@ -61,6 +64,7 @@ export function daisyworldFromPlanet(planet: PlanetState, withDaisies = true): W
   components.push(energyIncome, recordHistory);
   const simulation = createSimulation(components, [
     'elevation',
+    'seasonalAmplitude',
     'oceanAnomaly',
     'precipitation',
     'iceThickness',

@@ -100,6 +100,12 @@ export const LAYER_ICONS: Record<MapLayer, ReactNode> = {
       <path d="M12 9v7" />
     </Icon>
   ),
+  seasons: (
+    <Icon>
+      <circle cx="7" cy="7" r="3" />
+      <path d="M7 1v2m0 8v2M1 7h2m8 0h2M15 4v16m-3-3 3 3 3-3M12 7l3-3 3 3" />
+    </Icon>
+  ),
   pressure: (
     <Icon>
       <path d="M3 7c3-3 6 3 9 0s6 3 9 0M3 12c3-3 6 3 9 0s6 3 9 0M3 17c3-3 6 3 9 0s6 3 9 0" />

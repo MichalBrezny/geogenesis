@@ -46,8 +46,12 @@ describe('simulation', () => {
     const a = createRandomWorld({ seed: 123, width: 32, height: 16 });
     const b = createRandomWorld({ seed: 123, width: 32, height: 16 });
     expect(a.planet.fields.elevation).toEqual(b.planet.fields.elevation);
+    expect(a.planet.controls.obliquity).toBe(b.planet.controls.obliquity);
+    expect(a.planet.controls.obliquity).toBeGreaterThanOrEqual(15);
+    expect(a.planet.controls.obliquity).toBeLessThanOrEqual(35);
     const c = createRandomWorld({ seed: 124, width: 32, height: 16 });
     expect(c.planet.fields.elevation).not.toEqual(a.planet.fields.elevation);
+    expect(c.planet.controls.obliquity).not.toBe(a.planet.controls.obliquity);
   });
 
   it('generates roughly the requested ocean fraction', () => {

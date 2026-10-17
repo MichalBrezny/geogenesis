@@ -119,6 +119,8 @@ export interface ModelControls {
   mutationRate: number;
   /** The star's brightness. */
   solarFactor: number;
+  /** Axial tilt relative to the orbital plane's normal, degrees. */
+  obliquity: number;
 }
 
 export const DEFAULT_CONTROLS: Readonly<ModelControls> = {
@@ -127,6 +129,7 @@ export const DEFAULT_CONTROLS: Readonly<ModelControls> = {
   erosion: 1,
   mutationRate: 1,
   solarFactor: 1,
+  obliquity: 23.44,
 };
 
 /** Complete simulation state. Must stay plain data so it can be serialized and sent to a worker. */
