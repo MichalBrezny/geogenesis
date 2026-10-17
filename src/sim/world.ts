@@ -14,8 +14,9 @@ import { landIceMassBalance } from './models/atmosphere/ice';
 import { biomeModel } from './models/biosphere/biomes';
 import { createLife, seedPrimordialLife } from './models/biosphere/life';
 import { createLinearDiffuser } from './models/geosphere/diffusion';
-import { createPlateDrift } from './models/geosphere/drift';
+import { continentalCrustTarget, createPlateDrift } from './models/geosphere/drift';
 import { flowRouting } from './models/geosphere/flowRouting';
+import { impactModel } from './models/geosphere/impacts';
 import { seaLevelModel } from './models/geosphere/seaLevel';
 import { createStreamPowerEroder } from './models/geosphere/streamPower';
 import { generateTectonicPlanet, tectonicUplift } from './models/geosphere/tectonics';
@@ -27,6 +28,8 @@ import { createCivilization } from './models/civilization/civilization';
 import { eraStepYears, eraTracker, planetEra, type Era } from './eras';
 
 export interface WorldOptions extends PlanetOptions {
+  /** Preset age and biosphere for a new random planet. Defaults to `young`. */
+  start?: PlanetStart;
   /**
    * Planet (and star) age at the start, in years. Defaults to 4 Gyr: microbes only,
    * so the player can watch complex life evolve while the star is Sun-like.
@@ -41,7 +44,18 @@ export interface WorldOptions extends PlanetOptions {
 /** Choices a planet's simulation is built with; part of the saved scenario. */
 export interface RandomWorldSettings {
   continentalFraction: number;
+  start: PlanetStart;
 }
+
+export const PLANET_STARTS = ['young', 'microbial', 'quick'] as const;
+export type PlanetStart = (typeof PLANET_STARTS)[number];
+
+/** The young start is 0.5 Gyr: after ocean formation but during declining bombardment. */
+export const PLANET_START_AGES: Readonly<Record<PlanetStart, number>> = {
+  young: 0.5e9,
+  microbial: 2e9,
+  quick: 4e9,
+};
 
 export interface World {
   planet: PlanetState;
@@ -50,6 +64,8 @@ export interface World {
   stepYears: (planet: PlanetState) => number;
   /** The planet's era, or null for scenarios without eras (Daisyworld). */
   era: (planet: PlanetState) => Era | null;
+  /** Plain scenario choices needed to rebuild this simulation after loading. */
+  settings?: RandomWorldSettings;
 }
 
 /** Geology and evolution update at most this often (years) during civilizations. */
@@ -61,16 +77,24 @@ const HISTORY_INTERVAL = 1e6;
 /** Creates a random planet with the standard component pipeline. */
 export function createRandomWorld(options: WorldOptions = {}): World {
   const planet = createPlanet(options);
+  // Explicit startYear is retained for tests/custom callers and keeps the former
+  // seeded behaviour unless they also choose a start preset.
+  const start = options.start ?? (options.startYear === undefined ? 'young' : 'quick');
   const parameterRng = createRng(planet.rngState);
   planet.controls.obliquity = randomObliquity(parameterRng);
   planet.rngState = parameterRng.state;
-  planet.globals.year = options.startYear ?? 4.0e9;
-  generateTectonicPlanet(planet, { oceanFraction: options.oceanFraction ?? 0.7 });
-  seedPrimordialLife(planet);
+  planet.globals.year = options.startYear ?? PLANET_START_AGES[start];
+  const continentalFraction = options.continentalFraction ?? 0.3;
+  generateTectonicPlanet(planet, {
+    oceanFraction:
+      options.oceanFraction ?? 1 - continentalCrustTarget(planet.globals.year, continentalFraction),
+  });
+  if (start !== 'young') seedPrimordialLife(planet);
   planet.globals.atmosphere.o2 = 0;
   planet.globals.energy = STARTING_ENERGY;
   const world = randomWorldFromPlanet(planet, {
-    continentalFraction: options.continentalFraction ?? 0.3,
+    continentalFraction,
+    start,
   });
   // Run once with dt = 0 so derived fields are valid before the first real step.
   world.simulation.step(planet, 0);
@@ -94,10 +118,11 @@ function randomObliquity(rng: Rng): number {
 /** Builds the random-planet simulation around an existing planet (new or loaded). */
 export function randomWorldFromPlanet(
   planet: PlanetState,
-  settings: RandomWorldSettings = { continentalFraction: 0.3 },
+  settings: RandomWorldSettings = { continentalFraction: 0.3, start: 'quick' },
 ): World {
   const simulation = createSimulation(
     [
+      impactModel,
       withMinInterval(
         createPlateDrift({ continentalFraction: settings.continentalFraction }),
         SLOW_PROCESS_INTERVAL,
@@ -118,7 +143,14 @@ export function randomWorldFromPlanet(
       landIceMassBalance,
       seaLevelModel,
       biomeModel,
-      withMinInterval(createLife(), EVOLUTION_INTERVAL),
+      withMinInterval(
+        createLife({
+          // The Quick start keeps the pre-M11 pace of the first microbial and complex steps.
+          evolutionTimeFactors:
+            settings.start === 'quick' ? { eukaryotes: 30, plants: 60, radiates: 40 } : {},
+        }),
+        EVOLUTION_INTERVAL,
+      ),
       createCivilization(),
       biogeochemistry,
       createCarbonCycle(),
@@ -152,6 +184,7 @@ export function randomWorldFromPlanet(
     simulation,
     stepYears: eraStepYears,
     era: planetEra,
+    settings,
   };
 }
 

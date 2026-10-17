@@ -26,7 +26,14 @@ function lastFrame(messages: WorkerResponse[]) {
 describe('SimHost', () => {
   it('sends a frame for a new planet with transferable field copies', () => {
     const { host, messages, transfers } = createHost();
-    host.handle({ type: 'create', scenario: 'random', seed: 1, width: 32, height: 16 });
+    host.handle({
+      type: 'create',
+      scenario: 'random',
+      seed: 1,
+      width: 32,
+      height: 16,
+      start: 'young',
+    });
     const frame = lastFrame(messages);
     expect(frame.year).toBeGreaterThan(0);
     expect(frame.grid).toEqual({ width: 32, height: 16, cellCount: 512 });
@@ -39,7 +46,14 @@ describe('SimHost', () => {
 
   it('steps once on request and keeps stepping while running', () => {
     const { host, messages, queue, runQueued } = createHost();
-    host.handle({ type: 'create', scenario: 'random', seed: 1, width: 32, height: 16 });
+    host.handle({
+      type: 'create',
+      scenario: 'random',
+      seed: 1,
+      width: 32,
+      height: 16,
+      start: 'young',
+    });
     // Each frame announces the length of the next step (set by the planet's era).
     const advance = () => {
       const before = lastFrame(messages);
@@ -66,7 +80,14 @@ describe('SimHost', () => {
 
   it('saves a planet and loads it back', async () => {
     const { host, messages } = createHost();
-    host.handle({ type: 'create', scenario: 'daisyworld', seed: 2, width: 32, height: 16 });
+    host.handle({
+      type: 'create',
+      scenario: 'daisyworld',
+      seed: 2,
+      width: 32,
+      height: 16,
+      start: 'young',
+    });
     host.handle({ type: 'step' });
     const saved = lastFrame(messages);
     host.handle({ type: 'save' });
@@ -74,7 +95,14 @@ describe('SimHost', () => {
     const file = messages.at(-1) as Extract<WorkerResponse, { type: 'saved' }>;
     expect(file.fileName).toMatch(/.geogenesis$/);
 
-    host.handle({ type: 'create', scenario: 'random', seed: 9, width: 32, height: 16 });
+    host.handle({
+      type: 'create',
+      scenario: 'random',
+      seed: 9,
+      width: 32,
+      height: 16,
+      start: 'young',
+    });
     host.handle({ type: 'load', bytes: file.bytes });
     await vi.waitFor(() => expect(lastFrame(messages).scenario).toBe('daisyworld'));
     expect(lastFrame(messages).year).toBe(saved.year);
@@ -89,7 +117,14 @@ describe('SimHost', () => {
 
   it('ignores manual steps while running', () => {
     const { host, messages } = createHost();
-    host.handle({ type: 'create', scenario: 'random', seed: 1, width: 32, height: 16 });
+    host.handle({
+      type: 'create',
+      scenario: 'random',
+      seed: 1,
+      width: 32,
+      height: 16,
+      start: 'young',
+    });
     host.handle({ type: 'run', running: true });
     const count = messages.length;
     host.handle({ type: 'step' });

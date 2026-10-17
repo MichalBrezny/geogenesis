@@ -2,9 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { cellIndex } from '../../core/grid';
 import { createPlanet, type PlanetState } from '../../core/planet';
 import { createRng } from '../../core/rng';
-import { lifeClassIndex } from '../../data/lifeClasses';
-import { biogeochemistry } from '../atmosphere/biogeochemistry';
-import { createLife, seedPrimordialLife } from './life';
+import { LIFE_CLASSES, lifeClassIndex } from '../../data/lifeClasses';
+import { biogeochemistry, oxygenSink } from '../atmosphere/biogeochemistry';
+import {
+  ABIOGENESIS_TIME,
+  abiogenesisProbability,
+  createLife,
+  evolutionTimeYears,
+  seedPrimordialLife,
+} from './life';
 
 const rng = createRng(1);
 
@@ -74,9 +80,56 @@ describe('life', () => {
     // Oxygen-hungry animals cannot evolve in this thin oxygen.
     expect(planet.biota.appeared[lifeClassIndex('fish')]).toBeNull();
   });
+
+  it('requires exposed liquid ocean for abiogenesis and starts in a local cluster', () => {
+    const frozen = waterWorld();
+    frozen.fields.iceCover.fill(1);
+    createLife({ mutationRate: 0 }).runOneStep(frozen, 5e9, createRng(4));
+    expect(frozen.biota.appeared[lifeClassIndex('prokaryotes')]).toBeNull();
+
+    const temperate = waterWorld();
+    const life = createLife({ mutationRate: 0 });
+    const originRng = createRng(4);
+    for (
+      let step = 0;
+      step < 200 && temperate.biota.appeared[lifeClassIndex('prokaryotes')] === null;
+      step++
+    ) {
+      life.runOneStep(temperate, 10e6, originRng);
+      temperate.globals.year += 10e6;
+    }
+    expect(temperate.biota.appeared[lifeClassIndex('prokaryotes')]).not.toBeNull();
+    const n = temperate.grid.cellCount;
+    let occupied = 0;
+    for (let i = 0; i < n; i++) if (population(temperate, 'prokaryotes', i) > 0) occupied++;
+    expect(occupied).toBeGreaterThan(0);
+    expect(occupied).toBeLessThan(n / 4);
+  });
+
+  it('uses a step-independent abiogenesis hazard', () => {
+    const rate = 1 / ABIOGENESIS_TIME;
+    const oneStep = abiogenesisProbability(rate, 200e6);
+    const twentySteps = 1 - Math.pow(1 - abiogenesisProbability(rate, 10e6), 20);
+    expect(twentySteps).toBeCloseTo(oneStep, 12);
+  });
+
+  it('gives eukaryotes and the first complex life slow, data-driven transitions', () => {
+    const eukaryotes = LIFE_CLASSES[lifeClassIndex('eukaryotes')]!;
+    expect(eukaryotes.evolutionTime).toBe(30);
+    expect(evolutionTimeYears(eukaryotes)).toBe(1.2e9);
+    expect(evolutionTimeYears(LIFE_CLASSES[lifeClassIndex('plants')]!)).toBe(1.44e9);
+  });
 });
 
 describe('biogeochemistry', () => {
+  it('keeps a young planet anoxic until its reducing sinks fade', () => {
+    // A microbial biosphere (photosynthesis ~0.28) beats the sink only after ~2.3 Gyr.
+    expect(oxygenSink(0.5e9)).toBeGreaterThan(1);
+    expect(oxygenSink(2.0e9)).toBeGreaterThan(0.28);
+    expect(oxygenSink(2.6e9)).toBeLessThan(0.28);
+    expect(oxygenSink(4.5e9)).toBeCloseTo(0.14, 2);
+  });
+
   it('fills an anoxic microbial world with methane, and photosynthesis with oxygen', () => {
     const planet = waterWorld();
     seedPrimordialLife(planet);

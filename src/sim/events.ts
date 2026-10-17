@@ -12,6 +12,8 @@ export interface PlanetEvent {
 }
 
 export type EventKey =
+  | 'lifeOrigin'
+  | 'impact'
   | 'classAppeared'
   | 'classExtinct'
   | 'sentience'
@@ -29,7 +31,12 @@ export type EventKey =
 /** Only the most recent events are kept. */
 export const MAX_EVENTS = 100;
 
-export function recordEvent(state: PlanetState, key: EventKey, subject?: string): void {
-  state.events.push({ year: state.globals.year, key, subject });
+export function recordEvent(
+  state: PlanetState,
+  key: EventKey,
+  subject?: string,
+  year = state.globals.year,
+): void {
+  state.events.push({ year, key, subject });
   if (state.events.length > MAX_EVENTS) state.events.splice(0, state.events.length - MAX_EVENTS);
 }

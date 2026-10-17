@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { t, type MessageKey } from '../i18n/i18n';
 import { SCENARIO_IDS, type ScenarioId } from '../sim/scenarios';
 import type { Frame } from '../worker/protocol';
+import { PLANET_STARTS, type PlanetStart } from '../sim/world';
 import { formatGyr, formatPpm, formatStep } from './format';
 
 /** Pause between simulation steps for each speed setting, ms. */
@@ -22,7 +23,7 @@ interface Props {
   onStep: () => void;
   speed: Speed;
   onSpeedChange: (speed: Speed) => void;
-  onNewPlanet: (scenario: ScenarioId, resolutionIndex: number) => void;
+  onNewPlanet: (scenario: ScenarioId, resolutionIndex: number, start: PlanetStart) => void;
   onSave: () => void;
   onLoad: (file: File) => void;
   onShowHelp: () => void;
@@ -134,6 +135,7 @@ function NewPlanetMenu({ onCreate }: { onCreate: Props['onNewPlanet'] }) {
   const [open, setOpen] = useState(false);
   const [scenario, setScenario] = useState<ScenarioId>('random');
   const [resolution, setResolution] = useState(1);
+  const [start, setStart] = useState<PlanetStart>('young');
   const anchor = useRef<HTMLDivElement>(null);
 
   // A press anywhere outside the menu closes it.
@@ -160,7 +162,7 @@ function NewPlanetMenu({ onCreate }: { onCreate: Props['onNewPlanet'] }) {
           className="popover"
           onSubmit={(event) => {
             event.preventDefault();
-            onCreate(scenario, resolution);
+            onCreate(scenario, resolution, start);
             setOpen(false);
           }}
           onKeyDown={(event) => {
@@ -182,6 +184,17 @@ function NewPlanetMenu({ onCreate }: { onCreate: Props['onNewPlanet'] }) {
             </select>
           </label>
           <p className="muted">{t(`scenarioHelp.${scenario}`)}</p>
+          <label title={t('controls.startHint')}>
+            {t('controls.start')}
+            <select value={start} onChange={(e) => setStart(e.target.value as PlanetStart)}>
+              {PLANET_STARTS.map((id) => (
+                <option key={id} value={id} title={t(`startHelp.${id}`)}>
+                  {t(`start.${id}`)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="muted">{t(`startHelp.${start}`)}</p>
           <label>
             {t('controls.resolution')}
             <select value={resolution} onChange={(e) => setResolution(Number(e.target.value))}>

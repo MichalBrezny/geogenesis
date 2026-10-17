@@ -10,6 +10,7 @@ import {
   lifeClassIndex,
   PLANT_PRODUCTIVITY,
   type LifeClass,
+  type LifeClassKey,
 } from '../../data/lifeClasses';
 import { recordEvent } from '../../events';
 import { disperse } from '../dispersal';
@@ -18,6 +19,8 @@ import { isOcean } from '../geosphere/seaLevel';
 export interface LifeOptions {
   /** Multiplier on the rate at which new classes evolve (a future player control). */
   mutationRate?: number;
+  /** Scenario-specific transition-rate multipliers; Quick start uses this for legacy pacing. */
+  evolutionTimeFactors?: Partial<Record<LifeClassKey, number>>;
 }
 
 /** Years for a population to settle to a new carrying capacity (e-folding time). */
@@ -44,6 +47,16 @@ const FOUNDER_POPULATION = 0.2;
  * so microbes reach mammals in roughly a billion years.
  */
 const BASE_EVOLUTION_TIME = 40e6;
+/**
+ * Mean origin time on an otherwise fully suitable Earth-like ocean. The actual
+ * hazard scales with suitable liquid-ocean area, giving roughly 100–300 Myr on
+ * a temperate young planet.
+ */
+export const ABIOGENESIS_TIME = 180e6;
+const ABIOGENESIS_REFERENCE_OCEAN = 0.7;
+const ABIOGENESIS_MIN_TEMPERATURE = 0;
+const ABIOGENESIS_MAX_TEMPERATURE = 85;
+const ORIGIN_CLUSTER_RADIUS = 600_000;
 /** Population at which a class counts as fully present in a cell when evolving descendants. */
 const PRESENCE_POPULATION = 0.2;
 /** Sea water does not get much colder than this, whatever the air does. */
@@ -70,16 +83,117 @@ export function createLife(options: LifeOptions = {}): SimComponent {
     outputs: ['vegetation', 'lifeTier'],
     runOneStep(state, dtYears, rng) {
       if (dtYears > 0) {
+        attemptAbiogenesis(state, dtYears, rng);
         // Only classes that exist, or could evolve now, need any work.
         const alive = presentClasses(state);
         const relevant = alive.map((isAlive, c) => isAlive || isEvolutionCandidate(c, alive));
         const suitability = computeSuitability(state, relevant);
         growAndSpread(state, suitability, dtYears, alive, rng);
-        evolve(state, suitability, dtYears, mutationRate, rng);
+        evolve(state, suitability, dtYears, mutationRate, options.evolutionTimeFactors ?? {}, rng);
       }
       summarize(state);
     },
   };
+}
+
+/** Exact Poisson-event probability used by abiogenesis and its statistical tests. */
+export function abiogenesisProbability(ratePerYear: number, dtYears: number): number {
+  return 1 - Math.exp(-Math.max(0, ratePerYear) * Math.max(0, dtYears));
+}
+
+/** Mean full-overlap waiting time for a class's data-driven evolutionary transition. */
+export function evolutionTimeYears(lifeClass: LifeClass): number {
+  return BASE_EVOLUTION_TIME * lifeClass.difficulty * (lifeClass.evolutionTime ?? 1);
+}
+
+/** Whether a cell offers exposed liquid seawater in the origin-of-life temperature range. */
+export function isAbiogenesisHabitat(state: PlanetState, cell: number): boolean {
+  return (
+    isOcean(state.fields.elevation[cell]!, state.globals.seaLevel) &&
+    state.fields.iceCover[cell]! < 0.1 &&
+    state.fields.airTemperature[cell]! >= ABIOGENESIS_MIN_TEMPERATURE &&
+    state.fields.airTemperature[cell]! <= ABIOGENESIS_MAX_TEMPERATURE
+  );
+}
+
+function attemptAbiogenesis(state: PlanetState, dtYears: number, rng: Rng): void {
+  const prokaryotes = lifeClassIndex('prokaryotes');
+  const n = state.grid.cellCount;
+  for (let i = 0; i < n; i++) {
+    if (state.biota.populations[prokaryotes * n + i]! > 0) return;
+  }
+
+  const start = state.globals.year;
+  const end = start + dtYears;
+  const availableYears = Math.max(
+    0,
+    end - Math.max(start, state.geosphere.abiogenesisSuppressedUntil),
+  );
+  if (availableYears === 0) return;
+
+  let suitableArea = 0;
+  const candidates: number[] = [];
+  for (let y = 0; y < state.grid.height; y++) {
+    const area = state.grid.rowAreaWeight[y]!;
+    for (let x = 0; x < state.grid.width; x++) {
+      const i = y * state.grid.width + x;
+      if (!isAbiogenesisHabitat(state, i)) continue;
+      suitableArea += area;
+      candidates.push(i);
+    }
+  }
+  if (candidates.length === 0) return;
+  const rate = suitableArea / (ABIOGENESIS_REFERENCE_OCEAN * ABIOGENESIS_TIME);
+  if (rng.next() >= abiogenesisProbability(rate, availableYears)) return;
+
+  // Hydrothermal systems are favoured, but a quiet suitable ocean is not forbidden.
+  let totalWeight = 0;
+  for (const cell of candidates) {
+    const row = Math.floor(cell / state.grid.width);
+    totalWeight +=
+      state.grid.rowAreaWeight[row]! * (0.25 + Math.max(0, state.fields.volcanicActivity[cell]!));
+  }
+  let pick = rng.next() * totalWeight;
+  let origin = candidates[candidates.length - 1]!;
+  for (const cell of candidates) {
+    const row = Math.floor(cell / state.grid.width);
+    pick -=
+      state.grid.rowAreaWeight[row]! * (0.25 + Math.max(0, state.fields.volcanicActivity[cell]!));
+    if (pick <= 0) {
+      origin = cell;
+      break;
+    }
+  }
+  seedOriginCluster(state, origin, prokaryotes);
+  if (state.biota.appeared[prokaryotes] === null) {
+    state.biota.appeared[prokaryotes] = end;
+  }
+  recordEvent(state, 'lifeOrigin', undefined, end);
+}
+
+function seedOriginCluster(state: PlanetState, origin: number, lifeClass: number): void {
+  const { grid } = state;
+  const positions = grid.cellPosition;
+  const [ox, oy, oz] = [
+    positions[origin * 3]!,
+    positions[origin * 3 + 1]!,
+    positions[origin * 3 + 2]!,
+  ];
+  const offset = lifeClass * grid.cellCount;
+  for (let i = 0; i < grid.cellCount; i++) {
+    if (!isAbiogenesisHabitat(state, i)) continue;
+    const dot = Math.max(
+      -1,
+      Math.min(1, ox * positions[i * 3]! + oy * positions[i * 3 + 1]! + oz * positions[i * 3 + 2]!),
+    );
+    const distance = Math.acos(dot) * grid.radius;
+    if (distance <= ORIGIN_CLUSTER_RADIUS) {
+      state.biota.populations[offset + i] =
+        FOUNDER_POPULATION * Math.max(0.25, 1 - distance / ORIGIN_CLUSTER_RADIUS);
+    }
+  }
+  // Coarse grids may have no second cell within 600 km; the vent cell always starts life.
+  state.biota.populations[offset + origin] = FOUNDER_POPULATION;
 }
 
 /** Seeds the first life: prokaryotes throughout the ocean. */
@@ -208,6 +322,7 @@ function evolve(
   suitability: Float32Array,
   dtYears: number,
   mutationRate: number,
+  evolutionTimeFactors: Partial<Record<LifeClassKey, number>>,
   rng: Rng,
 ): void {
   const { grid, biota, globals } = state;
@@ -253,8 +368,11 @@ function evolve(
 
     const share = overlap / potential;
     const rate =
-      (mutationRate * state.controls.mutationRate * share) /
-      (BASE_EVOLUTION_TIME * lifeClass.difficulty);
+      (mutationRate *
+        state.controls.mutationRate *
+        share *
+        (evolutionTimeFactors[lifeClass.key] ?? 1)) /
+      evolutionTimeYears(lifeClass);
     if (rng.next() < 1 - Math.exp(-rate * dtYears)) {
       biota.populations[c * n + bestCell] = FOUNDER_POPULATION;
       if (biota.appeared[c] === null) biota.appeared[c] = globals.year;

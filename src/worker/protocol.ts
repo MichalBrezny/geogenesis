@@ -5,10 +5,18 @@ import type { PlanetEvent } from '../sim/events';
 import type { HistorySeries } from '../sim/history';
 import type { ScenarioId } from '../sim/scenarios';
 import type { Era } from '../sim/eras';
+import type { PlanetStart } from '../sim/world';
 
 /** Messages from the UI to the simulation worker. */
 export type WorkerRequest =
-  | { type: 'create'; scenario: ScenarioId; seed: number; width: number; height: number }
+  | {
+      type: 'create';
+      scenario: ScenarioId;
+      seed: number;
+      width: number;
+      height: number;
+      start: PlanetStart;
+    }
   | { type: 'run'; running: boolean }
   | { type: 'step' }
   | { type: 'tool'; use: ToolUse }

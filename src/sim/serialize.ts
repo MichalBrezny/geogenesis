@@ -1,5 +1,6 @@
 import { DEFAULT_CONTROLS, type PlanetState } from './core/planet';
 import { HISTORY_SERIES } from './history';
+import type { RandomWorldSettings } from './world';
 
 /**
  * Binary save format:
@@ -31,6 +32,8 @@ interface ArrayRef {
 export interface SavedGame {
   /** Scenario id the planet belongs to (see scenarios/index.ts). */
   scenario: string;
+  /** Scenario construction choices; optional so version-3 saves remain loadable. */
+  settings?: RandomWorldSettings;
   planet: PlanetState;
 }
 
@@ -103,6 +106,10 @@ function hydrateAddedState(planet: PlanetState): void {
   planet.fields.volcanicActivity ??= new Float32Array(planet.grid.cellCount);
   planet.globals.volcanicAerosol ??= 0;
   planet.globals.lipOutgassing ??= 0;
+  planet.globals.impactFlux ??= 0;
+  planet.globals.impactsThisStep ??= 0;
+  planet.globals.waterDelivered ??= 0;
+  planet.globals.impactHeating ??= 0;
   planet.geosphere ??= {
     initialPlateCount: planet.plates.length,
     hotspots: [],
@@ -111,8 +118,16 @@ function hydrateAddedState(planet: PlanetState): void {
     nextLipId: 1,
     lipCount: 0,
     cleanupElapsedYears: 0,
+    plateSpeedMantleFactor: 1,
+    impactHeat: 0,
+    impactCount: 0,
+    abiogenesisSuppressedUntil: 0,
   };
   planet.geosphere.cleanupElapsedYears ??= 0;
+  planet.geosphere.plateSpeedMantleFactor ??= 1;
+  planet.geosphere.impactHeat ??= 0;
+  planet.geosphere.impactCount ??= 0;
+  planet.geosphere.abiogenesisSuppressedUntil ??= 0;
   planet.controls.obliquity ??= DEFAULT_CONTROLS.obliquity;
   const samples = planet.history.year?.length ?? 0;
   for (const name of HISTORY_SERIES) planet.history[name] ??= Array(samples).fill(0);

@@ -55,7 +55,7 @@ describe('simulation', () => {
   });
 
   it('generates roughly the requested ocean fraction', () => {
-    const { planet } = createRandomWorld({ seed: 5 });
+    const { planet } = createRandomWorld({ start: 'quick', seed: 5 });
     const ocean = planet.fields.elevation.filter((e) => e < 0).length / planet.grid.cellCount;
     expect(ocean).toBeGreaterThan(0.65);
     expect(ocean).toBeLessThan(0.75);

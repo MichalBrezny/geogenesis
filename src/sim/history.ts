@@ -19,6 +19,7 @@ export const HISTORY_SERIES = [
   'o2',
   'ch4',
   'livingClasses',
+  'impactFlux',
 ] as const;
 export type HistorySeries = (typeof HISTORY_SERIES)[number];
 export type History = Record<HistorySeries, number[]>;
@@ -59,6 +60,7 @@ export const recordHistory: SimComponent = {
       o2: globals.atmosphere.o2,
       ch4: globals.atmosphere.ch4,
       livingClasses: state.biota.cover.filter((cover) => cover > 0).length,
+      impactFlux: globals.impactFlux,
     };
     const last = history.year[history.year.length - 1];
     // A zero-length step (initialization) replaces the sample for the same year.

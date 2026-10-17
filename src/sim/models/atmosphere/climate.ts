@@ -198,7 +198,8 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
           ),
         );
       }
-      const forcing = greenhouseForcing(globals.atmosphere) - globals.volcanicAerosol;
+      const forcing =
+        greenhouseForcing(globals.atmosphere) - globals.volcanicAerosol + globals.impactHeating;
 
       // Start from last step's albedo where it exists, so the ice state persists (hysteresis).
       for (let i = 0; i < grid.cellCount; i++) {

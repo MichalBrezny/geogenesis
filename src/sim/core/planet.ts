@@ -40,6 +40,14 @@ export interface GlobalState {
   volcanicAerosol: number;
   /** Outgassing of active large igneous provinces over the last step, relative to modern. */
   lipOutgassing: number;
+  /** Expected natural impact flux at the current age, impacts per year. */
+  impactFlux: number;
+  /** Number of natural impacts represented by the last simulation step. */
+  impactsThisStep: number;
+  /** Cumulative cometary water delivery, metres of global equivalent layer (reserved for M12). */
+  waterDelivered: number;
+  /** Time-averaged radiative forcing from impact heat over the current step, W/m². */
+  impactHeating: number;
   /** Player energy budget (Ω). */
   energy: number;
   /** Experimental mode: tools cost nothing. */
@@ -115,6 +123,14 @@ export interface GeosphereState {
   lipCount: number;
   /** Accumulated plate time since the last connected-component cleanup. */
   cleanupElapsedYears: number;
+  /** Mantle-heat multiplier already folded into plate angular speeds. */
+  plateSpeedMantleFactor: number;
+  /** Instantaneous impact heat carried between steps, W/m². */
+  impactHeat: number;
+  /** Total natural impacts sampled since this planet was created. */
+  impactCount: number;
+  /** Abiogenesis is prevented until this planet age after a sterilising impact. */
+  abiogenesisSuppressedUntil: number;
 }
 
 /** Life on the planet (see models/biosphere/life.ts). */
@@ -220,6 +236,10 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
       carbon: { outgassing: 1, weathering: 1, burial: 0 },
       volcanicAerosol: 0,
       lipOutgassing: 0,
+      impactFlux: 0,
+      impactsThisStep: 0,
+      waterDelivered: 0,
+      impactHeating: 0,
       energy: 0,
       unlimitedEnergy: false,
     },
@@ -232,6 +252,10 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
       nextLipId: 1,
       lipCount: 0,
       cleanupElapsedYears: 0,
+      plateSpeedMantleFactor: 1,
+      impactHeat: 0,
+      impactCount: 0,
+      abiogenesisSuppressedUntil: 0,
     },
     history: createHistory(),
     biota: {

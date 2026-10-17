@@ -36,16 +36,19 @@ describe('tools', () => {
     expect(state.globals.energy).toBe(10);
   });
 
-  it('only places life that has evolved before, where it can live', () => {
+  it('can originate prokaryotes, but only moves later life after it has evolved', () => {
     const state = planet();
     const use = { tool: 'seedLife', x: 10, y: 16, lifeClass: 'prokaryotes' } as const;
-    expect(applyTool(state, use)).toEqual({ ok: false, reason: 'notAllowed' });
-    state.biota.appeared[lifeClassIndex('prokaryotes')] = 0;
     expect(applyTool(state, use).ok).toBe(true);
+    expect(state.biota.appeared[lifeClassIndex('prokaryotes')]).toBe(0);
     const n = state.grid.cellCount;
     expect(
       state.biota.populations[lifeClassIndex('prokaryotes') * n + cellIndex(state.grid, 10, 16)],
     ).toBeGreaterThan(0);
+    expect(applyTool(state, { ...use, lifeClass: 'eukaryotes' })).toEqual({
+      ok: false,
+      reason: 'notAllowed',
+    });
   });
 
   it('wakes up intelligence with the monolith', () => {

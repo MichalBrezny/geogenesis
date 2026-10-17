@@ -48,6 +48,19 @@ const RESERVOIR_TIME = 300_000;
 const MODERN_BURIAL = 0.2;
 /** Global warming per e-fold of CO₂ (°C), used to predict temperature while solving for CO₂. */
 const CLIMATE_SENSITIVITY = 2.6;
+/**
+ * Share of the present-day carbon sink taken by seafloor weathering: hot seawater reacting
+ * with young basalt at the ridges (Earth: up to about a tenth). It grows with spreading, ocean
+ * area and the mantle's heat (hotter crust, more hydrothermal circulation), so a young water
+ * world with little land still has a thermostat, while mature planets barely feel it.
+ */
+const SEAFLOOR_SHARE = 0.08;
+/** Seafloor weathering speeds up by this factor per °C of the (surface-coupled) bottom water. */
+const SEAFLOOR_TEMPERATURE_SENSITIVITY = 0.04;
+/** Seafloor weathering ∝ (CO₂ / 280 ppm)^this (Coogan & Gillis 2013 range). */
+const SEAFLOOR_CO2_EXPONENT = 0.23;
+/** Ocean share of the surface the seafloor share is defined for. */
+const REFERENCE_OCEAN_FRACTION = 0.7;
 const MIN_CO2 = 1;
 const MAX_CO2 = 1e6;
 
@@ -84,9 +97,7 @@ export function createCarbonCycle(options: CarbonCycleOptions = {}): SimComponen
     runOneStep(state, dtYears) {
       const activity = spatialVolcanicActivity(state);
       const outgassing =
-        volcanism *
-        state.controls.volcanism *
-        (mantleHeat(state.globals.year) * activity + state.globals.lipOutgassing);
+        volcanism * state.controls.volcanism * (activity + state.globals.lipOutgassing);
       const atmosphere = state.globals.atmosphere;
       const before = atmosphere.co2;
       // Burial needs carbon to fix: it fades out as CO₂ runs out, like weathering.
@@ -96,13 +107,21 @@ export function createCarbonCycle(options: CarbonCycleOptions = {}): SimComponen
         (co2 / (co2 + WEATHERING_CO2_HALF_SATURATION));
       // One pass over the planet; other CO₂ levels scale it analytically (uniform warming).
       const current = rawWeathering(state, before);
+      const seafloor = seafloorWeathering(state);
       const weathering = (co2: number) =>
-        (current *
+        ((1 - SEAFLOOR_SHARE) *
+          (current *
+            Math.exp(
+              WEATHERING_TEMPERATURE_SENSITIVITY * CLIMATE_SENSITIVITY * Math.log(co2 / before),
+            ) *
+            (co2Factor(co2) / co2Factor(before)))) /
+          REFERENCE_WEATHERING +
+        seafloor *
           Math.exp(
-            WEATHERING_TEMPERATURE_SENSITIVITY * CLIMATE_SENSITIVITY * Math.log(co2 / before),
+            SEAFLOOR_TEMPERATURE_SENSITIVITY * CLIMATE_SENSITIVITY * Math.log(co2 / before),
           ) *
-          (co2Factor(co2) / co2Factor(before))) /
-        REFERENCE_WEATHERING;
+          Math.pow(co2 / 280, SEAFLOOR_CO2_EXPONENT) *
+          (co2 / (co2 + WEATHERING_CO2_HALF_SATURATION));
 
       if (dtYears > 0) {
         const k = dtYears / RESERVOIR_TIME;
@@ -137,7 +156,10 @@ export function createCarbonCycle(options: CarbonCycleOptions = {}): SimComponen
  */
 export function spatialVolcanicActivity(state: PlanetState): number {
   const mean = areaWeightedMean(state.grid, state.fields.volcanicActivity);
-  return mean > 0 ? mean : HOTSPOT_SHARE + (1 - HOTSPOT_SHARE) * tectonicActivity(state);
+  return mean > 0
+    ? mean
+    : HOTSPOT_SHARE * mantleHeat(state.globals.year) +
+        (1 - HOTSPOT_SHARE) * tectonicActivity(state);
 }
 
 /**
@@ -165,6 +187,27 @@ export function tectonicActivity(state: PlanetState): number {
     speed += cells[plate.id]! * plate.targetSpeed * grid.radius * (Math.PI / 4);
   }
   return speed / grid.cellCount / REFERENCE_PLATE_SPEED;
+}
+
+/**
+ * Seafloor weathering at 280 ppm and the current mean temperature, as a share of the
+ * present-day carbon flux: scales with ocean area, spreading (plate vigour) and mantle heat.
+ */
+function seafloorWeathering(state: PlanetState): number {
+  const { grid, fields, globals } = state;
+  let ocean = 0;
+  for (let i = 0; i < grid.cellCount; i++) {
+    if (isOcean(fields.elevation[i]!, globals.seaLevel)) {
+      ocean += grid.rowAreaWeight[Math.floor(i / grid.width)]!;
+    }
+  }
+  return (
+    SEAFLOOR_SHARE *
+    (ocean / REFERENCE_OCEAN_FRACTION) *
+    tectonicActivity(state) *
+    mantleHeat(globals.year) *
+    Math.exp(SEAFLOOR_TEMPERATURE_SENSITIVITY * (globals.meanTemperature - 15))
+  );
 }
 
 /**

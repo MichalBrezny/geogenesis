@@ -90,8 +90,10 @@ const TOOL_EFFECTS: Record<ToolId, Effect> = {
   seedLife(state, centre, use) {
     if (!use.lifeClass) return false;
     const c = lifeClassIndex(use.lifeClass);
-    // Only life that has evolved somewhere before can be placed, as in SimEarth.
-    if (state.biota.appeared[c] === null) return false;
+    // The player may catalyse the first prokaryotes; later classes still have to
+    // evolve somewhere before the SimEarth-style placement tool can move them.
+    const firstLife = use.lifeClass === 'prokaryotes' && state.biota.appeared[c] === null;
+    if (state.biota.appeared[c] === null && !firstLife) return false;
     const suitability = classSuitability(state, c);
     const n = state.grid.cellCount;
     let placed = false;
@@ -102,6 +104,10 @@ const TOOL_EFFECTS: Record<ToolId, Effect> = {
         SEEDED_POPULATION * suitability[i]!,
       );
       placed = true;
+    }
+    if (placed && firstLife) {
+      state.biota.appeared[c] = state.globals.year;
+      recordEvent(state, 'lifeOrigin');
     }
     return placed;
   },

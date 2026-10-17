@@ -23,6 +23,7 @@ describe('spatial volcanism', () => {
 
   it('leaves a volcanic chain as an oceanic plate moves over a fixed hotspot', () => {
     const planet = createPlanet({ width: 128, height: 64, seed: 22 });
+    planet.globals.year = 4.5e9;
     generateTectonicPlanet(planet, { plateCount: 1, oceanFraction: 1 });
     planet.fields.crustType.fill(0);
     planet.fields.elevation.fill(-4500);

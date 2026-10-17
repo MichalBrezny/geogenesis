@@ -8,6 +8,7 @@ import {
 } from '../../core/grid';
 import type { PlanetState, Plate } from '../../core/planet';
 import type { Rng } from '../../core/rng';
+import { mantleHeat } from '../atmosphere/carbon';
 import {
   componentArea,
   currentCell,
@@ -69,6 +70,17 @@ export const MIN_INDEPENDENT_PLATE_AREA = 200_000 * 1e6;
 const PLATE_CLEANUP_INTERVAL = 5e6;
 
 /**
+ * Continental crust grows from small Hadean/Archean nuclei to the modern target.
+ * With the default 30% ceiling this is 5.8% at 0.5 Gyr and 29.3% at 2.5 Gyr.
+ */
+export function continentalCrustTarget(ageYears: number, maximum = 0.3): number {
+  if (maximum <= 0) return 0;
+  const primordial = Math.min(maximum, 0.02);
+  const growth = 1 - Math.exp(-Math.pow(Math.max(0, ageYears) / 1.3e9, 2));
+  return primordial + (maximum - primordial) * growth;
+}
+
+/**
  * Simple continental drift.
  *
  * Every plate keeps its crust in its own reference raster and rotates rigidly
@@ -98,28 +110,35 @@ export function createPlateDrift(options: DriftOptions = {}): SimComponent {
     outputs: ['elevation', 'plateId', 'crustType', 'upliftRate'],
     runOneStep(state, stepYears, rng) {
       const speed = speedFactor * state.controls.driftSpeed;
-      if (stepYears <= 0 || speed <= 0) return;
+      if (stepYears <= 0) return;
       // Collisions stall plates only after they are detected, so long steps let
       // continents plough through each other: move in sub-steps of at most MAX_STEP.
       const substeps = Math.ceil(stepYears / MAX_STEP);
       for (let k = 0; k < substeps; k++) {
-        driftOnce(state, stepYears / substeps, speed, rng);
+        const dt = stepYears / substeps;
+        driftOnce(state, dt, speed, state.globals.year + (k + 0.5) * dt, rng);
       }
     },
   };
 
-  function driftOnce(state: PlanetState, dtYears: number, speed: number, rng: Rng): void {
+  function driftOnce(
+    state: PlanetState,
+    dtYears: number,
+    speed: number,
+    ageYears: number,
+    rng: Rng,
+  ): void {
+    adjustPlateSpeedsForMantle(state, ageYears);
     coolOceanFloor(state, dtYears);
-    accreteContinents(state, dtYears, continentalFraction, rng);
+    accreteContinents(state, dtYears, continentalCrustTarget(ageYears, continentalFraction), rng);
     // Persist erosion, uplift etc. from the last step into the plates before moving them.
     writeBackToPlates(state);
 
     if (rng.next() < 1 - Math.exp(-dtYears / reorganizationInterval)) {
       reorganizePlates(state, rng);
     }
-    for (const plate of state.plates) {
-      rotatePlate(plate, plate.angularSpeed * speed * dtYears);
-    }
+    if (speed > 0)
+      for (const plate of state.plates) rotatePlate(plate, plate.angularSpeed * speed * dtYears);
     fillPlateHoles(state);
     let collisions = composePlates(state, rng);
     state.geosphere.cleanupElapsedYears += dtYears;
@@ -200,7 +219,7 @@ function accreteContinents(state: PlanetState, dtYears: number, target: number, 
   const { grid } = state;
   const { neighbors } = getTopology(grid);
   const { elevation, crustType, upliftRate } = state.fields;
-  const deficit = Math.max(0, target - areaWeightedMean(grid, crustType)) / target;
+  const deficit = target > 0 ? Math.max(0, target - areaWeightedMean(grid, crustType)) / target : 0;
   const shelfRate = deficit / (SHELF_ACCRETION_TIME * resolutionScale(grid));
   const shelfChance = 1 - Math.exp(-dtYears * shelfRate);
 
@@ -222,6 +241,20 @@ function accreteContinents(state: PlanetState, dtYears: number, target: number, 
       elevation[i] = Math.max(elevation[i]!, state.globals.seaLevel + 100);
     }
   }
+}
+
+/** Keeps stored plate velocities on the mantle-cooling curve without step-size drift. */
+function adjustPlateSpeedsForMantle(state: PlanetState, ageYears: number): void {
+  const desired = mantleHeat(ageYears);
+  const previous = state.geosphere.plateSpeedMantleFactor || 1;
+  const ratio = desired / previous;
+  if (Math.abs(ratio - 1) > 1e-12) {
+    for (const plate of state.plates) {
+      plate.angularSpeed *= ratio;
+      plate.targetSpeed *= ratio;
+    }
+  }
+  state.geosphere.plateSpeedMantleFactor = desired;
 }
 
 /** Rebuilds the planet fields from the plates. Returns, per plate, whether it had a continental collision. */
@@ -677,6 +710,8 @@ function reorganizePlates(state: PlanetState, rng: Rng): void {
   for (const plate of state.plates) {
     if (plate.crust.owned.some((value) => value === 1)) {
       randomizeMotion(plate, rng, state.grid.radius);
+      plate.angularSpeed *= state.geosphere.plateSpeedMantleFactor;
+      plate.targetSpeed *= state.geosphere.plateSpeedMantleFactor;
     }
   }
 }

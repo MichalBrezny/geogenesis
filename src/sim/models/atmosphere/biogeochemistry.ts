@@ -13,6 +13,13 @@ export const MODERN_PHOTOSYNTHESIS = 1.0;
  * oxygen can accumulate; crossing it is the planet's Great Oxidation Event.
  */
 const OXYGEN_SINK = 0.14;
+/**
+ * Extra sink of a young planet: its hotter, more reduced mantle vents more hydrogen,
+ * CO and ferrous iron, and the sink fades as the crust oxidises. With these values an
+ * Earth-like microbial biosphere overcomes it at ~2.3 Gyr; by 4 Gyr it is negligible.
+ */
+const EARLY_OXYGEN_SINK = 6.9;
+const EARLY_SINK_DECAY_TIME = 0.6e9;
 /** E-folding time (years) of the oxygen reservoir. */
 const OXYGEN_RESPONSE_TIME = 50e6;
 /** Methane (ppm) an anoxic ocean full of methane-producing microbes sustains. */
@@ -39,8 +46,9 @@ export const biogeochemistry: SimComponent = {
     const { atmosphere } = state.globals;
     const cover = state.biota.cover;
     const index = photosynthesis(cover);
+    const sink = oxygenSink(state.globals.year);
     const target =
-      (MODERN_OXYGEN * Math.max(0, index - OXYGEN_SINK)) / (MODERN_PHOTOSYNTHESIS - OXYGEN_SINK);
+      (MODERN_OXYGEN * Math.max(0, index - sink)) / (MODERN_PHOTOSYNTHESIS - OXYGEN_SINK);
     if (dtYears > 0) {
       atmosphere.o2 += (target - atmosphere.o2) * (1 - Math.exp(-dtYears / OXYGEN_RESPONSE_TIME));
     }
@@ -50,6 +58,11 @@ export const biogeochemistry: SimComponent = {
       BACKGROUND_METHANE * Math.min(1, methanogens * 4) + ANOXIC_METHANE * methanogens * anoxia;
   },
 };
+
+/** Photosynthesis the planet's reducing sinks use up before oxygen can build up, at an age. */
+export function oxygenSink(ageYears: number): number {
+  return OXYGEN_SINK + EARLY_OXYGEN_SINK * Math.exp(-ageYears / EARLY_SINK_DECAY_TIME);
+}
 
 /**
  * Photosynthetic productivity of the planet: ocean microbes (eukaryotic algae

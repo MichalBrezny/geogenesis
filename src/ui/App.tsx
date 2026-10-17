@@ -16,6 +16,7 @@ import { Collapsible, TabbedPanel, type Tab } from './SidePanel';
 import { useShortcuts, type Shortcuts } from './shortcuts';
 import { ToolPalette } from './ToolPalette';
 import { RESOLUTIONS, SPEEDS, TopBar, type Speed } from './TopBar';
+import type { PlanetStart } from '../sim/world';
 
 /** How long a tool notice stays on screen, ms. */
 const NOTICE_DURATION = 3000;
@@ -151,14 +152,14 @@ export function App() {
   const send = useCallback((request: WorkerRequest) => workerRef.current?.postMessage(request), []);
 
   const createPlanet = useCallback(
-    (scenario: ScenarioId, resolutionIndex: number) => {
+    (scenario: ScenarioId, resolutionIndex: number, start: PlanetStart = 'young') => {
       const [width, height] = RESOLUTIONS[resolutionIndex]!;
-      send({ type: 'create', scenario, seed: randomSeed(), width, height });
+      send({ type: 'create', scenario, seed: randomSeed(), width, height, start });
     },
     [send],
   );
-  const newPlanet = (scenario: ScenarioId, resolutionIndex: number) => {
-    createPlanet(scenario, resolutionIndex);
+  const newPlanet = (scenario: ScenarioId, resolutionIndex: number, start: PlanetStart) => {
+    createPlanet(scenario, resolutionIndex, start);
     setLayer(SCENARIO_VIEW[scenario].layer);
     setError(null);
   };

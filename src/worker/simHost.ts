@@ -35,6 +35,7 @@ export class SimHost {
             seed: request.seed,
             width: request.width,
             height: request.height,
+            start: request.start,
           });
           this.sendFrame();
           break;
@@ -81,7 +82,9 @@ export class SimHost {
     if (!this.world) return;
     const { planet } = this.world;
     try {
-      const bytes = await compress(serializeGame({ scenario: this.scenario, planet }));
+      const bytes = await compress(
+        serializeGame({ scenario: this.scenario, settings: this.world.settings, planet }),
+      );
       const fileName = `planet-${Math.round(planet.globals.year)}.geogenesis`;
       this.post({ type: 'saved', bytes: bytes.buffer as ArrayBuffer, fileName }, [bytes.buffer]);
     } catch (error) {
@@ -94,7 +97,7 @@ export class SimHost {
       const game = deserializeGame(await decompress(new Uint8Array(buffer)));
       if (!isScenarioId(game.scenario)) throw new Error(`Unknown scenario "${game.scenario}"`);
       this.scenario = game.scenario;
-      this.world = restoreScenario(game.scenario, game.planet);
+      this.world = restoreScenario(game.scenario, game.planet, game.settings);
       this.sendFrame();
     } catch (error) {
       this.post({ type: 'error', message: String(error) }, []);

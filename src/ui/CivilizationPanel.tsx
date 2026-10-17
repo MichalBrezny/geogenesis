@@ -63,7 +63,7 @@ export function EventLog({ events }: { events: Frame['events'] }) {
 function describe(event: Frame['events'][number]): string {
   const subject = event.subject ?? '';
   const name =
-    event.key === 'largeEruption' || event.key === 'largeIgneousProvince'
+    event.key === 'largeEruption' || event.key === 'largeIgneousProvince' || event.key === 'impact'
       ? subject
       : event.key === 'ageReached'
         ? t(`age.${subject}` as MessageKey)

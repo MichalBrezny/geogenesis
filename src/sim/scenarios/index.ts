@@ -1,23 +1,40 @@
 import type { PlanetOptions, PlanetState } from '../core/planet';
-import { createRandomWorld, randomWorldFromPlanet, type World } from '../world';
+import {
+  createRandomWorld,
+  randomWorldFromPlanet,
+  type PlanetStart,
+  type RandomWorldSettings,
+  type World,
+} from '../world';
 import { createDaisyworld, daisyworldFromPlanet } from './daisyworld';
 
 interface Scenario {
   /** Generates a new planet. */
   create: (options: PlanetOptions) => World;
   /** Rebuilds the simulation around a saved planet. */
-  restore: (planet: PlanetState) => World;
+  restore: (planet: PlanetState, settings?: RandomWorldSettings) => World;
+}
+
+export interface ScenarioOptions extends PlanetOptions {
+  start?: PlanetStart;
 }
 
 /** Scenarios the player can start; ids are stable (used in messages and saves). */
 export const SCENARIOS = {
-  random: { create: createRandomWorld, restore: randomWorldFromPlanet },
+  random: {
+    create: createRandomWorld,
+    restore: (planet, settings) => randomWorldFromPlanet(planet, settings),
+  },
   daisyworld: { create: createDaisyworld, restore: (planet) => daisyworldFromPlanet(planet) },
   aquarium: {
     // SimEarth's water world: no continents, only the islands volcanoes build.
     create: (options) =>
       createRandomWorld({ ...options, oceanFraction: 1, continentalFraction: 0 }),
-    restore: (planet) => randomWorldFromPlanet(planet, { continentalFraction: 0 }),
+    restore: (planet, settings) =>
+      randomWorldFromPlanet(planet, {
+        continentalFraction: 0,
+        start: settings?.start ?? 'quick',
+      }),
   },
 } satisfies Record<string, Scenario>;
 
@@ -28,10 +45,14 @@ export function isScenarioId(id: string): id is ScenarioId {
   return id in SCENARIOS;
 }
 
-export function createScenario(id: ScenarioId, options: PlanetOptions): World {
+export function createScenario(id: ScenarioId, options: ScenarioOptions): World {
   return SCENARIOS[id].create(options);
 }
 
-export function restoreScenario(id: ScenarioId, planet: PlanetState): World {
-  return SCENARIOS[id].restore(planet);
+export function restoreScenario(
+  id: ScenarioId,
+  planet: PlanetState,
+  settings?: RandomWorldSettings,
+): World {
+  return SCENARIOS[id].restore(planet, settings);
 }

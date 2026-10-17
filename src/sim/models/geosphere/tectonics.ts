@@ -3,6 +3,7 @@ import { getTopology, NEIGHBOR_COUNT } from '../../core/grid';
 import { createValueNoise3D, fractalNoise, type Noise3D } from '../../core/noise';
 import type { PlanetState, Plate } from '../../core/planet';
 import { createRng, type Rng } from '../../core/rng';
+import { mantleHeat } from '../atmosphere/carbon';
 import { anchorPlates, randomPlate, randomUnitVector, removePlateExclaves } from './plates';
 
 export interface TectonicsOptions {
@@ -54,6 +55,12 @@ export function generateTectonicPlanet(state: PlanetState, options: TectonicsOpt
   const pos = grid.cellPosition;
 
   state.plates = Array.from({ length: opts.plateCount }, (_, id) => randomPlate(rng, id, grid));
+  const speedFactor = mantleHeat(state.globals.year);
+  for (const plate of state.plates) {
+    plate.angularSpeed *= speedFactor;
+    plate.targetSpeed *= speedFactor;
+  }
+  state.geosphere.plateSpeedMantleFactor = speedFactor;
   state.geosphere.initialPlateCount = opts.plateCount;
   const plateCentres = Array.from({ length: opts.plateCount }, () => randomUnitVector(rng));
   const { plateId, crustType, elevation } = state.fields;

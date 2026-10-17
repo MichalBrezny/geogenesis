@@ -114,7 +114,9 @@ export const volcanicActivityModel: SimComponent = {
       state.geosphere.volcanicBoost[i] = state.geosphere.volcanicBoost[i]! * boostDecay;
       volcanicActivity[i] =
         (plateMean > 0 ? (boundary[i]! * plateTarget) / plateMean : 0) +
-        (hotspotMean > 0 ? (hotspot[i]! * HOTSPOT_SHARE) / hotspotMean : 0) +
+        (hotspotMean > 0
+          ? (hotspot[i]! * HOTSPOT_SHARE * mantleHeat(state.globals.year)) / hotspotMean
+          : 0) +
         state.geosphere.volcanicBoost[i]!;
       if (dtYears > 0 && !crustType[i] && hotspot[i]! > 0.01) {
         elevation[i] = Math.min(
@@ -327,10 +329,9 @@ function weightedActivityCell(state: PlanetState, rng: Rng): number {
 }
 
 function createLips(state: PlanetState, dt: number, activity: number, rng: Rng): void {
-  // Young planets already have larger activity through the mantle-heat-scaled carbon
-  // cycle; cap the spatial multiplier so pathological player boosts cannot spam LIPs.
-  const expected =
-    (dt / LIP_INTERVAL) * mantleHeat(state.globals.year) * Math.max(0.25, Math.min(3, activity));
+  // The spatial activity already includes hotter-mantle plate and hotspot scaling;
+  // cap it so pathological player boosts cannot spam LIPs.
+  const expected = (dt / LIP_INTERVAL) * Math.max(0.25, Math.min(3, activity));
   const count = samplePoisson(expected, rng);
   const start = state.globals.year;
   for (let n = 0; n < count; n++) {

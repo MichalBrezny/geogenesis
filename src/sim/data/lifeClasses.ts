@@ -43,6 +43,8 @@ export interface LifeClass {
    * ancestor. Higher means longer waits.
    */
   difficulty: number;
+  /** Multiplier on the base waiting time for this evolutionary transition. */
+  evolutionTime?: number;
   /** Map tier: how advanced the class counts for the "most advanced life" layer. */
   tier: LifeTier;
 }
@@ -75,6 +77,9 @@ export const LIFE_CLASSES: readonly LifeClass[] = [
     temperatureTolerance: 30,
     minOxygen: 0.002,
     difficulty: 1,
+    // Endosymbiosis was an exceptional transition: 30 × 40 Myr = 1.2 Gyr
+    // at full habitat overlap, before oxygen and geographic limits are applied.
+    evolutionTime: 30,
     tier: 'microbes',
   },
   {
@@ -85,6 +90,9 @@ export const LIFE_CLASSES: readonly LifeClass[] = [
     temperatureTolerance: 28,
     minOxygen: 0.01,
     difficulty: 0.6,
+    // Land plants and animals waited for a well-oxygenated, eukaryote-rich ocean: on Earth
+    // complex life came ~1.2 Gyr after the first eukaryotes.
+    evolutionTime: 60,
     tier: 'plants',
   },
   {
@@ -95,6 +103,7 @@ export const LIFE_CLASSES: readonly LifeClass[] = [
     temperatureTolerance: 22,
     minOxygen: 0.03,
     difficulty: 1.5,
+    evolutionTime: 40,
     tier: 'seaAnimals',
   },
   {

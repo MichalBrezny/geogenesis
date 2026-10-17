@@ -50,7 +50,8 @@ describe('plateDrift', () => {
   });
 
   it('keeps continental crust and plate count roughly stable over 500 Myr', () => {
-    const { planet, simulation } = createRandomWorld({ seed: 4 });
+    // A mature planet: young ones grow their continents on purpose.
+    const { planet, simulation } = createRandomWorld({ seed: 4, start: 'quick' });
     const startCrust = areaWeightedMean(planet.grid, planet.fields.crustType);
     for (let s = 0; s < 500; s++) simulation.step(planet, 1e6);
     const crust = areaWeightedMean(planet.grid, planet.fields.crustType);
@@ -87,12 +88,14 @@ describe('plateDrift', () => {
     expect(a.planet.fields.plateId).toEqual(b.planet.fields.plateId);
   });
 
-  it('does nothing when the speed factor is 0', () => {
+  it('does not move plates when the speed factor is 0', () => {
     const planet = createPlanet({ seed: 7 });
+    planet.globals.year = 4.5e9;
     generateTectonicPlanet(planet);
-    const before = Float32Array.from(planet.fields.elevation);
+    const before = Int32Array.from(planet.fields.plateId);
+    // Ocean floor still cools and crust still accretes; only the plates stand still.
     createPlateDrift({ speedFactor: 0 }).runOneStep(planet, 1e7, createRng(1));
-    expect(planet.fields.elevation).toEqual(before);
+    expect(planet.fields.plateId).toEqual(before);
   });
 
   it('transfers a small detached piece between reference rasters without losing crust', () => {
