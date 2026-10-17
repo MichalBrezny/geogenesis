@@ -8,7 +8,16 @@ import {
 } from '../../core/grid';
 import type { PlanetState, Plate } from '../../core/planet';
 import type { Rng } from '../../core/rng';
-import { randomizeMotion, referenceCell, rotatePlate } from './plates';
+import {
+  componentArea,
+  currentCell,
+  randomPlate,
+  randomizeMotion,
+  referenceCell,
+  rotatePlate,
+  surroundingPlate,
+  valueComponents,
+} from './plates';
 import { ABYSSAL_DEPTH, DEFAULT_MAX_UPLIFT_RATE, updateUplift } from './tectonics';
 
 export interface DriftOptions {
@@ -51,6 +60,13 @@ const SPEED_RECOVERY_TIME = 80e6;
 const SHELF_ACCRETION_TIME = 10e6;
 /** Shelf cells shallower than this (m) next to a continent can accrete. */
 const SHELF_DEPTH = -3000;
+/**
+ * Detached crust below 200,000 km² is a terrane, not an independent plate.
+ * Larger detached bodies rift into a new plate when a stable slot is available.
+ */
+export const MIN_INDEPENDENT_PLATE_AREA = 200_000 * 1e6;
+/** Component cleanup cadence in plate time; an accumulator makes it step-length independent. */
+const PLATE_CLEANUP_INTERVAL = 5e6;
 
 /**
  * Simple continental drift.
@@ -105,7 +121,16 @@ export function createPlateDrift(options: DriftOptions = {}): SimComponent {
       rotatePlate(plate, plate.angularSpeed * speed * dtYears);
     }
     fillPlateHoles(state);
-    const collisions = composePlates(state, rng);
+    let collisions = composePlates(state, rng);
+    state.geosphere.cleanupElapsedYears += dtYears;
+    if (state.geosphere.cleanupElapsedYears >= PLATE_CLEANUP_INTERVAL) {
+      state.geosphere.cleanupElapsedYears %= PLATE_CLEANUP_INTERVAL;
+      // A transfer can expose a previously hidden overlap. A few bounded passes
+      // settle those secondary crumbs at the same physical cleanup time.
+      for (let pass = 0; pass < 3 && cleanupPlateFragments(state, rng); pass++) {
+        collisions = composePlates(state, rng);
+      }
+    }
     for (const plate of state.plates) {
       if (collisions[plate.id]) {
         plate.angularSpeed *= Math.exp(-dtYears / COLLISION_STALL_TIME);
@@ -294,6 +319,145 @@ function composePlates(state: PlanetState, rng: Rng): Uint8Array {
   buffers.composedValid = true;
   spreadThickening(state, thickening);
   return collided;
+}
+
+/**
+ * Reassigns detached visible pieces by moving their existing crust samples between
+ * plate reference rasters. The planet ownership raster is used only to identify
+ * pieces and their enclosing neighbour; plate shapes are never reconstructed from it.
+ * Returns true when any raster changed.
+ */
+export function cleanupPlateFragments(state: PlanetState, rng: Rng): boolean {
+  const { grid, plates } = state;
+  const ids = state.fields.plateId;
+  const initialCount = state.geosphere.initialPlateCount || plates.length;
+  // Four simultaneous daughter plates are enough to represent active rifts without
+  // making the O(cells × plates) compositor steadily more expensive. The count
+  // also never exceeds twice the generated plate count on small test worlds.
+  const capacity = Math.max(initialCount, Math.min(initialCount * 2, initialCount + 4));
+  let changed = false;
+
+  // Work from a snapshot: transfers are composed together after this pass.
+  const snapshot = Int32Array.from(ids);
+  for (const plate of [...plates]) {
+    const pieces = valueComponents(grid, snapshot, plate.id);
+    if (pieces.length === 0) continue;
+    pieces.sort((a, b) => componentArea(grid, b) - componentArea(grid, a));
+    const totalArea = pieces.reduce((sum, piece) => sum + componentArea(grid, piece), 0);
+
+    if (totalArea < MIN_INDEPENDENT_PLATE_AREA) {
+      const cells = pieces.flat();
+      const receiverId = surroundingPlate(grid, snapshot, cells, plate.id);
+      const receiver = plates[receiverId];
+      if (receiver && transferCrust(state, plate, receiver)) changed = true;
+      continue;
+    }
+
+    for (const piece of pieces.slice(1)) {
+      const receiverId = surroundingPlate(grid, snapshot, piece, plate.id);
+      const receiver = plates[receiverId];
+      if (!receiver) continue;
+      const area = componentArea(grid, piece);
+      if (area >= MIN_INDEPENDENT_PLATE_AREA) {
+        const target = plateSlotForRift(state, plate, rng, capacity);
+        if (target) {
+          const selected = cellMask(grid.cellCount, piece);
+          if (transferCrust(state, plate, target, selected)) changed = true;
+          continue;
+        }
+      }
+      const selected = cellMask(grid.cellCount, piece);
+      if (transferCrust(state, plate, receiver, selected)) changed = true;
+    }
+  }
+  return changed;
+}
+
+function cellMask(length: number, cells: readonly number[]): Uint8Array {
+  const mask = new Uint8Array(length);
+  for (const cell of cells) mask[cell] = 1;
+  return mask;
+}
+
+/** Moves owned source samples whose current positions lie in `selected` (or all samples). */
+function transferCrust(
+  state: PlanetState,
+  source: Plate,
+  target: Plate,
+  selected?: Uint8Array,
+): boolean {
+  const { grid } = state;
+  const sourceCrust = source.crust;
+  const targetCrust = target.crust;
+  const moves: [number, number][] = [];
+  const movedSource = new Uint8Array(grid.cellCount);
+  const claimed = new Uint8Array(grid.cellCount);
+  if (selected) {
+    for (let planetCell = 0; planetCell < grid.cellCount; planetCell++) {
+      if (!selected[planetCell]) continue;
+      const sourceReference = referenceCell(grid, source, planetCell);
+      if (!sourceCrust.owned[sourceReference] || movedSource[sourceReference]) continue;
+      const targetReference = referenceCell(grid, target, planetCell);
+      if (claimed[targetReference]) continue;
+      movedSource[sourceReference] = 1;
+      claimed[targetReference] = 1;
+      moves.push([sourceReference, targetReference]);
+    }
+  } else {
+    for (let sourceReference = 0; sourceReference < grid.cellCount; sourceReference++) {
+      if (!sourceCrust.owned[sourceReference]) continue;
+      const planetCell = currentCell(grid, source, sourceReference);
+      const targetReference = referenceCell(grid, target, planetCell);
+      if (claimed[targetReference]) continue;
+      claimed[targetReference] = 1;
+      moves.push([sourceReference, targetReference]);
+    }
+  }
+  for (const [sourceReference, targetReference] of moves) {
+    if (!targetCrust.owned[targetReference]) {
+      targetCrust.owned[targetReference] = 1;
+      targetCrust.elevation[targetReference] = sourceCrust.elevation[sourceReference]!;
+      targetCrust.type[targetReference] = sourceCrust.type[sourceReference]!;
+    } else if (sourceCrust.type[sourceReference] && !targetCrust.type[targetReference]) {
+      targetCrust.type[targetReference] = 1;
+      targetCrust.elevation[targetReference] = sourceCrust.elevation[sourceReference]!;
+    } else {
+      targetCrust.elevation[targetReference] = Math.max(
+        targetCrust.elevation[targetReference]!,
+        sourceCrust.elevation[sourceReference]!,
+      );
+    }
+    sourceCrust.owned[sourceReference] = 0;
+  }
+  return moves.length > 0;
+}
+
+/** Reuses an empty stable id before appending a new id, up to twice the generated count. */
+function plateSlotForRift(
+  state: PlanetState,
+  parent: Plate,
+  rng: Rng,
+  capacity: number,
+): Plate | undefined {
+  let target = state.plates.find((plate) => !plate.crust.owned.some((value) => value === 1));
+  if (!target && state.plates.length < capacity) {
+    target = randomPlate(rng, state.plates.length, state.grid);
+    state.plates.push(target);
+  }
+  if (!target || target === parent) return undefined;
+  target.rotation = [...parent.rotation];
+  target.crust.owned.fill(0);
+  // A small seeded pole perturbation gives the daughter a separating motion.
+  const [x, y, z] = parent.eulerPole;
+  const scale = 0.12;
+  const px = x + (rng.next() * 2 - 1) * scale;
+  const py = y + (rng.next() * 2 - 1) * scale;
+  const pz = z + (rng.next() * 2 - 1) * scale;
+  const length = Math.hypot(px, py, pz);
+  target.eulerPole = [px / length, py / length, pz / length];
+  target.targetSpeed = parent.targetSpeed * (0.9 + rng.next() * 0.2);
+  target.angularSpeed = target.targetSpeed;
+  return target;
 }
 
 /**
@@ -495,50 +659,24 @@ function beats(a: Plate, ra: number, b: Plate, rb: number): boolean {
 
 /** Young ocean floor relaxes towards abyssal depth; trenches and arcs are left alone. */
 function coolOceanFloor(state: PlanetState, dtYears: number): void {
-  const { elevation, crustType, upliftRate } = state.fields;
+  const { elevation, crustType, upliftRate, volcanicActivity } = state.fields;
   const k = 1 - Math.exp(-dtYears / OCEAN_FLOOR_COOLING_TIME);
   for (let i = 0; i < elevation.length; i++) {
     const h = elevation[i]!;
-    if (crustType[i] || upliftRate[i]! > 0 || h > -1500 || h <= ABYSSAL_DEPTH) continue;
+    if (crustType[i] || upliftRate[i]! > 0 || volcanicActivity[i]! > 1 || h <= ABYSSAL_DEPTH)
+      continue;
     elevation[i] = h + (ABYSSAL_DEPTH - h) * k;
   }
 }
 
 /**
- * Gives every plate a new motion. If a plate slot is empty (its plate was fully
- * subducted), the largest plate splits in two along a random line.
+ * Gives every non-empty plate a new motion. Empty ids stay available for a later
+ * physically detected continental rift.
  */
 function reorganizePlates(state: PlanetState, rng: Rng): void {
-  const sizes = state.plates.map((plate) => plate.crust.owned.reduce((sum, v) => sum + v, 0));
-  const empty = sizes.indexOf(0);
-  if (empty >= 0) {
-    const largest = sizes.indexOf(Math.max(...sizes));
-    splitPlate(state.grid, state.plates[largest]!, state.plates[empty]!, rng);
-  }
-  for (const plate of state.plates) randomizeMotion(plate, rng, state.grid.radius);
-}
-
-/** Moves the part of `source` nearer to one of two random cells of it into `target`. */
-function splitPlate(grid: Grid, source: Plate, target: Plate, rng: Rng): void {
-  const owned: number[] = [];
-  source.crust.owned.forEach((v, i) => v && owned.push(i));
-  const a = owned[rng.int(0, owned.length)]!;
-  const b = owned[rng.int(0, owned.length)]!;
-  if (a === b) return;
-  target.rotation = [...source.rotation];
-  target.crust.owned.fill(0);
-  // Both plates share the same reference frame, so distances can be measured there.
-  const pos = grid.cellPosition;
-  const dot = (i: number, j: number) =>
-    pos[i * 3]! * pos[j * 3]! +
-    pos[i * 3 + 1]! * pos[j * 3 + 1]! +
-    pos[i * 3 + 2]! * pos[j * 3 + 2]!;
-  for (const i of owned) {
-    if (dot(i, b) > dot(i, a)) {
-      target.crust.owned[i] = 1;
-      target.crust.elevation[i] = source.crust.elevation[i]!;
-      target.crust.type[i] = source.crust.type[i]!;
-      source.crust.owned[i] = 0;
+  for (const plate of state.plates) {
+    if (plate.crust.owned.some((value) => value === 1)) {
+      randomizeMotion(plate, rng, state.grid.radius);
     }
   }
 }

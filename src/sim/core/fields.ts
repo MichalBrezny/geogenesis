@@ -66,6 +66,8 @@ export const FIELD_SPECS = {
   plateId: { type: 'i32', unit: '' },
   /** Tectonic uplift rate (negative = subsidence). */
   upliftRate: { type: 'f32', unit: 'm/yr' },
+  /** Relative volcanic activity (1 = present-day Earth area mean). */
+  volcanicActivity: { type: 'f32', unit: '' },
   /** Downstream cell of steepest descent; -1 for outlets (ocean, sinks). */
   flowReceiver: { type: 'i32', unit: '' },
   /** Cell indices ordered from downstream to upstream (receivers before donors). */

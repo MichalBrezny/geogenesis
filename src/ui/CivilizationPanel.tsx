@@ -63,12 +63,14 @@ export function EventLog({ events }: { events: Frame['events'] }) {
 function describe(event: Frame['events'][number]): string {
   const subject = event.subject ?? '';
   const name =
-    event.key === 'ageReached'
-      ? t(`age.${subject}` as MessageKey)
-      : event.key === 'eraReached'
-        ? t(`era.${subject}` as MessageKey)
-        : subject
-          ? t(`lifeClass.${subject}` as MessageKey)
-          : '';
+    event.key === 'largeEruption' || event.key === 'largeIgneousProvince'
+      ? subject
+      : event.key === 'ageReached'
+        ? t(`age.${subject}` as MessageKey)
+        : event.key === 'eraReached'
+          ? t(`era.${subject}` as MessageKey)
+          : subject
+            ? t(`lifeClass.${subject}` as MessageKey)
+            : '';
   return t(`event.${event.key}`, { name });
 }

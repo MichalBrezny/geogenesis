@@ -41,6 +41,7 @@ const SCENARIO_VIEW: Record<
     layers: [
       'terrain',
       'plates',
+      'volcanism',
       'airTemperature',
       'seasons',
       'pressure',
@@ -73,6 +74,7 @@ const SCENARIO_VIEW: Record<
       'life',
       'terrain',
       'plates',
+      'volcanism',
       'airTemperature',
       'seasons',
       'pressure',

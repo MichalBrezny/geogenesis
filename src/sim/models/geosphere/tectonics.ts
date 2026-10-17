@@ -3,7 +3,7 @@ import { getTopology, NEIGHBOR_COUNT } from '../../core/grid';
 import { createValueNoise3D, fractalNoise, type Noise3D } from '../../core/noise';
 import type { PlanetState, Plate } from '../../core/planet';
 import { createRng, type Rng } from '../../core/rng';
-import { anchorPlates, randomPlate, randomUnitVector } from './plates';
+import { anchorPlates, randomPlate, randomUnitVector, removePlateExclaves } from './plates';
 
 export interface TectonicsOptions {
   plateCount?: number;
@@ -54,9 +54,11 @@ export function generateTectonicPlanet(state: PlanetState, options: TectonicsOpt
   const pos = grid.cellPosition;
 
   state.plates = Array.from({ length: opts.plateCount }, (_, id) => randomPlate(rng, id, grid));
+  state.geosphere.initialPlateCount = opts.plateCount;
   const plateCentres = Array.from({ length: opts.plateCount }, () => randomUnitVector(rng));
   const { plateId, crustType, elevation } = state.fields;
   assignPlates(state, plateCentres, rng);
+  removePlateExclaves(state);
 
   // Continental crust: per-plate bias plus noise, thresholded to the target land fraction.
   const continental = state.plates.map(() => rng.next() < opts.continentalPlateChance);
@@ -91,7 +93,21 @@ export function generateTectonicPlanet(state: PlanetState, options: TectonicsOpt
     elevation[i] = elevation[i]! + relief[i]! + detail * (crustType[i] ? 400 : 250);
   }
   anchorPlates(state);
+  initializeHotspots(state, rng);
   updateUplift(state, opts.maxUpliftRate);
+}
+
+/** Creates 10–20 major mantle plumes, comparable with the major hotspots on Earth. */
+function initializeHotspots(state: PlanetState, rng: Rng): void {
+  const count = rng.int(10, 21);
+  const now = state.globals.year;
+  state.geosphere.hotspots = Array.from({ length: count }, (_, id) => ({
+    id,
+    position: randomUnitVector(rng),
+    strength: 0.7 + rng.next() * 0.6,
+    birthYear: now - rng.next() * 300e6,
+    deathYear: now + 300e6 + rng.next() * 500e6,
+  }));
 }
 
 /** Nearest plate centre after warping each cell's position with noise, giving irregular plate shapes. */

@@ -10,7 +10,7 @@ import { HISTORY_SERIES } from './history';
  */
 // Kept from the project's working title so that older saves still load.
 const MAGIC = 'SIMEARTH';
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 const TYPED_ARRAYS = {
   Float64Array,
@@ -92,7 +92,7 @@ export function deserializeGame(bytes: Uint8Array): SavedGame {
   return game;
 }
 
-/** Keeps version-2 saves loadable when optional plain-data state is added. */
+/** Hydrates optional state added within the current save version. */
 function hydrateAddedState(planet: PlanetState): void {
   planet.globals.seaLevel ??= 0;
   planet.globals.sedimentExport ??= 0;
@@ -100,6 +100,19 @@ function hydrateAddedState(planet: PlanetState): void {
   planet.fields.seasonalAmplitude ??= new Float32Array(planet.grid.cellCount);
   planet.fields.lakeDepth ??= new Float32Array(planet.grid.cellCount);
   planet.fields.lakeType ??= new Int32Array(planet.grid.cellCount);
+  planet.fields.volcanicActivity ??= new Float32Array(planet.grid.cellCount);
+  planet.globals.volcanicAerosol ??= 0;
+  planet.globals.lipOutgassing ??= 0;
+  planet.geosphere ??= {
+    initialPlateCount: planet.plates.length,
+    hotspots: [],
+    volcanicBoost: new Float32Array(planet.grid.cellCount),
+    activeLips: [],
+    nextLipId: 1,
+    lipCount: 0,
+    cleanupElapsedYears: 0,
+  };
+  planet.geosphere.cleanupElapsedYears ??= 0;
   planet.controls.obliquity ??= DEFAULT_CONTROLS.obliquity;
   const samples = planet.history.year?.length ?? 0;
   for (const name of HISTORY_SERIES) planet.history[name] ??= Array(samples).fill(0);

@@ -94,6 +94,12 @@ export const LAYER_ICONS: Record<MapLayer, ReactNode> = {
       <path d="m4 9 6 2-1 5 3 5m-2-10 7-5m-5 10 8 1" />
     </Icon>
   ),
+  volcanism: (
+    <Icon>
+      <path d="M2 21 8.5 11h7L22 21Z" />
+      <path d="M10 8c0-2 4-2 4-4m-2 4c0-1.5 3-2 3-4" />
+    </Icon>
+  ),
   airTemperature: (
     <Icon>
       <path d="M14 14.5V5a2 2 0 0 0-4 0v9.5a4 4 0 1 0 4 0Z" />

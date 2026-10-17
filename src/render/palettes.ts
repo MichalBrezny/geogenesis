@@ -65,6 +65,15 @@ export const precipitationPalette = gradient([
   { value: 4000, color: [30, 50, 140] },
 ]);
 
+/** Relative volcanic activity: dim background through orange to incandescent yellow. */
+export const volcanicPalette = gradient([
+  { value: 0, color: [18, 22, 28] },
+  { value: 0.2, color: [67, 43, 46] },
+  { value: 1, color: [180, 57, 35] },
+  { value: 3, color: [241, 137, 43] },
+  { value: 6, color: [255, 235, 132] },
+]);
+
 /** Sea-level pressure (hPa): cool lows and warm highs, centred on 1013 hPa. */
 export const pressurePalette = gradient([
   { value: 997, color: [38, 92, 170] },

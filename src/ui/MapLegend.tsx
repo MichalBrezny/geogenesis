@@ -16,6 +16,7 @@ import {
   seaAnomalyPalette,
   temperaturePalette,
   windSpeedPalette,
+  volcanicPalette,
   type Rgb,
 } from '../render/palettes';
 import { BIOME_IDS, BIOMES } from '../sim/data/biomes';
@@ -86,6 +87,13 @@ const SCALES: Partial<Record<MapLayer, Scale>> = {
     max: 4000,
     ticks: [0, 600, 1200, 2500, 4000],
     unit: 'mm/yr',
+  },
+  volcanism: {
+    palette: volcanicPalette,
+    min: 0,
+    max: 6,
+    ticks: [0, 0.2, 1, 3, 6],
+    unit: '× Earth mean',
   },
 };
 

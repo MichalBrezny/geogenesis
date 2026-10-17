@@ -1,4 +1,5 @@
 import type { SimComponent } from '../../core/component';
+import { areaWeightedMean } from '../../core/grid';
 import type { PlanetState } from '../../core/planet';
 import { Biome, BIOMES } from '../../data/biomes';
 import { isOcean } from '../geosphere/seaLevel';
@@ -24,7 +25,7 @@ const WEATHERING_CO2_HALF_SATURATION = 10;
 /** Weathering of bare rock relative to an average vegetated surface (plants speed it up ~3×). */
 const BARREN_WEATHERING = 0.35;
 /** Share of outgassing from hotspots and other volcanism independent of plate motion. */
-const HOTSPOT_SHARE = 0.3;
+export const HOTSPOT_SHARE = 0.3;
 /** E-folding time (years) of the excess heat of a young planet's mantle. */
 const MANTLE_COOLING_TIME = 2.5e9;
 /**
@@ -77,15 +78,15 @@ export function createCarbonCycle(options: CarbonCycleOptions = {}): SimComponen
       'plateId',
       'biome',
       'vegetation',
+      'volcanicActivity',
     ],
     outputs: [],
     runOneStep(state, dtYears) {
-      const plates = tectonicActivity(state);
+      const activity = spatialVolcanicActivity(state);
       const outgassing =
         volcanism *
         state.controls.volcanism *
-        mantleHeat(state.globals.year) *
-        (HOTSPOT_SHARE + (1 - HOTSPOT_SHARE) * plates);
+        (mantleHeat(state.globals.year) * activity + state.globals.lipOutgassing);
       const atmosphere = state.globals.atmosphere;
       const before = atmosphere.co2;
       // Burial needs carbon to fix: it fades out as CO₂ runs out, like weathering.
@@ -128,6 +129,15 @@ export function createCarbonCycle(options: CarbonCycleOptions = {}): SimComponen
       };
     },
   };
+}
+
+/**
+ * Area-integrated spatial volcanism. A zero field is treated as an old/uninitialized
+ * save and falls back to the former plate-speed formula, preserving its calibration.
+ */
+export function spatialVolcanicActivity(state: PlanetState): number {
+  const mean = areaWeightedMean(state.grid, state.fields.volcanicActivity);
+  return mean > 0 ? mean : HOTSPOT_SHARE + (1 - HOTSPOT_SHARE) * tectonicActivity(state);
 }
 
 /**

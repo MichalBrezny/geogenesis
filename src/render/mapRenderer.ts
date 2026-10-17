@@ -9,6 +9,7 @@ import {
   seasonalRangePalette,
   seaAnomalyPalette,
   temperaturePalette,
+  volcanicPalette,
   windSpeedPalette,
   type Rgb,
 } from './palettes';
@@ -17,6 +18,7 @@ import {
 export const RENDERED_FIELDS = [
   'elevation',
   'plateId',
+  'volcanicActivity',
   'discharge',
   'lakeDepth',
   'lakeType',
@@ -48,6 +50,7 @@ export interface MapSource {
 export const MAP_LAYERS = [
   'terrain',
   'plates',
+  'volcanism',
   'airTemperature',
   'seasons',
   'pressure',
@@ -117,9 +120,18 @@ const layerColors: Record<MapLayer, CellColor> = {
     return ice > 0 ? mix(color, ocean ? SEA_ICE_COLOR : LAND_ICE_COLOR, 0.2 + 0.8 * ice) : color;
   },
   plates(state, i) {
-    const base = plateColor(state.fields.plateId[i]!);
+    const base = PLATE_PALETTE[state.fields.plateId[i]! % PLATE_PALETTE.length]!;
     // Dim the ocean so continents stay recognisable.
     return state.fields.elevation[i]! < state.seaLevel ? mix(base, [10, 20, 40], 0.45) : base;
+  },
+  volcanism(state, i) {
+    const terrain = elevationPalette(state.fields.elevation[i]! - state.seaLevel);
+    const activity = state.fields.volcanicActivity[i]!;
+    return mix(
+      mix(terrain, [12, 16, 22], 0.72),
+      volcanicPalette(activity),
+      Math.min(0.9, activity / 3),
+    );
   },
   airTemperature(state, i, temperatureMonth) {
     return temperaturePalette(displayedTemperature(state, i, temperatureMonth));
@@ -194,6 +206,7 @@ export function layerPixels(
 ): Uint8ClampedArray<ArrayBuffer> {
   const { cellCount } = state.grid;
   const pixels = new Uint8ClampedArray(cellCount * 4);
+  if (layer === 'plates') return platePixels(state, pixels);
   const color = layerColors[layer];
   for (let i = 0; i < cellCount; i++) {
     const [r, g, b] = color(state, i, temperatureMonth);
@@ -205,6 +218,78 @@ export function layerPixels(
   }
   return pixels;
 }
+
+/** Contrasting greedy graph colours plus a one-native-pixel boundary line. */
+function platePixels(
+  state: MapSource,
+  pixels: Uint8ClampedArray<ArrayBuffer>,
+): Uint8ClampedArray<ArrayBuffer> {
+  const { width, height } = state.grid;
+  const ids = state.fields.plateId;
+  const maxId = ids.reduce((maximum, id) => Math.max(maximum, id), 0);
+  const adjacency = Array.from({ length: maxId + 1 }, () => new Set<number>());
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = y * width + x;
+      const east = y * width + ((x + 1) % width);
+      const south = y + 1 < height ? i + width : -1;
+      for (const neighbor of [east, south]) {
+        if (neighbor < 0 || ids[neighbor] === ids[i]) continue;
+        adjacency[ids[i]!]!.add(ids[neighbor]!);
+        adjacency[ids[neighbor]!]!.add(ids[i]!);
+      }
+    }
+  }
+  const assigned = new Int16Array(maxId + 1).fill(-1);
+  for (let id = 0; id <= maxId; id++) {
+    const used = new Uint8Array(PLATE_PALETTE.length);
+    for (const neighbor of adjacency[id]!) {
+      const color = assigned[neighbor]!;
+      if (color >= 0) used[color] = 1;
+    }
+    let color = id % PLATE_PALETTE.length;
+    for (let k = 0; k < PLATE_PALETTE.length; k++) {
+      const candidate = (id + k) % PLATE_PALETTE.length;
+      if (!used[candidate]) {
+        color = candidate;
+        break;
+      }
+    }
+    assigned[id] = color;
+  }
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = y * width + x;
+      const east = y * width + ((x + 1) % width);
+      const south = y + 1 < height ? i + width : -1;
+      const boundary = ids[east] !== ids[i] || (south >= 0 && ids[south] !== ids[i]);
+      let color: Rgb = boundary ? [9, 13, 18] : PLATE_PALETTE[assigned[ids[i]!]!]!;
+      if (!boundary && state.fields.elevation[i]! < state.seaLevel) {
+        color = mix(color, [10, 20, 40], 0.45);
+      }
+      const p = i * 4;
+      pixels[p] = color[0];
+      pixels[p + 1] = color[1];
+      pixels[p + 2] = color[2];
+      pixels[p + 3] = 255;
+    }
+  }
+  return pixels;
+}
+
+/** Qualitative palette chosen for separation in hue and lightness. */
+export const PLATE_PALETTE: readonly Rgb[] = [
+  [69, 117, 180],
+  [230, 126, 34],
+  [79, 157, 105],
+  [196, 78, 82],
+  [137, 101, 184],
+  [196, 137, 68],
+  [84, 166, 169],
+  [214, 103, 164],
+  [154, 150, 65],
+  [120, 120, 125],
+];
 
 /**
  * Draws one layer at native grid resolution (1 pixel per cell) into the canvas.
@@ -240,17 +325,4 @@ function mix(a: Rgb, b: Rgb, t: number): Rgb {
     Math.round(a[1] + (b[1] - a[1]) * t),
     Math.round(a[2] + (b[2] - a[2]) * t),
   ];
-}
-
-/** Distinct, stable colour per plate id (golden-angle hue spacing). */
-function plateColor(id: number): Rgb {
-  const hue = (id * 137.508) % 360;
-  return hslToRgb(hue, 0.55, 0.55);
-}
-
-function hslToRgb(h: number, s: number, l: number): Rgb {
-  const k = (n: number) => (n + h / 30) % 12;
-  const a = s * Math.min(l, 1 - l);
-  const f = (n: number) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
-  return [Math.round(f(0) * 255), Math.round(f(8) * 255), Math.round(f(4) * 255)];
 }

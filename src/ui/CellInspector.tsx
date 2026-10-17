@@ -29,6 +29,7 @@ export function CellInspector({ frame, cell }: { frame: Frame; cell: HoveredCell
     ['inspect.warmestMonth', `${(f.airTemperature[i]! + f.seasonalAmplitude[i]!).toFixed(1)} °C`],
     ['inspect.coldestMonth', `${(f.airTemperature[i]! - f.seasonalAmplitude[i]!).toFixed(1)} °C`],
     ['inspect.precipitation', `${Math.round(f.precipitation[i]!).toLocaleString('en')} mm/yr`],
+    ['inspect.volcanism', `${f.volcanicActivity[i]!.toFixed(2)} × Earth mean`],
     ['inspect.wind', formatWind(f.windU[i]!, f.windV[i]!)],
     ['inspect.clouds', `${Math.round(f.cloudCover[i]! * 100)}%`],
     ['inspect.biome', t(`biome.${BIOMES[f.biome[i] as Biome].key}` as MessageKey)],

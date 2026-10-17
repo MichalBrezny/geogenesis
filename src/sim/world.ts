@@ -19,6 +19,7 @@ import { flowRouting } from './models/geosphere/flowRouting';
 import { seaLevelModel } from './models/geosphere/seaLevel';
 import { createStreamPowerEroder } from './models/geosphere/streamPower';
 import { generateTectonicPlanet, tectonicUplift } from './models/geosphere/tectonics';
+import { eruptionModel, volcanicActivityModel } from './models/geosphere/volcanism';
 import { recordHistory } from './history';
 import { createSimulation, withMinInterval, type Simulation } from './simulation';
 import { energyIncome, STARTING_ENERGY } from './tools/tools';
@@ -102,6 +103,8 @@ export function randomWorldFromPlanet(
         SLOW_PROCESS_INTERVAL,
       ),
       withMinInterval(tectonicUplift, SLOW_PROCESS_INTERVAL),
+      withMinInterval(volcanicActivityModel, SLOW_PROCESS_INTERVAL),
+      eruptionModel,
       withMinInterval(flowRouting, SLOW_PROCESS_INTERVAL),
       withMinInterval(createStreamPowerEroder(), SLOW_PROCESS_INTERVAL),
       withMinInterval(createLinearDiffuser(), SLOW_PROCESS_INTERVAL),

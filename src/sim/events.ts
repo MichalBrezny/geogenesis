@@ -21,6 +21,8 @@ export type EventKey =
   | 'civilizationCollapsed'
   | 'exodus'
   | 'meteor'
+  | 'largeEruption'
+  | 'largeIgneousProvince'
   | 'monolith'
   | 'eraReached';
 

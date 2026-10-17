@@ -1,4 +1,4 @@
-import { cellAt, type Grid } from '../../core/grid';
+import { cellAt, getTopology, NEIGHBOR_COUNT, type Grid } from '../../core/grid';
 import type { PlanetState, Plate } from '../../core/planet';
 import type { Rng } from '../../core/rng';
 
@@ -75,6 +75,111 @@ export function referenceCell(grid: Grid, plate: Plate, i: number): number {
     m[1]! * x + m[4]! * y + m[7]! * z,
     m[2]! * x + m[5]! * y + m[8]! * z,
   );
+}
+
+/** Planet cell currently covered by a reference-frame cell of `plate`. */
+export function currentCell(grid: Grid, plate: Plate, reference: number): number {
+  const m = plate.rotation;
+  const p = grid.cellPosition;
+  const x = p[reference * 3]!;
+  const y = p[reference * 3 + 1]!;
+  const z = p[reference * 3 + 2]!;
+  return cellAt(
+    grid,
+    m[0]! * x + m[1]! * y + m[2]! * z,
+    m[3]! * x + m[4]! * y + m[5]! * z,
+    m[6]! * x + m[7]! * y + m[8]! * z,
+  );
+}
+
+/** 8-connected components of one value in a categorical planet raster. */
+export function valueComponents(grid: Grid, values: Int32Array, value: number): number[][] {
+  const { neighbors } = getTopology(grid);
+  const seen = new Uint8Array(grid.cellCount);
+  const components: number[][] = [];
+  const stack: number[] = [];
+  for (let start = 0; start < grid.cellCount; start++) {
+    if (seen[start] || values[start] !== value) continue;
+    const cells: number[] = [];
+    seen[start] = 1;
+    stack.push(start);
+    while (stack.length > 0) {
+      const cell = stack.pop()!;
+      cells.push(cell);
+      for (let d = 0; d < NEIGHBOR_COUNT; d++) {
+        const neighbor = neighbors[cell * NEIGHBOR_COUNT + d]!;
+        if (neighbor < 0 || seen[neighbor] || values[neighbor] !== value) continue;
+        seen[neighbor] = 1;
+        stack.push(neighbor);
+      }
+    }
+    components.push(cells);
+  }
+  return components;
+}
+
+/**
+ * Removes noise-warped Voronoi exclaves before crust is generated. Every piece
+ * except a plate's largest is assigned to the neighbour sharing the longest
+ * physical border. Repeating handles rare cases where reassignment joins two
+ * pieces of the receiving plate.
+ */
+export function removePlateExclaves(state: PlanetState): void {
+  const { grid } = state;
+  const ids = state.fields.plateId;
+  for (let pass = 0; pass < 4; pass++) {
+    let changed = false;
+    for (const plate of state.plates) {
+      const pieces = valueComponents(grid, ids, plate.id);
+      if (pieces.length <= 1) continue;
+      pieces.sort((a, b) => componentArea(grid, b) - componentArea(grid, a));
+      for (const piece of pieces.slice(1)) {
+        const receiver = surroundingPlate(grid, ids, piece, plate.id);
+        if (receiver < 0) continue;
+        for (const cell of piece) ids[cell] = receiver;
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
+}
+
+/** Physical area of a list of planet cells, m². */
+export function componentArea(grid: Grid, cells: readonly number[]): number {
+  let area = 0;
+  for (const cell of cells) area += grid.rowCellArea[Math.floor(cell / grid.width)]!;
+  return area;
+}
+
+/** Neighbour sharing the longest four-connected physical border with `cells`. */
+export function surroundingPlate(
+  grid: Grid,
+  ids: Int32Array,
+  cells: readonly number[],
+  excluded: number,
+): number {
+  const { neighbors, rowNorthEdge, rowSouthEdge } = getTopology(grid);
+  const borders = new Map<number, number>();
+  for (const cell of cells) {
+    const row = Math.floor(cell / grid.width);
+    for (let d = 0; d < NEIGHBOR_COUNT; d += 2) {
+      const neighbor = neighbors[cell * NEIGHBOR_COUNT + d]!;
+      if (neighbor < 0) continue;
+      const id = ids[neighbor]!;
+      if (id === excluded) continue;
+      const length = d === 0 ? rowNorthEdge[row]! : d === 4 ? rowSouthEdge[row]! : grid.dy;
+      borders.set(id, (borders.get(id) ?? 0) + length);
+    }
+  }
+  let best = -1;
+  let bestLength = -1;
+  for (const [id, length] of borders) {
+    if (length > bestLength || (length === bestLength && id < best)) {
+      best = id;
+      bestLength = length;
+    }
+  }
+  return best;
 }
 
 /** Rotates the plate further by `angle` radians about its current Euler pole. */

@@ -36,6 +36,10 @@ export interface GlobalState {
   circulation?: { hadleyWidth: number; meanItcz: number };
   /** Carbon fluxes relative to present-day Earth (written by the carbon cycle). */
   carbon: { outgassing: number; weathering: number; burial: number };
+  /** Cooling radiative forcing from volcanic aerosols, W/m² (positive means cooling). */
+  volcanicAerosol: number;
+  /** Outgassing of active large igneous provinces over the last step, relative to modern. */
+  lipOutgassing: number;
   /** Player energy budget (Ω). */
   energy: number;
   /** Experimental mode: tools cost nothing. */
@@ -76,6 +80,41 @@ export interface PlateCrust {
   elevation: Float32Array;
   /** Same meaning as the crustType field. */
   type: Uint8Array;
+}
+
+/** A long-lived mantle plume fixed in the planet/mantle reference frame. */
+export interface MantleHotspot {
+  id: number;
+  /** Unit vector through the plume centre. */
+  position: [number, number, number];
+  /** Relative plume strength. */
+  strength: number;
+  birthYear: number;
+  deathYear: number;
+}
+
+/** A large igneous province that releases its carbon over a finite interval. */
+export interface LargeIgneousProvince {
+  id: number;
+  position: [number, number, number];
+  startYear: number;
+  endYear: number;
+  /** Extra CO₂ outgassing while active, relative to the modern volcanic flux. */
+  outgassing: number;
+}
+
+/** Plain-data state owned by plate cleanup and volcanism. */
+export interface GeosphereState {
+  /** Plate count at generation; cleanup may use up to twice this many stable slots. */
+  initialPlateCount: number;
+  hotspots: MantleHotspot[];
+  /** Player-created activity, decayed separately from the diagnosed natural field. */
+  volcanicBoost: Float32Array;
+  activeLips: LargeIgneousProvince[];
+  nextLipId: number;
+  lipCount: number;
+  /** Accumulated plate time since the last connected-component cleanup. */
+  cleanupElapsedYears: number;
 }
 
 /** Life on the planet (see models/biosphere/life.ts). */
@@ -138,6 +177,7 @@ export interface PlanetState {
   fields: Fields;
   globals: GlobalState;
   plates: Plate[];
+  geosphere: GeosphereState;
   /** Global quantities over time, one sample per step (thinned on long runs). */
   history: History;
   biota: Biota;
@@ -178,10 +218,21 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
       seaLevel: 0,
       sedimentExport: 0,
       carbon: { outgassing: 1, weathering: 1, burial: 0 },
+      volcanicAerosol: 0,
+      lipOutgassing: 0,
       energy: 0,
       unlimitedEnergy: false,
     },
     plates: [],
+    geosphere: {
+      initialPlateCount: 0,
+      hotspots: [],
+      volcanicBoost: new Float32Array(grid.cellCount),
+      activeLips: [],
+      nextLipId: 1,
+      lipCount: 0,
+      cleanupElapsedYears: 0,
+    },
     history: createHistory(),
     biota: {
       populations: new Float32Array(grid.cellCount * LIFE_CLASS_COUNT),

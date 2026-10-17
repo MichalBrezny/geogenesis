@@ -65,6 +65,11 @@ const TOOL_EFFECTS: Record<ToolId, Effect> = {
   lower: (state, centre) => shapeTerrain(state, centre, -TERRAIN_STEP, 1),
   volcano(state, centre) {
     shapeTerrain(state, centre, VOLCANO_HEIGHT, 0.5);
+    for (const [i, falloff] of brush(state, centre, 0.5)) {
+      const boost = 5 * falloff;
+      state.geosphere.volcanicBoost[i] = state.geosphere.volcanicBoost[i]! + boost;
+      state.fields.volcanicActivity[i] = state.fields.volcanicActivity[i]! + boost;
+    }
     state.globals.atmosphere.co2 += VOLCANO_CO2;
     return true;
   },

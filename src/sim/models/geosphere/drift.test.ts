@@ -4,8 +4,8 @@ import { createPlanet } from '../../core/planet';
 import { createRng } from '../../core/rng';
 import { createSimulation } from '../../simulation';
 import { createRandomWorld } from '../../world';
-import { createPlateDrift } from './drift';
-import { referenceCell, rotatePlate } from './plates';
+import { cleanupPlateFragments, createPlateDrift } from './drift';
+import { anchorPlates, referenceCell, rotatePlate, valueComponents } from './plates';
 import { generateTectonicPlanet } from './tectonics';
 
 describe('plates', () => {
@@ -16,6 +16,16 @@ describe('plates', () => {
     for (let k = 0; k < 8; k++) rotatePlate(plate, Math.PI / 4);
     for (let i = 0; i < planet.grid.cellCount; i++) {
       expect(referenceCell(planet.grid, plate, i)).toBe(i);
+    }
+  });
+
+  it('removes noise-warped Voronoi exclaves before crust is anchored', () => {
+    const planet = createPlanet({ width: 128, height: 64, seed: 19 });
+    generateTectonicPlanet(planet);
+    for (const plate of planet.plates) {
+      expect(
+        valueComponents(planet.grid, planet.fields.plateId, plate.id).length,
+      ).toBeLessThanOrEqual(1);
     }
   });
 });
@@ -83,5 +93,51 @@ describe('plateDrift', () => {
     const before = Float32Array.from(planet.fields.elevation);
     createPlateDrift({ speedFactor: 0 }).runOneStep(planet, 1e7, createRng(1));
     expect(planet.fields.elevation).toEqual(before);
+  });
+
+  it('transfers a small detached piece between reference rasters without losing crust', () => {
+    const planet = createPlanet({ width: 128, height: 64, seed: 8 });
+    generateTectonicPlanet(planet, { plateCount: 2 });
+    const { width, height } = planet.grid;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) planet.fields.plateId[y * width + x] = x < width / 2 ? 0 : 1;
+    }
+    const detached = Math.floor(height / 2) * width + Math.floor((width * 3) / 4);
+    planet.fields.plateId[detached] = 0;
+    anchorPlates(planet);
+    const before = planet.plates.reduce(
+      (sum, plate) => sum + plate.crust.owned.reduce((plateSum, value) => plateSum + value, 0),
+      0,
+    );
+    expect(cleanupPlateFragments(planet, createRng(2))).toBe(true);
+    const after = planet.plates.reduce(
+      (sum, plate) => sum + plate.crust.owned.reduce((plateSum, value) => plateSum + value, 0),
+      0,
+    );
+    expect(after).toBe(before);
+    expect(planet.plates[0]!.crust.owned[detached]).toBe(0);
+    expect(planet.plates[1]!.crust.owned[detached]).toBe(1);
+  });
+
+  it('turns a large detached continental piece into a new stable plate id', () => {
+    const planet = createPlanet({ width: 128, height: 64, seed: 9 });
+    generateTectonicPlanet(planet, { plateCount: 2 });
+    const { width, height } = planet.grid;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) planet.fields.plateId[y * width + x] = x < width / 2 ? 0 : 1;
+    }
+    const row = Math.floor(height / 2);
+    for (let x = 90; x < 93; x++) {
+      const i = row * width + x;
+      planet.fields.plateId[i] = 0;
+      planet.fields.crustType[i] = 1;
+    }
+    anchorPlates(planet);
+    expect(cleanupPlateFragments(planet, createRng(3))).toBe(true);
+    expect(planet.plates.length).toBe(3);
+    expect(
+      planet.plates[2]!.crust.owned.reduce((sum, value) => sum + value, 0),
+    ).toBeGreaterThanOrEqual(3);
+    expect(planet.plates[2]!.eulerPole).not.toEqual(planet.plates[0]!.eulerPole);
   });
 });
