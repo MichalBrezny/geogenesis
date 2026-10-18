@@ -104,7 +104,12 @@ function Vitals({ frame }: { frame: Frame }) {
     ['stat.step', 'stat.stepHint', formatStep(frame.stepYears)],
     ['stat.temperature', 'stat.temperatureHint', `${frame.meanTemperature.toFixed(1)} °C`],
     ['stat.co2', 'stat.co2Hint', `${formatPpm(frame.co2)} ppm`],
-    ['stat.o2', 'stat.o2Hint', `${(frame.o2 * 100).toFixed(1)}%`],
+    ['stat.pressure', 'stat.pressureHint', `${frame.surfacePressure.toFixed(2)} bar`],
+    [
+      'stat.o2',
+      'stat.o2Hint',
+      `${(frame.o2 * 100).toFixed(1)}% / ${frame.o2Pressure.toFixed(2)} bar`,
+    ],
     ['stat.ice', 'stat.iceHint', `${(frame.iceFraction * 100).toFixed(0)}%`],
     ['stat.seaLevel', 'stat.seaLevelHint', `${frame.seaLevel.toFixed(0)} m`],
     ['stat.sun', 'stat.sunHint', `${(frame.solarInput * 100).toFixed(1)}%`],

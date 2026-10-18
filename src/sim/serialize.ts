@@ -1,6 +1,12 @@
 import { DEFAULT_CONTROLS, type PlanetState } from './core/planet';
 import { HISTORY_SERIES } from './history';
 import type { RandomWorldSettings } from './world';
+import { surfacePressureOf } from './models/atmosphere/atmosphere';
+import {
+  atmosphericWaterGel,
+  basinWaterGel,
+  landIceWaterGel,
+} from './models/geosphere/seaLevel';
 
 /**
  * Binary save format:
@@ -104,6 +110,17 @@ function hydrateAddedState(planet: PlanetState): void {
   planet.fields.lakeDepth ??= new Float32Array(planet.grid.cellCount);
   planet.fields.lakeType ??= new Int32Array(planet.grid.cellCount);
   planet.fields.volcanicActivity ??= new Float32Array(planet.grid.cellCount);
+  planet.globals.atmosphere.n2 ??= 0.78084;
+  planet.globals.atmosphere.inert ??= 0.00934;
+  planet.globals.atmosphere.waterVapor ??= 0.0025;
+  planet.globals.surfacePressure ??= surfacePressureOf(planet.globals.atmosphere);
+  planet.globals.water ??=
+    basinWaterGel(planet.grid, planet.fields.elevation, planet.globals.seaLevel) +
+    landIceWaterGel(planet) +
+    atmosphericWaterGel(planet);
+  planet.globals.initialWater ??= planet.globals.water;
+  planet.globals.escapedWater ??= 0;
+  planet.globals.runawayGreenhouse ??= false;
   planet.globals.volcanicAerosol ??= 0;
   planet.globals.lipOutgassing ??= 0;
   planet.globals.impactFlux ??= 0;

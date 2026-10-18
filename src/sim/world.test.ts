@@ -2,9 +2,30 @@ import { describe, expect, it } from 'vitest';
 import { areaWeightedMean } from './core/grid';
 import { lifeClassIndex } from './data/lifeClasses';
 import { continentalCrustTarget } from './models/geosphere/drift';
+import { equilibriumSeaLevel } from './models/geosphere/seaLevel';
+import { updateSurfacePressure } from './models/atmosphere/atmosphere';
 import { createRandomWorld, PLANET_START_AGES } from './world';
 
 describe('random-world starts', () => {
+  it('runs a dry planet without oceans or non-finite climate fields', () => {
+    const world = createRandomWorld({ start: 'quick', seed: 22, width: 32, height: 16 });
+    const { planet } = world;
+    planet.globals.water = 0;
+    planet.globals.atmosphere.waterVapor = 0;
+    planet.fields.iceThickness.fill(0);
+    planet.globals.seaLevel = equilibriumSeaLevel(planet);
+    updateSurfacePressure(planet.globals);
+    for (let step = 0; step < 3; step++) world.simulation.step(planet, 1e6);
+
+    expect(Array.from(planet.fields.elevation).every(Number.isFinite)).toBe(true);
+    expect(Array.from(planet.fields.airTemperature).every(Number.isFinite)).toBe(true);
+    expect(Array.from(planet.fields.precipitation).every((value) => value === 0)).toBe(true);
+    expect(Array.from(planet.fields.oceanAnomaly).every((value) => value === 0)).toBe(true);
+    expect(planet.fields.elevation.every((elevation) => elevation >= planet.globals.seaLevel)).toBe(
+      true,
+    );
+  });
+
   it('creates a lifeless 0.5 Gyr young planet by default with little continental crust', () => {
     const world = createRandomWorld({ seed: 12, width: 32, height: 16 });
     expect(world.planet.globals.year).toBe(PLANET_START_AGES.young);

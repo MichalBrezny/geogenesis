@@ -17,6 +17,13 @@ interface ChartSpec {
 const CHARTS: readonly ChartSpec[] = [
   { series: 'meanTemperature', title: 'chart.temperature', format: (v) => `${v.toFixed(1)} °C` },
   { series: 'co2', title: 'chart.co2', format: (v) => `${formatPpm(v)} ppm`, log: true },
+  {
+    series: 'surfacePressure',
+    title: 'chart.surfacePressure',
+    format: (v) => `${v.toFixed(2)} bar`,
+    log: true,
+  },
+  { series: 'water', title: 'chart.water', format: (v) => `${v.toFixed(0)} m GEL` },
   { series: 'iceFraction', title: 'chart.ice', scale: 100, format: (v) => `${v.toFixed(1)}%` },
   { series: 'landFraction', title: 'chart.land', scale: 100, format: (v) => `${v.toFixed(1)}%` },
   { series: 'seaLevel', title: 'chart.seaLevel', format: (v) => `${v.toFixed(0)} m` },

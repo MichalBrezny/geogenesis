@@ -7,12 +7,18 @@ import type { Era } from '../eras';
 
 /** Well-mixed atmospheric gases. */
 export interface Atmosphere {
-  /** Carbon dioxide, ppm by volume (280 before the industrial era). */
+  /** Nitrogen partial pressure, bar (Earth: about 0.78 bar). */
+  n2: number;
+  /** Argon-like inert-gas partial pressure, bar (Earth: about 0.0093 bar). */
+  inert: number;
+  /** Carbon-dioxide partial pressure in microbar (280 microbar before industry). */
   co2: number;
-  /** Methane, ppm by volume (0.7 before the industrial era). */
+  /** Methane partial pressure in microbar (0.7 microbar before industry). */
   ch4: number;
-  /** Oxygen, fraction by volume (0.21 on modern Earth). */
+  /** Oxygen fraction by volume (0.21 on modern Earth); its partial pressure is derived. */
   o2: number;
+  /** Atmospheric water-vapour column, expressed as an equivalent partial pressure, bar. */
+  waterVapor: number;
 }
 
 /** Planet-wide (non-gridded) state. */
@@ -22,12 +28,22 @@ export interface GlobalState {
   /** Star luminosity relative to the present Sun (1 = 1361 W/m² at the planet). */
   solarInput: number;
   atmosphere: Atmosphere;
+  /** Total surface pressure, bar, derived from the well-mixed gas inventory. */
+  surfacePressure: number;
   /** Area-weighted mean surface air temperature, °C (written by the climate model). */
   meanTemperature: number;
   /** Fraction of the surface covered by ice, 0..1 (written by the climate model). */
   iceFraction: number;
   /** Ocean surface elevation relative to the ice-free datum, m. */
   seaLevel: number;
+  /** Total extant planetary water inventory, metres of global equivalent layer (GEL). */
+  water: number;
+  /** Water inventory when the represented planet was initialized, m GEL. */
+  initialWater: number;
+  /** Cumulative water lost to space as escaping hydrogen, m GEL. */
+  escapedWater: number;
+  /** Whether the planet has crossed the moist/runaway-greenhouse threshold. */
+  runawayGreenhouse: boolean;
   /** Cumulative sediment exported beyond represented marine accommodation, m³. */
   sedimentExport: number;
   /** Area-mean total cloud cover, 0..1 (written by the cloud model). */
@@ -44,7 +60,7 @@ export interface GlobalState {
   impactFlux: number;
   /** Number of natural impacts represented by the last simulation step. */
   impactsThisStep: number;
-  /** Cumulative cometary water delivery, metres of global equivalent layer (reserved for M12). */
+  /** Cumulative cometary water delivery, metres of global equivalent layer. */
   waterDelivered: number;
   /** Time-averaged radiative forcing from impact heat over the current step, W/m². */
   impactHeating: number;
@@ -228,10 +244,23 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
     globals: {
       year: 0,
       solarInput: 1,
-      atmosphere: { co2: 280, ch4: 0.7, o2: 0.21 },
+      atmosphere: {
+        n2: 0.78084,
+        inert: 0.00934,
+        co2: 280,
+        ch4: 0.7,
+        o2: 0.21,
+        waterVapor: 0.0025,
+      },
+      surfacePressure: 1.00375,
       meanTemperature: 0,
       iceFraction: 0,
       seaLevel: 0,
+      // Terrain generation replaces this with the basin volume below the 0 m datum.
+      water: 2700,
+      initialWater: 2700,
+      escapedWater: 0,
+      runawayGreenhouse: false,
       sedimentExport: 0,
       carbon: { outgassing: 1, weathering: 1, burial: 0 },
       volcanicAerosol: 0,

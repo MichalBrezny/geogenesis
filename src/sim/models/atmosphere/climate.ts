@@ -7,19 +7,32 @@ import {
   type Grid,
 } from '../../core/grid';
 import type { Atmosphere } from '../../core/planet';
+import { recordEvent } from '../../events';
 import { isOcean } from '../geosphere/seaLevel';
+import {
+  REFERENCE_SURFACE_PRESSURE,
+  REFERENCE_WATER_VAPOR,
+  boilingPointC,
+  surfacePressureOf,
+  updateSurfacePressure,
+} from './atmosphere';
 import { LOW_CLOUD_ALBEDO, REFERENCE_LOW_CLOUD } from './clouds';
 import { surfaceIceCover } from './ice';
 import { SOLAR_CONSTANT } from './star';
 
 export { iceFractionAt } from './ice';
 
-/**
- * Outgoing longwave radiation OLR = A + B·T (T in °C), from satellite fits
- * (North et al. 1981). B includes the water-vapour feedback.
- */
+/** Low-temperature outgoing-radiation fit from North et al. (1981), T in deg C. */
 const OLR_A = 203.3;
 const OLR_B = 2.09;
+/** Wet-atmosphere Simpson-Nakajima radiation limit, W/m2. */
+export const WET_OLR_LIMIT = 294;
+/** Temperature where the OLR bends smoothly away from the linear Earth regime. */
+export const WET_OLR_TRANSITION = 40;
+const WET_TRANSITION_OLR = OLR_A + OLR_B * WET_OLR_TRANSITION;
+/** Numerical bounds for climates from snowballs through dry Venus-like worlds. */
+export const MIN_CLIMATE_TEMPERATURE = -120;
+export const MAX_CLIMATE_TEMPERATURE = 700;
 /** Meridional heat transport coefficient for the Laplacian on the unit sphere, W m⁻² K⁻¹. */
 const DEFAULT_DIFFUSIVITY = 0.45;
 /** Planetary albedo (surface plus typical cloud cover) of snow and ice. */
@@ -72,9 +85,39 @@ export interface ClimateOptions {
 export function greenhouseForcing(atmosphere: Atmosphere): number {
   const logRatio = Math.log(Math.max(atmosphere.co2, 1e-3) / REFERENCE_CO2);
   const co2 = 5.35 * logRatio + 0.4 * Math.max(0, logRatio) ** 2;
+  const water = 2 * Math.log(Math.max(atmosphere.waterVapor, 1e-8) / REFERENCE_WATER_VAPOR);
+  // Collision/pressure broadening of the CO2 and H2O bands. Normalizing to the
+  // complete reference atmosphere makes the calibrated Earth forcing identical.
+  // CO2 self-broadening up to ~1 bar is already in the fit's quadratic term, so
+  // only CO2 beyond 1 bar adds here; otherwise a CO2-rich young planet feeds on
+  // itself, while a Venus-like atmosphere still broadens its bands.
+  const broadeningCo2 = REFERENCE_CO2 + Math.max(0, atmosphere.co2 - 1e6);
+  const broadening = Math.sqrt(
+    surfacePressureOf({ ...atmosphere, co2: broadeningCo2 }) / REFERENCE_SURFACE_PRESSURE,
+  );
   // The methane formula uses ppb.
   const ch4 = 0.036 * (Math.sqrt(atmosphere.ch4 * 1000) - Math.sqrt(REFERENCE_CH4 * 1000));
-  return co2 + ch4;
+  return broadening * (co2 + water) + ch4;
+}
+
+/**
+ * Clear-sky OLR used by the EBM. With surface water it joins the North linear
+ * fit continuously at 40 C, then approaches 294 W/m2 exponentially: a compact
+ * fit to the Simpson-Nakajima limit in Goldblatt et al. (2013) and the moist
+ * greenhouse transition in Kopparapu et al. (2013). A dry planet stays linear.
+ */
+export function outgoingLongwaveRadiation(temperatureC: number, hasWater: boolean): number {
+  if (!hasWater || temperatureC <= WET_OLR_TRANSITION) {
+    return OLR_A + OLR_B * temperatureC;
+  }
+  return (
+    WET_OLR_LIMIT -
+    (WET_OLR_LIMIT - WET_TRANSITION_OLR) *
+      Math.exp(
+        (-OLR_B * (temperatureC - WET_OLR_TRANSITION)) /
+          (WET_OLR_LIMIT - WET_TRANSITION_OLR),
+      )
+  );
 }
 
 interface InsolationHarmonics {
@@ -141,9 +184,10 @@ function insolationHarmonics(latitudeDeg: number, obliquityDeg: number): Insolat
 /**
  * Energy-balance climate model (Budyko–Sellers / North type) in 2D.
  *
- * On a coarse lat/long grid it solves the steady state of
- *   Q(φ)(1 − α) = A + B·T − F_greenhouse − D∇²T
- * with conjugate gradients, where α is the area-mean albedo of the fine cells.
+ * On a coarse lat/long grid it solves the low-temperature steady state of
+ *   Q(phi)(1 - alpha) = OLR(T) - F_greenhouse - D laplacian(T)
+ * with conjugate gradients, where OLR bends from the North linear fit towards
+ * the wet Simpson-Nakajima limit and alpha is the fine-cell mean albedo.
  * The result is interpolated to the fine grid, cooled with altitude, and turned
  * into snow/ice cover, whose high albedo feeds back into the next iteration —
  * the ice–albedo feedback that can tip a planet into a snowball.
@@ -168,6 +212,7 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
     outputs: ['airTemperature', 'seasonalAmplitude', 'iceCover', 'albedo'],
     runOneStep(state, dtYears) {
       const { grid, fields, globals } = state;
+      updateSurfacePressure(globals);
       const {
         elevation,
         surfaceAlbedo,
@@ -184,6 +229,13 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
       const previous = lag > 1e-6 ? Float32Array.from(airTemperature) : null;
       const hasClouds = globals.cloudCover !== undefined;
       const climate = getClimateGrid(grid, diffusivity);
+      // Meridional heat transport rises with atmospheric mass. A 0.7 power is
+      // between the linear and square-root scalings used by simple EBMs.
+      climate.transportScale = Math.max(
+        0.02,
+        Math.min(50, Math.pow(globals.surfacePressure / REFERENCE_SURFACE_PRESSURE, 0.7)),
+      );
+      const hasWater = globals.water > 0;
       const hasSeasons = state.controls.obliquity > 1e-6;
       const continentality = hasSeasons
         ? continentalityField(grid, elevation, globals.seaLevel)
@@ -200,6 +252,7 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
       }
       const forcing =
         greenhouseForcing(globals.atmosphere) - globals.volcanicAerosol + globals.impactHeating;
+      let crossedRunawayLimit = false;
 
       // Start from last step's albedo where it exists, so the ice state persists (hysteresis).
       for (let i = 0; i < grid.cellCount; i++) {
@@ -208,7 +261,18 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
       }
 
       for (let iteration = 0; iteration < 12; iteration++) {
-        solveCoarse(climate, grid, albedo, globals.solarInput, state.controls.obliquity, forcing);
+        crossedRunawayLimit =
+          solveCoarse(
+            climate,
+            grid,
+            albedo,
+            globals.solarInput,
+            state.controls.obliquity,
+            forcing,
+            hasWater,
+            hasWater && (globals.runawayGreenhouse || globals.meanTemperature >= 50),
+            globals.surfacePressure,
+          ) || crossedRunawayLimit;
         interpolateToFine(
           climate,
           grid,
@@ -250,6 +314,10 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
         }
         if (maxChange < 1e-3) break;
       }
+      if (crossedRunawayLimit && !globals.runawayGreenhouse) {
+        globals.runawayGreenhouse = true;
+        recordEvent(state, 'runawayGreenhouse');
+      }
       if (previous) {
         for (let i = 0; i < grid.cellCount; i++) {
           airTemperature[i] = airTemperature[i]! + (previous[i]! - airTemperature[i]!) * lag;
@@ -277,6 +345,9 @@ interface ClimateGrid {
   neighbors: Int32Array;
   /** D × conductance of each face on the unit sphere, same layout as neighbors. */
   conductance: Float64Array;
+  diffusivity: number;
+  /** Atmospheric-mass multiplier applied to face conductances. */
+  transportScale: number;
   /** Unit-sphere area of each coarse row. */
   rowArea: Float64Array;
   /** Coarse temperatures (°C), kept between steps as the solver's starting guess. */
@@ -289,7 +360,7 @@ const climateCache = new WeakMap<Grid, ClimateGrid>();
 
 function getClimateGrid(grid: Grid, diffusivity: number): ClimateGrid {
   let climate = climateCache.get(grid);
-  if (!climate) {
+  if (!climate || climate.diffusivity !== diffusivity) {
     climate = buildClimateGrid(grid, diffusivity);
     climateCache.set(grid, climate);
   }
@@ -334,6 +405,8 @@ function buildClimateGrid(grid: Grid, diffusivity: number): ClimateGrid {
     factor: grid.width / width,
     neighbors,
     conductance,
+    diffusivity,
+    transportScale: 1,
     rowArea,
     temperature: new Float64Array(n).fill(14),
     coarseAlbedo: new Float64Array(n),
@@ -490,7 +563,10 @@ function solveCoarse(
   solarInput: number,
   obliquity: number,
   forcing: number,
-): void {
+  hasWater: boolean,
+  forcedRunaway: boolean,
+  surfacePressure: number,
+): boolean {
   const { coarse, factor, coarseAlbedo, rhs, rowArea } = climate;
 
   // Area-weighted mean albedo of the fine cells in each coarse cell.
@@ -505,25 +581,71 @@ function solveCoarse(
       weight[c] = weight[c]! + area;
     }
   }
+  let absorbedSum = 0;
+  let areaSum = 0;
   for (let y = 0; y < coarse.height; y++) {
     const insolation = annualInsolation(coarse.rowLatitude[y]!, solarInput, obliquity);
     for (let x = 0; x < coarse.width; x++) {
       const c = y * coarse.width + x;
       coarseAlbedo[c] = coarseAlbedo[c]! / weight[c]!;
-      rhs[c] = rowArea[y]! * (insolation * (1 - coarseAlbedo[c]!) - (OLR_A - forcing));
+      const absorbed = insolation * (1 - coarseAlbedo[c]!);
+      rhs[c] = rowArea[y]! * (absorbed - (OLR_A - forcing));
+      absorbedSum += rowArea[y]! * absorbed;
+      areaSum += rowArea[y]!;
     }
   }
   conjugateGradient(climate);
+  const requiredOlr = absorbedSum / areaSum + forcing;
+  const runaway = hasWater && (forcedRunaway || requiredOlr >= WET_OLR_LIMIT);
+  if (runaway) {
+    // Above the radiation limit no wet steady state exists. Represent the hot
+    // moist adiabat with a bounded target that strengthens as steam pressure and
+    // greenhouse forcing grow; the water component supplies the slower inventory change.
+    const hotTarget = Math.min(
+      MAX_CLIMATE_TEMPERATURE,
+      Math.max(
+        boilingPointC(surfacePressure) + 30,
+        120 + 4 * Math.max(0, requiredOlr - WET_OLR_LIMIT) + 1.5 * Math.max(0, forcing),
+      ),
+    );
+    shiftCoarseMean(climate, hotTarget);
+  } else if (hasWater && requiredOlr > WET_TRANSITION_OLR) {
+    const remaining = Math.max(1e-9, WET_OLR_LIMIT - requiredOlr);
+    const wetTarget =
+      WET_OLR_TRANSITION -
+      ((WET_OLR_LIMIT - WET_TRANSITION_OLR) / OLR_B) *
+        Math.log(remaining / (WET_OLR_LIMIT - WET_TRANSITION_OLR));
+    shiftCoarseMean(climate, wetTarget);
+  }
+  return runaway;
+}
+
+function shiftCoarseMean(climate: ClimateGrid, target: number): void {
+  const { temperature, rowArea, coarse } = climate;
+  let sum = 0;
+  let area = 0;
+  for (let i = 0; i < temperature.length; i++) {
+    const weight = rowArea[Math.floor(i / coarse.width)]!;
+    sum += temperature[i]! * weight;
+    area += weight;
+  }
+  const shift = target - sum / area;
+  for (let i = 0; i < temperature.length; i++) {
+    temperature[i] = Math.max(
+      MIN_CLIMATE_TEMPERATURE,
+      Math.min(MAX_CLIMATE_TEMPERATURE, temperature[i]! + shift),
+    );
+  }
 }
 
 /** (A·B + D·L) x, the energy balance operator; symmetric positive definite. */
 function applyOperator(climate: ClimateGrid, x: Float64Array, out: Float64Array): void {
-  const { neighbors, conductance, rowArea, coarse } = climate;
+  const { neighbors, conductance, rowArea, coarse, transportScale } = climate;
   for (let i = 0; i < x.length; i++) {
     let value = rowArea[Math.floor(i / coarse.width)]! * OLR_B * x[i]!;
     for (let d = 0; d < 4; d++) {
       const n = neighbors[i * 4 + d]!;
-      if (n >= 0) value += conductance[i * 4 + d]! * (x[i]! - x[n]!);
+      if (n >= 0) value += transportScale * conductance[i * 4 + d]! * (x[i]! - x[n]!);
     }
     out[i] = value;
   }
@@ -531,12 +653,22 @@ function applyOperator(climate: ClimateGrid, x: Float64Array, out: Float64Array)
 
 /** Jacobi-preconditioned conjugate gradients, warm-started from the previous solution. */
 function conjugateGradient(climate: ClimateGrid): void {
-  const { temperature: x, rhs: b, neighbors, conductance, rowArea, coarse } = climate;
+  const {
+    temperature: x,
+    rhs: b,
+    neighbors,
+    conductance,
+    rowArea,
+    coarse,
+    transportScale,
+  } = climate;
   const n = x.length;
   const diagonal = new Float64Array(n);
   for (let i = 0; i < n; i++) {
     let value = rowArea[Math.floor(i / coarse.width)]! * OLR_B;
-    for (let d = 0; d < 4; d++) if (neighbors[i * 4 + d]! >= 0) value += conductance[i * 4 + d]!;
+    for (let d = 0; d < 4; d++) {
+      if (neighbors[i * 4 + d]! >= 0) value += transportScale * conductance[i * 4 + d]!;
+    }
     diagonal[i] = value;
   }
   const r = new Float64Array(n);
@@ -603,11 +735,16 @@ function interpolateToFine(
       const top = temperature[y0 * cw + x0]! * (1 - tx) + temperature[y0 * cw + x1]! * tx;
       const bottom = temperature[y1 * cw + x0]! * (1 - tx) + temperature[y1 * cw + x1]! * tx;
       const i = fy * grid.width + fx;
-      out[i] =
-        top * (1 - ty) +
-        bottom * ty -
-        Math.max(0, elevation[i]! - seaLevel) * LAPSE_RATE +
-        oceanAnomaly[i]!;
+      out[i] = Math.max(
+        MIN_CLIMATE_TEMPERATURE,
+        Math.min(
+          MAX_CLIMATE_TEMPERATURE,
+          top * (1 - ty) +
+            bottom * ty -
+            Math.max(0, elevation[i]! - seaLevel) * LAPSE_RATE +
+            oceanAnomaly[i]!,
+        ),
+      );
     }
   }
 }

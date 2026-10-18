@@ -15,6 +15,7 @@ import {
 import { recordEvent } from '../../events';
 import { disperse } from '../dispersal';
 import { isOcean } from '../geosphere/seaLevel';
+import { boilingPointC, oxygenPartialPressure } from '../atmosphere/atmosphere';
 
 export interface LifeOptions {
   /** Multiplier on the rate at which new classes evolve (a future player control). */
@@ -55,7 +56,7 @@ const BASE_EVOLUTION_TIME = 40e6;
 export const ABIOGENESIS_TIME = 180e6;
 const ABIOGENESIS_REFERENCE_OCEAN = 0.7;
 const ABIOGENESIS_MIN_TEMPERATURE = 0;
-const ABIOGENESIS_MAX_TEMPERATURE = 85;
+const ABIOGENESIS_BOILING_MARGIN = 10;
 const ORIGIN_CLUSTER_RADIUS = 600_000;
 /** Population at which a class counts as fully present in a cell when evolving descendants. */
 const PRESENCE_POPULATION = 0.2;
@@ -108,11 +109,12 @@ export function evolutionTimeYears(lifeClass: LifeClass): number {
 
 /** Whether a cell offers exposed liquid seawater in the origin-of-life temperature range. */
 export function isAbiogenesisHabitat(state: PlanetState, cell: number): boolean {
+  const upperTemperature = boilingPointC(state.globals.surfacePressure) - ABIOGENESIS_BOILING_MARGIN;
   return (
     isOcean(state.fields.elevation[cell]!, state.globals.seaLevel) &&
     state.fields.iceCover[cell]! < 0.1 &&
     state.fields.airTemperature[cell]! >= ABIOGENESIS_MIN_TEMPERATURE &&
-    state.fields.airTemperature[cell]! <= ABIOGENESIS_MAX_TEMPERATURE
+    state.fields.airTemperature[cell]! <= upperTemperature
   );
 }
 
@@ -253,7 +255,9 @@ export function classSuitability(
   const plants = lifeClassIndex('plants');
   const lifeClass = LIFE_CLASSES[c]!;
   out.fill(0);
-  const oxygen = oxygenFactor(lifeClass, globals.atmosphere.o2);
+  // Oxygen requirements are physiological partial-pressure thresholds. At one
+  // bar the value is numerically the same as the former volume-fraction input.
+  const oxygen = oxygenFactor(lifeClass, oxygenPartialPressure(globals.atmosphere));
   if (oxygen === 0) return out;
   for (let i = 0; i < n; i++) {
     const ocean = isOcean(elevation[i]!, globals.seaLevel);

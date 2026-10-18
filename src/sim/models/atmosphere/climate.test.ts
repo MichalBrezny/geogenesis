@@ -8,7 +8,9 @@ import {
   createClimate,
   firstAnnualInsolationHarmonic,
   greenhouseForcing,
+  outgoingLongwaveRadiation,
   seasonalTemperatureAmplitude,
+  WET_OLR_LIMIT,
 } from './climate';
 import { SOLAR_CONSTANT, stellarLuminosity, SUN_AGE } from './star';
 import { createSurfaceAlbedo } from './surfaceAlbedo';
@@ -39,6 +41,22 @@ describe('star', () => {
 });
 
 describe('climate', () => {
+  it('saturates wet outgoing radiation but leaves a dry planet radiative', () => {
+    expect(outgoingLongwaveRadiation(15, true)).toBeCloseTo(203.3 + 2.09 * 15, 8);
+    expect(outgoingLongwaveRadiation(200, true)).toBeLessThanOrEqual(WET_OLR_LIMIT);
+    expect(outgoingLongwaveRadiation(200, true)).toBeGreaterThan(WET_OLR_LIMIT - 0.1);
+    expect(outgoingLongwaveRadiation(200, false)).toBeGreaterThan(WET_OLR_LIMIT);
+  });
+
+  it('has no wet steady state above the radiation limit', () => {
+    const planet = oceanPlanet();
+    planet.globals.solarInput = 1.5;
+    createClimate().runOneStep(planet, 1e6, rng);
+    expect(planet.globals.runawayGreenhouse).toBe(true);
+    expect(planet.globals.meanTemperature).toBeGreaterThan(100);
+    expect(planet.events.some((event) => event.key === 'runawayGreenhouse')).toBe(true);
+  });
+
   it('integrates Earth-obliquity insolation close to the former North fit', () => {
     for (const latitude of [0, 15, 30, 45, 60, 75, 89.9]) {
       const x = Math.sin((latitude * Math.PI) / 180);
@@ -143,6 +161,24 @@ describe('climate', () => {
     for (let k = 1; k < temperatures.length; k++) {
       expect(temperatures[k]!).toBeGreaterThan(temperatures[k - 1]!);
     }
+  });
+
+  it('uses thick air to reduce the equator-to-pole contrast', () => {
+    const contrasts = [0.02, 8].map((n2) => {
+      const planet = oceanPlanet();
+      planet.globals.atmosphere.n2 = n2;
+      planet.globals.atmosphere.inert = 0;
+      planet.globals.atmosphere.o2 = 0;
+      createClimate().runOneStep(planet, 0, rng);
+      const { width, height } = planet.grid;
+      const rowMean = (y: number) => {
+        let sum = 0;
+        for (let x = 0; x < width; x++) sum += planet.fields.airTemperature[y * width + x]!;
+        return sum / width;
+      };
+      return rowMean(height / 2) - rowMean(0);
+    });
+    expect(contrasts[1]!).toBeLessThan(contrasts[0]! * 0.5);
   });
 
   it('remembers a snowball: the same sunlight supports a warm and a frozen state', () => {

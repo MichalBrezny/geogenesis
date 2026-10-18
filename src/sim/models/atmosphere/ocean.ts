@@ -69,6 +69,19 @@ export const oceanModel: SimComponent = {
   runOneStep(state) {
     const { grid, fields } = state;
     const seaLevel = state.globals.seaLevel;
+    let hasSea = false;
+    for (const elevation of fields.elevation) {
+      if (elevation < seaLevel) {
+        hasSea = true;
+        break;
+      }
+    }
+    if (!hasSea) {
+      fields.oceanCurrentU.fill(0);
+      fields.oceanCurrentV.fill(0);
+      fields.oceanAnomaly.fill(0);
+      return;
+    }
     const atmosphere = getAtmosphereGrid(grid);
     const { coarse } = atmosphere;
     const n = coarse.cellCount;

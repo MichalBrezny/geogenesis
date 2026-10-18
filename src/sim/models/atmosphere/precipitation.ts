@@ -76,6 +76,16 @@ export const precipitationModel: SimComponent = {
   outputs: ['precipitation'],
   runOneStep(state) {
     const { grid, fields } = state;
+    let oceanCells = 0;
+    for (const elevation of fields.elevation) {
+      if (elevation < state.globals.seaLevel) oceanCells++;
+    }
+    // With no surface reservoir there is no source for the steady moisture
+    // budget. This also prevents a dry planet retaining synthetic initial rain.
+    if (oceanCells === 0) {
+      fields.precipitation.fill(0);
+      return;
+    }
     const atmosphere = getAtmosphereGrid(grid);
     const coarseRain = moistureBudget(
       atmosphere,

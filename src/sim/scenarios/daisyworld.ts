@@ -33,6 +33,8 @@ export function createDaisyworld(options: DaisyworldOptions = {}): World {
   planet.controls.obliquity = DAISYWORLD_OBLIQUITY;
   planet.globals.year = options.startYear ?? 2.5e9;
   planet.globals.atmosphere.co2 = 280;
+  planet.globals.water = 0;
+  planet.globals.initialWater = 0;
   planet.globals.energy = STARTING_ENERGY;
 
   // Gentle rolling land everywhere: no oceans, so nothing but daisies sets the albedo.

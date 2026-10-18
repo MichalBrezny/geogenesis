@@ -30,6 +30,8 @@ const SCENARIO_VIEW: Record<
     charts: [
       'meanTemperature',
       'co2',
+      'surfacePressure',
+      'water',
       'o2',
       'livingClasses',
       'iceFraction',
@@ -65,6 +67,8 @@ const SCENARIO_VIEW: Record<
     charts: [
       'meanTemperature',
       'co2',
+      'surfacePressure',
+      'water',
       'o2',
       'livingClasses',
       'landFraction',

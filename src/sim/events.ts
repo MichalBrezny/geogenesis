@@ -25,6 +25,8 @@ export type EventKey =
   | 'meteor'
   | 'largeEruption'
   | 'largeIgneousProvince'
+  | 'runawayGreenhouse'
+  | 'oceansLost'
   | 'monolith'
   | 'eraReached';
 

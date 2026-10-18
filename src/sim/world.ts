@@ -11,13 +11,18 @@ import { createSurfaceAlbedo } from './models/atmosphere/surfaceAlbedo';
 import { biogeochemistry } from './models/atmosphere/biogeochemistry';
 import { cloudModel } from './models/atmosphere/clouds';
 import { landIceMassBalance } from './models/atmosphere/ice';
+import { atmosphericWaterCycle } from './models/atmosphere/water';
 import { biomeModel } from './models/biosphere/biomes';
 import { createLife, seedPrimordialLife } from './models/biosphere/life';
 import { createLinearDiffuser } from './models/geosphere/diffusion';
 import { continentalCrustTarget, createPlateDrift } from './models/geosphere/drift';
 import { flowRouting } from './models/geosphere/flowRouting';
 import { impactModel } from './models/geosphere/impacts';
-import { seaLevelModel } from './models/geosphere/seaLevel';
+import {
+  initializeWaterInventory,
+  seaLevelDatumModel,
+  seaLevelModel,
+} from './models/geosphere/seaLevel';
 import { createStreamPowerEroder } from './models/geosphere/streamPower';
 import { generateTectonicPlanet, tectonicUplift } from './models/geosphere/tectonics';
 import { eruptionModel, volcanicActivityModel } from './models/geosphere/volcanism';
@@ -89,6 +94,7 @@ export function createRandomWorld(options: WorldOptions = {}): World {
     oceanFraction:
       options.oceanFraction ?? 1 - continentalCrustTarget(planet.globals.year, continentalFraction),
   });
+  initializeWaterInventory(planet);
   if (start !== 'young') seedPrimordialLife(planet);
   planet.globals.atmosphere.o2 = 0;
   planet.globals.energy = STARTING_ENERGY;
@@ -133,6 +139,7 @@ export function randomWorldFromPlanet(
       withMinInterval(flowRouting, SLOW_PROCESS_INTERVAL),
       withMinInterval(createStreamPowerEroder(), SLOW_PROCESS_INTERVAL),
       withMinInterval(createLinearDiffuser(), SLOW_PROCESS_INTERVAL),
+      withMinInterval(seaLevelDatumModel, SLOW_PROCESS_INTERVAL),
       stellarEvolution,
       createSurfaceAlbedo(),
       createClimate(),
@@ -141,6 +148,7 @@ export function randomWorldFromPlanet(
       precipitationModel,
       cloudModel,
       landIceMassBalance,
+      atmosphericWaterCycle,
       seaLevelModel,
       biomeModel,
       withMinInterval(
@@ -207,7 +215,11 @@ function spinUpAtmosphere(planet: PlanetState): void {
     createCarbonCycle(),
   ];
   const rng = createRng(planet.rngState);
-  for (let iteration = 0; iteration < 10; iteration++) {
+  for (let iteration = 0; iteration < 20; iteration++) {
     for (const component of components) component.runOneStep(planet, 20e6, rng);
   }
+  // The last carbon solve changes CO2 after the last climate pass. Refresh the
+  // diagnostic atmosphere at zero elapsed time so the opening temperature and
+  // clouds describe that final reservoir rather than the previous iteration.
+  for (const component of components.slice(0, -1)) component.runOneStep(planet, 0, rng);
 }

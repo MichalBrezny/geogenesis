@@ -1,5 +1,6 @@
 import { RENDERED_FIELDS } from '../render/mapRenderer';
 import { HISTORY_SERIES, type HistorySeries } from '../sim/history';
+import { oxygenPartialPressure } from '../sim/models/atmosphere/atmosphere';
 import { createScenario, isScenarioId, restoreScenario, type ScenarioId } from '../sim/scenarios';
 import { compress, decompress, deserializeGame, serializeGame } from '../sim/serialize';
 import { applyTool } from '../sim/tools/tools';
@@ -142,10 +143,13 @@ export class SimHost {
       grid: { width, height, cellCount },
       fields,
       seaLevel: planet.globals.seaLevel,
+      water: planet.globals.water,
       year: planet.globals.year,
       meanTemperature: planet.globals.meanTemperature,
       solarInput: planet.globals.solarInput,
       co2: planet.globals.atmosphere.co2,
+      surfacePressure: planet.globals.surfacePressure,
+      o2Pressure: oxygenPartialPressure(planet.globals.atmosphere),
       iceFraction: planet.globals.iceFraction,
       o2: planet.globals.atmosphere.o2,
       ch4: planet.globals.atmosphere.ch4,

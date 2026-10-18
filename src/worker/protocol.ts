@@ -37,10 +37,15 @@ export interface Frame extends MapSource {
   solarInput: number;
   /** Atmospheric CO₂, ppm. */
   co2: number;
+  /** Total atmospheric surface pressure and oxygen partial pressure, bar. */
+  surfacePressure: number;
+  o2Pressure: number;
   /** Ice-covered fraction of the surface, 0..1. */
   iceFraction: number;
   /** Ocean surface elevation relative to the ice-free datum, m. */
   seaLevel: number;
+  /** Total extant water inventory, metres of global equivalent layer. */
+  water: number;
   /** Atmospheric O₂ (fraction) and CH₄ (ppm). */
   o2: number;
   ch4: number;

@@ -2,8 +2,9 @@ import type { SimComponent } from '../../core/component';
 import { areaWeightedMean } from '../../core/grid';
 import type { PlanetState } from '../../core/planet';
 import { Biome, BIOMES } from '../../data/biomes';
-import { isOcean } from '../geosphere/seaLevel';
+import { isOcean, liquidWaterGel } from '../geosphere/seaLevel';
 import { MODERN_PHOTOSYNTHESIS, photosynthesis } from './biogeochemistry';
+import { updateSurfacePressure } from './atmosphere';
 
 export interface CarbonCycleOptions {
   /** Multiplier on volcanic CO₂ outgassing (a future player control). */
@@ -62,7 +63,10 @@ const SEAFLOOR_CO2_EXPONENT = 0.23;
 /** Ocean share of the surface the seafloor share is defined for. */
 const REFERENCE_OCEAN_FRACTION = 0.7;
 const MIN_CO2 = 1;
-const MAX_CO2 = 1e6;
+/** 100 bar in microbar: enough for a Venus-like 90 bar CO2 atmosphere. */
+export const MAX_CO2 = 1e8;
+/** Rain-bearing planets weather before reaching the former 1-bar CO2 guardrail. */
+const MAX_WET_CO2 = 3e6;
 
 /**
  * Long-term (geological) carbon cycle: the silicate-weathering thermostat.
@@ -70,8 +74,8 @@ const MAX_CO2 = 1e6;
  * Volcanoes add CO₂; rain on warm, exposed rock removes it by weathering, which
  * speeds up as the planet warms. Photosynthesis removes some more by burying
  * organic carbon (the source of oxygen), so a thriving biosphere cools its planet. The resulting negative feedback keeps the
- * climate habitable as the star brightens, until CO₂ runs out — the
- * self-regulation at the heart of SimEarth's Gaia theme.
+ * climate habitable as the star brightens, until CO₂ drawdown can no longer
+ * prevent a runaway greenhouse — the self-regulation at the heart of SimEarth's Gaia theme.
  *
  * The reservoir responds faster than one simulation step, so the new CO₂ is
  * found implicitly: temperatures are extrapolated from the last climate
@@ -131,7 +135,10 @@ export function createCarbonCycle(options: CarbonCycleOptions = {}): SimComponen
           return (c - before) / before - k * (outgassing - weathering(c) - burialAt(c));
         };
         let low = Math.log(MIN_CO2);
-        let high = Math.log(MAX_CO2);
+        // A wet silicate-weathering planet cannot naturally accumulate a Venus
+        // atmosphere during one implicit solve; once rain is gone, the full
+        // representable 100-bar range is available to volcanic outgassing.
+        let high = Math.log(liquidWaterGel(state) > 1e-6 ? MAX_WET_CO2 : MAX_CO2);
         if (residual(low) >= 0) high = low;
         else if (residual(high) <= 0) low = high;
         for (let iteration = 0; iteration < 60 && high - low > 1e-6; iteration++) {
@@ -146,6 +153,7 @@ export function createCarbonCycle(options: CarbonCycleOptions = {}): SimComponen
         weathering: weathering(atmosphere.co2),
         burial: burialAt(atmosphere.co2),
       };
+      updateSurfacePressure(state.globals);
     },
   };
 }
@@ -194,6 +202,7 @@ export function tectonicActivity(state: PlanetState): number {
  * present-day carbon flux: scales with ocean area, spreading (plate vigour) and mantle heat.
  */
 function seafloorWeathering(state: PlanetState): number {
+  if (liquidWaterGel(state) <= 1e-6) return 0;
   const { grid, fields, globals } = state;
   let ocean = 0;
   for (let i = 0; i < grid.cellCount; i++) {
@@ -216,6 +225,8 @@ function seafloorWeathering(state: PlanetState): number {
  * every cell's temperature, to predict weathering at a different CO₂ level.
  */
 export function rawWeathering(state: PlanetState, co2: number, warming = 0): number {
+  // Silicate weathering needs liquid water and rain; it ceases after ocean loss.
+  if (liquidWaterGel(state) <= 1e-6) return 0;
   const { grid, fields } = state;
   const { elevation, airTemperature, precipitation, iceCover, biome, vegetation } = fields;
   let total = 0;

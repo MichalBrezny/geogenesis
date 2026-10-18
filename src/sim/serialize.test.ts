@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { restoreScenario } from './scenarios';
 import { compress, decompress, deserializeGame, SaveFormatError, serializeGame } from './serialize';
 import { createRandomWorld } from './world';
+import { surfacePressureOf } from './models/atmosphere/atmosphere';
 
 describe('save files', () => {
   it('round-trip a planet exactly', async () => {
@@ -39,8 +40,16 @@ describe('save files', () => {
     );
   });
 
-  it('hydrates seasons, ice thickness, sea level, lakes and history from an older version-2 shape', () => {
+  it('hydrates atmosphere, water, seasons, ice, sea level, lakes and history from an older shape', () => {
     const planet = createRandomWorld({ seed: 7, width: 32, height: 16 }).planet;
+    delete (planet.globals.atmosphere as Partial<typeof planet.globals.atmosphere>).n2;
+    delete (planet.globals.atmosphere as Partial<typeof planet.globals.atmosphere>).inert;
+    delete (planet.globals.atmosphere as Partial<typeof planet.globals.atmosphere>).waterVapor;
+    delete (planet.globals as Partial<typeof planet.globals>).surfacePressure;
+    delete (planet.globals as Partial<typeof planet.globals>).water;
+    delete (planet.globals as Partial<typeof planet.globals>).initialWater;
+    delete (planet.globals as Partial<typeof planet.globals>).escapedWater;
+    delete (planet.globals as Partial<typeof planet.globals>).runawayGreenhouse;
     delete (planet.globals as Partial<typeof planet.globals>).seaLevel;
     delete (planet.globals as Partial<typeof planet.globals>).sedimentExport;
     delete (planet.fields as Partial<typeof planet.fields>).iceThickness;
@@ -48,15 +57,30 @@ describe('save files', () => {
     delete (planet.fields as Partial<typeof planet.fields>).lakeDepth;
     delete (planet.fields as Partial<typeof planet.fields>).lakeType;
     delete (planet.history as Partial<typeof planet.history>).seaLevel;
+    delete (planet.history as Partial<typeof planet.history>).surfacePressure;
+    delete (planet.history as Partial<typeof planet.history>).water;
     delete (planet.controls as Partial<typeof planet.controls>).obliquity;
     const loaded = deserializeGame(serializeGame({ scenario: 'random', planet }));
     expect(loaded.planet.globals.seaLevel).toBe(0);
     expect(loaded.planet.globals.sedimentExport).toBe(0);
+    expect(loaded.planet.globals.atmosphere.n2).toBe(0.78084);
+    expect(loaded.planet.globals.atmosphere.inert).toBe(0.00934);
+    expect(loaded.planet.globals.atmosphere.waterVapor).toBe(0.0025);
+    expect(loaded.planet.globals.surfacePressure).toBeCloseTo(
+      surfacePressureOf(loaded.planet.globals.atmosphere),
+      6,
+    );
+    expect(loaded.planet.globals.water).toBeGreaterThan(0);
+    expect(loaded.planet.globals.initialWater).toBe(loaded.planet.globals.water);
+    expect(loaded.planet.globals.escapedWater).toBe(0);
+    expect(loaded.planet.globals.runawayGreenhouse).toBe(false);
     expect(loaded.planet.fields.iceThickness).toEqual(new Float32Array(planet.grid.cellCount));
     expect(loaded.planet.fields.seasonalAmplitude).toEqual(new Float32Array(planet.grid.cellCount));
     expect(loaded.planet.fields.lakeDepth).toEqual(new Float32Array(planet.grid.cellCount));
     expect(loaded.planet.fields.lakeType).toEqual(new Int32Array(planet.grid.cellCount));
     expect(loaded.planet.history.seaLevel).toEqual(loaded.planet.history.year.map(() => 0));
+    expect(loaded.planet.history.surfacePressure).toEqual(loaded.planet.history.year.map(() => 0));
+    expect(loaded.planet.history.water).toEqual(loaded.planet.history.year.map(() => 0));
     expect(loaded.planet.controls.obliquity).toBe(23.44);
   });
 

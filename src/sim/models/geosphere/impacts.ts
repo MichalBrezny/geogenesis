@@ -152,9 +152,10 @@ export function applyImpactCrater(state: PlanetState, centre: number, diameterKm
 }
 
 function deliverWater(state: PlanetState, diameterKm: number, count: number): void {
-  // A bookkeeping inventory only: M12 can couple this to ocean volume. Even a
-  // 100 km comet contributes just 2 mm global equivalent here.
-  state.globals.waterDelivered += count * 0.002 * Math.pow(diameterKm / 100, 3);
+  // Even a 100 km comet contributes just 2 mm global equivalent here.
+  const delivered = count * 0.002 * Math.pow(diameterKm / 100, 3);
+  state.globals.waterDelivered += delivered;
+  state.globals.water += delivered;
 }
 
 function sterilise(
