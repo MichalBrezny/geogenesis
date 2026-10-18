@@ -25,6 +25,7 @@ import {
 } from '../render/mapRenderer';
 import type { Frame } from '../worker/protocol';
 import { CellInspector, type HoveredCell } from './CellInspector';
+import type { CellLife } from '../sim/models/biosphere/diversity';
 
 /** Ways to look at the planet. */
 export const VIEWS = ['map', 'globe'] as const;
@@ -104,6 +105,10 @@ interface Props {
   /** Flow and pressure overlays to draw. */
   overlays: readonly Overlay[];
   temperatureMonth: TemperatureMonth;
+  /** Asks the worker for the life classes of the inspected cell. */
+  onInspect?: (cell: number) => void;
+  /** The worker's answer for the inspected cell. */
+  cellLife?: CellLife | null;
 }
 
 /** The planet as a flat map or a globe, with the cell inspector under the pointer. */
@@ -115,6 +120,8 @@ export function PlanetView({
   onCellClick,
   overlays,
   temperatureMonth,
+  onInspect,
+  cellLife,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
@@ -129,6 +136,11 @@ export function PlanetView({
     height: number;
   }>({ layers: new Map(), project: null, width: 0, height: 0 });
   const [hovered, setHovered] = useState<HoveredCell | null>(null);
+  const hoveredCell = hovered?.index;
+  // One request per newly inspected cell and per new frame (the life changes as time runs).
+  useEffect(() => {
+    if (hoveredCell !== undefined) onInspect?.(hoveredCell);
+  }, [hoveredCell, frame, onInspect]);
   const [globeView, setGlobeView] = useState<GlobeView>({ longitude: 180, latitude: 20 });
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null);
 
@@ -326,7 +338,7 @@ export function PlanetView({
         <canvas ref={overlayRef} className="overlay-arrows" aria-hidden="true" />
         <canvas ref={isobarRef} className="overlay-isobars" aria-hidden="true" />
       </div>
-      {hovered && <CellInspector frame={frame} cell={hovered} />}
+      {hovered && <CellInspector frame={frame} cell={hovered} life={cellLife} />}
     </>
   );
 }

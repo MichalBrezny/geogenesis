@@ -268,6 +268,22 @@ export interface ModelControls {
   solarFactor: number;
   /** Axial tilt relative to the orbital plane's normal, degrees. */
   obliquity: number;
+  /** Greenhouse forcing (CO₂, CH₄, water vapour bands). */
+  greenhouse: number;
+  /** Brightening by low cloud relative to the reference cover. */
+  cloudAlbedo: number;
+  /** Ice-free surface albedo (the result is clamped to 0.03..0.9). */
+  surfaceAlbedo: number;
+  /** Air–sea heat transfer: how fast temperatures follow the ocean-lagged equilibrium (inverse of the 40-year response time). */
+  airSeaHeat: number;
+  /** Hydrological intensity: evaporation, and with it rainfall, in the moisture budget. */
+  rainfall: number;
+  /** Overall tempo of life's progress: abiogenesis and evolutionary transitions (mutationRate acts on evolution only). */
+  advanceRate: number;
+  /** Population growth and decline rate towards carrying capacity. */
+  reproduction: number;
+  /** Width of the temperature range every life class tolerates. */
+  thermalTolerance: number;
 }
 
 export const DEFAULT_CONTROLS: Readonly<ModelControls> = {
@@ -277,6 +293,14 @@ export const DEFAULT_CONTROLS: Readonly<ModelControls> = {
   mutationRate: 1,
   solarFactor: 1,
   obliquity: 23.44,
+  greenhouse: 1,
+  cloudAlbedo: 1,
+  surfaceAlbedo: 1,
+  airSeaHeat: 1,
+  rainfall: 1,
+  advanceRate: 1,
+  reproduction: 1,
+  thermalTolerance: 1,
 };
 
 /** Complete simulation state. Must stay plain data so it can be serialized and sent to a worker. */

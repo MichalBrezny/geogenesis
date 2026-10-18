@@ -96,6 +96,7 @@ export const precipitationModel: SimComponent = {
       state.globals.circulation,
       state.planetParams.surfaceGravity,
       state.planetParams.tidallyLocked,
+      state.controls.rainfall,
     );
     const fine = fields.precipitation;
     if (atmosphere.coarse === grid) {
@@ -118,6 +119,7 @@ function moistureBudget(
   circulation: { hadleyWidth: number; meanItcz: number } | undefined,
   surfaceGravity: number,
   tidallyLocked: boolean,
+  rainfall: number,
 ): Float64Array {
   const { coarse } = atmosphere;
   const n = coarse.cellCount;
@@ -219,7 +221,8 @@ function moistureBudget(
       w +=
         evaporable[c]! *
         Math.max(0, OCEAN_HUMIDITY * capacity[c]! - w) *
-        (TIME_STEP / EVAPORATION_TIME);
+        (TIME_STEP / EVAPORATION_TIME) *
+        rainfall;
       w += recycling[c]! * rain[c]! * TIME_STEP;
       // Rain: the cell's rate, plus anything beyond what the air can hold here.
       const excess = Math.max(0, w - capacity[c]!);

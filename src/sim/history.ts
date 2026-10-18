@@ -1,6 +1,7 @@
 import type { SimComponent } from './core/component';
 import { Biome } from './data/biomes';
 import type { PlanetState } from './core/planet';
+import { ERAS, planetEra } from './eras';
 import { isOcean } from './models/geosphere/seaLevel';
 
 /** Global quantities recorded once per step, for graphs. */
@@ -22,6 +23,7 @@ export const HISTORY_SERIES = [
   'ch4',
   'livingClasses',
   'impactFlux',
+  'era',
 ] as const;
 export type HistorySeries = (typeof HISTORY_SERIES)[number];
 export type History = Record<HistorySeries, number[]>;
@@ -65,14 +67,18 @@ export const recordHistory: SimComponent = {
       ch4: globals.atmosphere.ch4,
       livingClasses: state.biota.cover.filter((cover) => cover > 0).length,
       impactFlux: globals.impactFlux,
+      era: ERAS.indexOf(planetEra(state)),
     };
     const last = history.year[history.year.length - 1];
     // A zero-length step (initialization) replaces the sample for the same year.
     if (last === globals.year) for (const name of HISTORY_SERIES) history[name].pop();
     for (const name of HISTORY_SERIES) history[name].push(sample[name]);
     if (history.year.length >= MAX_HISTORY_LENGTH) {
+      const era = history.era;
       for (const name of HISTORY_SERIES) {
-        history[name] = history[name].filter((_, k) => k % 2 === 0);
+        history[name] = history[name].filter(
+          (_, k) => k % 2 === 0 || (k > 0 && era[k] !== era[k - 1]),
+        );
       }
     }
   },

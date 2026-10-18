@@ -21,7 +21,8 @@ const HOTSPOT_LIFETIME_RANGE = 500e6;
 const HOTSPOT_BOOST_DECAY = 5e6;
 /** VEI 6–7 recurrence on an Earth-like planet. */
 const LARGE_ERUPTION_INTERVAL = 200;
-const AEROSOL_EFOLDING_TIME = 1;
+/** A 1.5-year e-folding leaves substantial forcing through two post-eruption summers. */
+const AEROSOL_EFOLDING_TIME = 1.5;
 const MAX_AEROSOL_STEP = 10_000;
 /** Mean LIP recurrence; hotter young mantles shorten it through mantleHeat in the caller. */
 const LIP_INTERVAL = 35e6;

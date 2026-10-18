@@ -4,6 +4,7 @@ import type { MapLayer, TemperatureMonth } from '../render/mapRenderer';
 import type { Frame, WorkerRequest, WorkerResponse } from '../worker/protocol';
 import type { ScenarioId } from '../sim/scenarios';
 import type { LifeClassKey } from '../sim/data/lifeClasses';
+import type { CellLife } from '../sim/models/biosphere/diversity';
 import type { ToolId } from '../sim/tools/tools';
 import { HistoryCharts, type ChartSeries } from './charts/HistoryCharts';
 import { CivilizationPanel, EventLog } from './CivilizationPanel';
@@ -56,6 +57,7 @@ const SCENARIO_VIEW: Record<
       'oceanCurrents',
       'biomes',
       'life',
+      'diversity',
       'civilization',
     ],
     layer: 'terrain',
@@ -90,13 +92,22 @@ const SCENARIO_VIEW: Record<
       'wind',
       'oceanCurrents',
       'biomes',
+      'diversity',
       'civilization',
     ],
     layer: 'life',
   },
   mars: {
     charts: ['meanTemperature', 'co2', 'surfacePressure', 'water', 'iceFraction', 'solarInput'],
-    layers: ['terrain', 'airTemperature', 'pressure', 'wind', 'precipitation', 'clouds', 'volcanism'],
+    layers: [
+      'terrain',
+      'airTemperature',
+      'pressure',
+      'wind',
+      'precipitation',
+      'clouds',
+      'volcanism',
+    ],
     layer: 'airTemperature',
   },
   venus: {
@@ -161,11 +172,14 @@ export function App() {
   const [speed, setSpeed] = useState<Speed>('fast');
   const [tool, setTool] = useState<ToolId | null>(null);
   const [lifeClass, setLifeClass] = useState<LifeClassKey>('prokaryotes');
+  const [cellLife, setCellLife] = useState<CellLife | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const noticeTimer = useRef<number | undefined>(undefined);
 
   const send = useCallback((request: WorkerRequest) => workerRef.current?.postMessage(request), []);
+
+  const inspectCell = useCallback((cell: number) => send({ type: 'inspect', cell }), [send]);
 
   const createPlanet = useCallback(
     (
@@ -197,6 +211,7 @@ export function App() {
     worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
       const message = event.data;
       if (message.type === 'frame') setFrame(message.frame);
+      else if (message.type === 'cellLife') setCellLife(message.life);
       else if (message.type === 'error') setError(message.message);
       else if (message.type === 'saved') download(message.bytes, message.fileName);
       else {
@@ -348,6 +363,8 @@ export function App() {
                   toolActive={tool !== null}
                   overlays={frame.scenario === 'daisyworld' ? [] : overlays}
                   temperatureMonth={temperatureMonth}
+                  cellLife={cellLife}
+                  onInspect={inspectCell}
                   onCellClick={(x, y) => {
                     if (tool) send({ type: 'tool', use: { tool, x, y, lifeClass } });
                   }}

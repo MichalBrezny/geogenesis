@@ -1,7 +1,7 @@
 import type { SimComponent } from '../core/component';
 import { cellIndex } from '../core/grid';
 import type { PlanetState } from '../core/planet';
-import { SENTIENCE_POTENTIAL } from '../data/civilization';
+import { SENTIENCE_POTENTIAL, TECH_AGES } from '../data/civilization';
 import { LIFE_CLASSES, lifeClassIndex, type LifeClassKey } from '../data/lifeClasses';
 import { recordEvent } from '../events';
 import { classSuitability } from '../models/biosphere/life';
@@ -194,6 +194,11 @@ export const energyIncome: SimComponent = {
   outputs: [],
   runOneStep(state, dtYears) {
     const { globals } = state;
-    globals.energy = Math.min(MAX_ENERGY, globals.energy + ENERGY_PER_YEAR * dtYears);
+    const age = Math.max(0, Math.min(TECH_AGES.length - 1, state.civilization.age));
+    // SimEarth's civilization ladder roughly doubles the Stone-age budget and reaches
+    // 8x at Nanotech. Applying that multiplier to the yearly rate (not once per short
+    // civilization step) keeps play-time income near the established evolution-era pace.
+    const multiplier = state.civilization.species === null ? 1 : 2 + age;
+    globals.energy = Math.min(MAX_ENERGY, globals.energy + ENERGY_PER_YEAR * multiplier * dtYears);
   },
 };

@@ -1,5 +1,6 @@
 import { RENDERED_FIELDS } from '../render/mapRenderer';
 import { HISTORY_SERIES, type HistorySeries } from '../sim/history';
+import { inspectCellLife, updateDiversity } from '../sim/models/biosphere/diversity';
 import { oxygenPartialPressure } from '../sim/models/atmosphere/atmosphere';
 import { createScenario, isScenarioId, restoreScenario, type ScenarioId } from '../sim/scenarios';
 import { compress, decompress, deserializeGame, serializeGame } from '../sim/serialize';
@@ -59,6 +60,13 @@ export class SimHost {
           if (!this.world) break;
           Object.assign(this.world.planet.controls, request.controls);
           this.sendFrame();
+          break;
+        case 'inspect':
+          if (!this.world) break;
+          this.post(
+            { type: 'cellLife', life: inspectCellLife(this.world.planet, request.cell) },
+            [],
+          );
           break;
         case 'speed':
           this.delayMs = Math.max(0, request.delayMs);
@@ -126,6 +134,7 @@ export class SimHost {
   private sendFrame(): void {
     if (!this.world) return;
     const { planet, simulation } = this.world;
+    updateDiversity(planet);
     const fields = {} as Frame['fields'];
     const transfer: Transferable[] = [];
     for (const name of RENDERED_FIELDS) {

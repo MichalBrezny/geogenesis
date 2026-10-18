@@ -295,7 +295,10 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
       } = fields;
       // Last step's temperatures, for the ocean's lag. The first run of a planet has
       // dt = 0 and goes straight to equilibrium.
-      const lag = dtYears > 0 ? Math.exp(-dtYears / OCEAN_RESPONSE_TIME) : 0;
+      const lag =
+        dtYears > 0
+          ? Math.exp((-dtYears * Math.max(0, state.controls.airSeaHeat)) / OCEAN_RESPONSE_TIME)
+          : 0;
       const previous = lag > 1e-6 ? Float32Array.from(airTemperature) : null;
       const hasClouds = globals.cloudCover !== undefined;
       const climate = getClimateGrid(grid, diffusivity);
@@ -322,17 +325,22 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
           : 0;
       }
       const forcing =
-        greenhouseForcing(globals.atmosphere) -
+        greenhouseForcing(globals.atmosphere) * state.controls.greenhouse -
         thinAtmosphereCooling(globals.surfacePressure) -
         globals.volcanicAerosol +
         globals.impactHeating;
       const hazeAlbedo = sulfurCloudAlbedo(globals.atmosphere, hasWater);
+      const albedoScale = state.controls.surfaceAlbedo;
+      const scaledSurface = (i: number) =>
+        albedoScale === 1
+          ? surfaceAlbedo[i]!
+          : Math.min(0.9, Math.max(0.03, surfaceAlbedo[i]! * albedoScale));
       const lapseDatum = lapseRateDatum(grid, elevation, globals.seaLevel);
       let crossedRunawayLimit = false;
 
       // Start from last step's albedo where it exists, so the ice state persists (hysteresis).
       for (let i = 0; i < grid.cellCount; i++) {
-        const base = Math.max(surfaceAlbedo[i]!, hazeAlbedo);
+        const base = Math.max(scaledSurface(i), hazeAlbedo);
         if (albedo[i] === 0) albedo[i] = base * (1 - iceCover[i]!) + iceAlbedo * iceCover[i]!;
       }
 
@@ -378,11 +386,14 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
           // Low cloud above the reference brightens the ice-free part (the last step's
           // clouds); planets without a cloud model keep the typical clouds of the albedos.
           const cloud = hasClouds
-            ? LOW_CLOUD_ALBEDO * (fields.lowCloud[i]! - REFERENCE_LOW_CLOUD) * (1 - ice)
+            ? state.controls.cloudAlbedo *
+              LOW_CLOUD_ALBEDO *
+              (fields.lowCloud[i]! - REFERENCE_LOW_CLOUD) *
+              (1 - ice)
             : 0;
           const target = Math.min(
             0.9,
-            Math.max(0.03, hazeAlbedo, surfaceAlbedo[i]! * (1 - ice) + iceAlbedo * ice + cloud),
+            Math.max(0.03, hazeAlbedo, scaledSurface(i) * (1 - ice) + iceAlbedo * ice + cloud),
           );
           // Damped update: the albedo–temperature iteration can oscillate at ice edges.
           const next = iteration === 0 ? target : 0.5 * (albedo[i]! + target);

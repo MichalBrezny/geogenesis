@@ -146,7 +146,7 @@ function attemptAbiogenesis(state: PlanetState, dtYears: number, rng: Rng): void
   }
   if (candidates.length === 0) return;
   const rate = suitableArea / (ABIOGENESIS_REFERENCE_OCEAN * ABIOGENESIS_TIME);
-  if (rng.next() >= abiogenesisProbability(rate, availableYears)) return;
+  if (rng.next() >= abiogenesisProbability(rate * state.controls.advanceRate, availableYears)) return;
 
   // Hydrothermal systems are favoured, but a quiet suitable ocean is not forbidden.
   let totalWeight = 0;
@@ -265,7 +265,9 @@ export function classSuitability(
     const temperature = ocean
       ? Math.max(SEA_WATER_MIN_TEMPERATURE, airTemperature[i]!)
       : airTemperature[i]!;
-    const d = (temperature - lifeClass.optimumTemperature) / lifeClass.temperatureTolerance;
+    const d =
+      (temperature - lifeClass.optimumTemperature) /
+      (lifeClass.temperatureTolerance * Math.max(0.05, state.controls.thermalTolerance));
     let value = Math.max(0, 1 - d * d) * oxygen;
     // Life under sea ice survives at low density; land ice is uninhabitable.
     value *= ocean ? 1 - 0.8 * iceCover[i]! : 1 - iceCover[i]!;
@@ -291,7 +293,8 @@ function growAndSpread(
 ): void {
   const { grid, biota } = state;
   const n = grid.cellCount;
-  const response = 1 - Math.exp(-dtYears / POPULATION_RESPONSE_TIME);
+  const speed = Math.max(0, state.controls.reproduction);
+  const response = 1 - Math.exp((-dtYears * speed) / POPULATION_RESPONSE_TIME);
   const populations = biota.populations;
 
   for (let c = 0; c < LIFE_CLASS_COUNT; c++) {
@@ -314,7 +317,7 @@ function growAndSpread(
         populations[offset + i] === 0 && suitability[offset + i]! > EXTINCTION_THRESHOLD,
       settle: (i, remaining) => {
         const capacity = suitability[offset + i]!;
-        const grown = capacity * (1 - Math.exp((-remaining * dtYears) / POPULATION_RESPONSE_TIME));
+        const grown = capacity * (1 - Math.exp((-remaining * dtYears * speed) / POPULATION_RESPONSE_TIME));
         populations[offset + i] = Math.max(grown, Math.min(capacity, COLONISATION_THRESHOLD));
       },
     });
@@ -374,6 +377,7 @@ function evolve(
     const rate =
       (mutationRate *
         state.controls.mutationRate *
+        state.controls.advanceRate *
         share *
         (evolutionTimeFactors[lifeClass.key] ?? 1)) /
       evolutionTimeYears(lifeClass);

@@ -17,6 +17,14 @@ const SLIDERS: readonly Slider[] = [
   { key: 'driftSpeed', min: 0, max: 3, step: 0.1 },
   { key: 'erosion', min: 0, max: 3, step: 0.1 },
   { key: 'mutationRate', min: 0, max: 5, step: 0.1 },
+  { key: 'greenhouse', min: 0, max: 2, step: 0.05 },
+  { key: 'cloudAlbedo', min: 0, max: 3, step: 0.1 },
+  { key: 'surfaceAlbedo', min: 0.5, max: 1.5, step: 0.05 },
+  { key: 'airSeaHeat', min: 0.1, max: 5, step: 0.1 },
+  { key: 'rainfall', min: 0.2, max: 3, step: 0.1 },
+  { key: 'advanceRate', min: 0, max: 5, step: 0.1 },
+  { key: 'reproduction', min: 0.1, max: 5, step: 0.1 },
+  { key: 'thermalTolerance', min: 0.5, max: 2, step: 0.05 },
 ];
 
 /** Model controls: multipliers on the planet's processes (1 = natural). */

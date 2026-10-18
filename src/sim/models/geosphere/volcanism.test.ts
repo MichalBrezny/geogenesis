@@ -63,4 +63,9 @@ describe('spatial volcanism', () => {
     for (let year = 0; year < 5; year++) split = decayAerosol(split, 1);
     expect(split).toBeCloseTo(one, 12);
   });
+
+  it('retains aerosol forcing across two post-eruption summers', () => {
+    expect(decayAerosol(4, 2)).toBeCloseTo(4 * Math.exp(-2 / 1.5), 12);
+    expect(decayAerosol(4, 2)).toBeGreaterThan(1);
+  });
 });

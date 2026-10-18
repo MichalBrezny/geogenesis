@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { cellIndex } from '../core/grid';
 import { createPlanet, type PlanetState } from '../core/planet';
+import { createRng } from '../core/rng';
 import { LIFE_CLASS_COUNT, lifeClassIndex } from '../data/lifeClasses';
-import { applyTool, TOOLS } from './tools';
+import { applyTool, energyIncome, TOOLS } from './tools';
 
 function planet(): PlanetState {
   const state = createPlanet({ width: 64, height: 32 });
@@ -70,5 +71,38 @@ describe('tools', () => {
     expect(state.globals.atmosphere.co2).toBe(480);
     applyTool(state, { tool: 'removeCo2', x: 0, y: 0 });
     expect(state.globals.atmosphere.co2).toBe(240);
+  });
+  it('keeps the base energy income without a civilization', () => {
+    const state = planet();
+    energyIncome.runOneStep(state, 1_000, createRng(1));
+    expect(state.globals.energy).toBeCloseTo(1000.01, 10);
+  });
+
+  it('increases energy income with the civilization tech age', () => {
+    const stone = planet();
+    stone.civilization.species = 0;
+    stone.civilization.age = 0;
+    energyIncome.runOneStep(stone, 100, createRng(1));
+
+    const nanotech = planet();
+    nanotech.civilization.species = 0;
+    nanotech.civilization.age = 6;
+    energyIncome.runOneStep(nanotech, 100, createRng(1));
+
+    expect(nanotech.globals.energy - 1000).toBeGreaterThan(stone.globals.energy - 1000);
+  });
+
+  it('earns the same civilization income across different step lengths', () => {
+    const oneStep = planet();
+    oneStep.civilization.species = 0;
+    oneStep.civilization.age = 4;
+    energyIncome.runOneStep(oneStep, 100, createRng(1));
+
+    const split = planet();
+    split.civilization.species = 0;
+    split.civilization.age = 4;
+    for (let step = 0; step < 20; step++) energyIncome.runOneStep(split, 5, createRng(1));
+
+    expect(split.globals.energy).toBeCloseTo(oneStep.globals.energy, 10);
   });
 });

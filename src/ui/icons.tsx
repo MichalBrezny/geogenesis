@@ -135,6 +135,13 @@ export const LAYER_ICONS: Record<MapLayer, ReactNode> = {
       <circle cx="8" cy="11" r="0.5" fill="currentColor" />
     </Icon>
   ),
+  diversity: (
+    <Icon>
+      <circle cx="7" cy="8" r="3" />
+      <circle cx="17" cy="8" r="3" />
+      <circle cx="12" cy="16" r="3" />
+    </Icon>
+  ),
   civilization: (
     <Icon>
       <path d="M2 21h20M4 21V11l4-3v13m0 0V4h7v17m0 0V11h5v10" />

@@ -9,6 +9,7 @@ import {
 import { LIFE_TIERS } from '../sim/data/lifeClasses';
 import {
   cloudPalette,
+  diversityPalette,
   elevationPalette,
   precipitationPalette,
   pressurePalette,
@@ -66,6 +67,13 @@ const SCALES: Partial<Record<MapLayer, Scale>> = {
     max: 12,
     ticks: [0, 3, 6, 9, 12],
     unit: 'm/s',
+  },
+  diversity: {
+    palette: diversityPalette,
+    min: 1,
+    max: 15,
+    ticks: [1, 5, 10, 15],
+    unit: 'classes',
   },
   clouds: {
     palette: cloudPalette,

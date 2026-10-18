@@ -3,10 +3,11 @@ import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
 import { t, type MessageKey } from '../../i18n/i18n';
 import type { HistorySeries } from '../../sim/history';
+import { ERAS, type Era } from '../../sim/eras';
 import { formatGyr, formatPpm } from '../format';
 
 interface ChartSpec {
-  series: Exclude<HistorySeries, 'year'>;
+  series: Exclude<HistorySeries, 'year' | 'era'>;
   title: MessageKey;
   /** Converts the recorded value to the plotted one (e.g. fraction to %). */
   scale?: number;
@@ -62,6 +63,13 @@ export type ChartSeries = ChartSpec['series'];
 /** Shared by all charts so hovering one shows the same moment in all of them. */
 const CURSOR_SYNC_KEY = 'planet-history';
 
+const ERA_LABELS: Record<Era, MessageKey> = {
+  geological: 'eraName.geological',
+  evolution: 'eraName.evolution',
+  civilization: 'eraName.civilization',
+  technology: 'eraName.technology',
+};
+
 interface Props {
   history: Record<HistorySeries, Float64Array>;
   /** Which measures to chart, in this order. */
@@ -86,12 +94,17 @@ export function HistoryCharts({ history, series }: Props) {
 function HistoryChart({ spec, history }: { spec: ChartSpec; history: Props['history'] }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const plotRef = useRef<uPlot | null>(null);
+  const historyRef = useRef(history);
   const [hovered, setHovered] = useState<{ year: number; value: number } | null>(null);
 
   const scale = spec.scale ?? 1;
   const years = history.year;
   const values = history[spec.series];
   const latest = values.length > 0 ? values[values.length - 1]! * scale : undefined;
+
+  useEffect(() => {
+    historyRef.current = history;
+  }, [history]);
 
   // Create the plot once; data updates go through setData below.
   useEffect(() => {
@@ -138,6 +151,7 @@ function HistoryChart({ spec, history }: { spec: ChartSpec; history: Props['hist
         ],
         series: [{}, { stroke: token('--series-1'), width: 2, points: { show: false } }],
         hooks: {
+          draw: [(u) => drawEraTransitions(u, historyRef.current, token)],
           setCursor: [
             (u) => {
               const index = u.cursor.idx;
@@ -189,4 +203,55 @@ function HistoryChart({ spec, history }: { spec: ChartSpec; history: Props['hist
       <div ref={containerRef} className="chart-plot" />
     </figure>
   );
+}
+
+/** Draws all transition lines, but skips labels that would overlap a previous one. */
+function drawEraTransitions(
+  plot: uPlot,
+  history: Props['history'],
+  token: (name: string) => string,
+) {
+  const { year: years, era: eras } = history;
+  if (years.length < 2 || eras.length !== years.length) return;
+  const ratio = uPlot.pxRatio;
+  const { ctx, bbox } = plot;
+  const minYear = plot.scales.x!.min ?? -Infinity;
+  const maxYear = plot.scales.x!.max ?? Infinity;
+  let labelRight = -Infinity;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(bbox.left, bbox.top, bbox.width, bbox.height);
+  ctx.clip();
+  ctx.lineWidth = ratio;
+  ctx.strokeStyle = token('--text-secondary');
+  ctx.fillStyle = token('--text-secondary');
+  ctx.font = `${10 * ratio}px system-ui, sans-serif`;
+  ctx.textBaseline = 'top';
+
+  for (let index = 1; index < years.length; index++) {
+    if (eras[index] === eras[index - 1]) continue;
+    const year = years[index]!;
+    const era = ERAS[eras[index]!] as Era | undefined;
+    if (!era || year < minYear || year > maxYear) continue;
+    const x = Math.round(plot.valToPos(year, 'x', true)) + 0.5 * ratio;
+    ctx.globalAlpha = 0.55;
+    ctx.beginPath();
+    ctx.moveTo(x, bbox.top);
+    ctx.lineTo(x, bbox.top + bbox.height);
+    ctx.stroke();
+
+    const label = t(ERA_LABELS[era]);
+    const labelWidth = ctx.measureText(label).width;
+    const labelX = Math.min(x + 4 * ratio, bbox.left + bbox.width - labelWidth - 2 * ratio);
+    if (labelX <= labelRight) continue;
+    ctx.globalAlpha = 0.9;
+    ctx.lineWidth = 3 * ratio;
+    ctx.strokeStyle = token('--surface-chart');
+    ctx.strokeText(label, labelX, bbox.top + 3 * ratio);
+    ctx.fillText(label, labelX, bbox.top + 3 * ratio);
+    ctx.strokeStyle = token('--text-secondary');
+    labelRight = labelX + labelWidth + 8 * ratio;
+  }
+  ctx.restore();
 }

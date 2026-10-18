@@ -176,6 +176,14 @@ function hydrateAddedState(planet: PlanetState): void {
   planet.geosphere.nextObliquityUpdateYear ??= 0;
   planet.geosphere.obliquityUpdateIndex ??= 0;
   planet.controls.obliquity ??= DEFAULT_CONTROLS.obliquity;
+  planet.controls.greenhouse ??= DEFAULT_CONTROLS.greenhouse;
+  planet.controls.cloudAlbedo ??= DEFAULT_CONTROLS.cloudAlbedo;
+  planet.controls.surfaceAlbedo ??= DEFAULT_CONTROLS.surfaceAlbedo;
+  planet.controls.airSeaHeat ??= DEFAULT_CONTROLS.airSeaHeat;
+  planet.controls.rainfall ??= DEFAULT_CONTROLS.rainfall;
+  planet.controls.advanceRate ??= DEFAULT_CONTROLS.advanceRate;
+  planet.controls.reproduction ??= DEFAULT_CONTROLS.reproduction;
+  planet.controls.thermalTolerance ??= DEFAULT_CONTROLS.thermalTolerance;
   if (missingPlanetParams) planet.planetParams.initialWaterGel = planet.globals.initialWater;
   const samples = planet.history.year?.length ?? 0;
   for (const name of HISTORY_SERIES) planet.history[name] ??= Array(samples).fill(0);

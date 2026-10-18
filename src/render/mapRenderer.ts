@@ -3,6 +3,7 @@ import type { Grid } from '../sim/core/grid';
 import { Biome, BIOMES } from '../sim/data/biomes';
 import { LakeType } from '../sim/models/geosphere/flowRouting';
 import {
+  diversityPalette,
   elevationPalette,
   precipitationPalette,
   pressurePalette,
@@ -38,6 +39,7 @@ export const RENDERED_FIELDS = [
   'biome',
   'vegetation',
   'lifeTier',
+  'diversity',
   'civilization',
 ] as const;
 export interface MapSource {
@@ -60,6 +62,7 @@ export const MAP_LAYERS = [
   'oceanCurrents',
   'biomes',
   'life',
+  'diversity',
   'civilization',
   'daisies',
 ] as const;
@@ -162,6 +165,12 @@ const layerColors: Record<MapLayer, CellColor> = {
   },
   life(state, i) {
     return LIFE_TIER_COLORS[state.fields.lifeTier[i]!]!;
+  },
+  diversity(state, i) {
+    const { diversity, elevation } = state.fields;
+    const count = diversity[i]!;
+    if (count <= 0) return elevation[i]! < state.seaLevel ? [22, 34, 52] : [52, 56, 62];
+    return diversityPalette(count);
   },
   daisies(state, i) {
     const { daisyWhite, daisyBlack, elevation } = state.fields;

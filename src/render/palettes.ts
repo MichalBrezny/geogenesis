@@ -106,3 +106,11 @@ export const cloudPalette = gradient([
   { value: 0, color: [16, 30, 52] },
   { value: 100, color: [242, 244, 248] },
 ]);
+
+/** Number of life classes present: dark blue (one) to pale yellow (a full community). */
+export const diversityPalette = gradient([
+  { value: 1, color: [30, 60, 110] },
+  { value: 5, color: [34, 150, 150] },
+  { value: 10, color: [140, 205, 110] },
+  { value: 15, color: [250, 240, 150] },
+]);

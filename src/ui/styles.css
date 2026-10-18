@@ -774,3 +774,32 @@ kbd {
   margin: 0;
   font-variant-numeric: tabular-nums;
 }
+
+.inspector-life {
+  margin-top: 6px;
+  padding-top: 4px;
+  border-top: 1px solid var(--grid);
+}
+
+.inspector-life h4,
+.inspector-life p {
+  margin: 0 0 2px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.inspector-life ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.inspector-life li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-variant-numeric: tabular-nums;
+}

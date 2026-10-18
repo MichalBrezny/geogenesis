@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createPlanet } from './core/planet';
 import { createRng } from './core/rng';
+import { ERAS } from './eras';
 import { MAX_HISTORY_LENGTH, recordHistory } from './history';
 
 const rng = createRng(1);
@@ -29,5 +30,22 @@ describe('history', () => {
     expect(years[0]).toBe(0);
     expect(years[years.length - 1]).toBeGreaterThan(3 * MAX_HISTORY_LENGTH - 10);
     for (let k = 1; k < years.length; k++) expect(years[k]!).toBeGreaterThan(years[k - 1]!);
+  });
+
+  it('keeps era transitions when thinning drops surrounding samples', () => {
+    const planet = createPlanet({ width: 8, height: 4 });
+    const transitionYear = MAX_HISTORY_LENGTH - 3;
+    for (let step = 0; step < 2 * MAX_HISTORY_LENGTH; step++) {
+      planet.globals.year = step;
+      if (step === transitionYear) {
+        planet.civilization.species = 0;
+        planet.civilization.age = 0;
+      }
+      recordHistory.runOneStep(planet, 1, rng);
+    }
+    const transitionIndex = planet.history.year.indexOf(transitionYear);
+    expect(transitionIndex).toBeGreaterThan(0);
+    expect(planet.history.era[transitionIndex - 1]).toBe(ERAS.indexOf('geological'));
+    expect(planet.history.era[transitionIndex]).toBe(ERAS.indexOf('civilization'));
   });
 });

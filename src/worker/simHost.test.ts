@@ -131,3 +131,29 @@ describe('SimHost', () => {
     expect(messages).toHaveLength(count);
   });
 });
+
+describe('SimHost cell inspection', () => {
+  it('answers an inspect request with the life of that cell only', () => {
+    const { host, messages } = createHost();
+    host.handle({
+      type: 'create',
+      scenario: 'random',
+      seed: 1,
+      width: 32,
+      height: 16,
+      start: 'quick',
+    });
+    const framesBefore = messages.length;
+    host.handle({ type: 'inspect', cell: 5 });
+    expect(messages).toHaveLength(framesBefore + 1);
+    const reply = messages[messages.length - 1]!;
+    expect(reply.type).toBe('cellLife');
+    if (reply.type === 'cellLife') expect(reply.life.cell).toBe(5);
+    expect(lastFrameFields(messages)).not.toContain('populations');
+  });
+});
+
+function lastFrameFields(messages: WorkerResponse[]): string[] {
+  const frame = messages.find((m) => m.type === 'frame');
+  return frame?.type === 'frame' ? Object.keys(frame.frame.fields) : [];
+}

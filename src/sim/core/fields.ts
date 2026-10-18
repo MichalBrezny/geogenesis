@@ -35,6 +35,8 @@ export const FIELD_SPECS = {
   vegetation: { type: 'f32', unit: '' },
   /** Most advanced tier of life present (index into LIFE_TIERS + 1; 0 = lifeless). */
   lifeTier: { type: 'i32', unit: '' },
+  /** Number of life classes present in the cell (derived for the Diversity layer). */
+  diversity: { type: 'i32', unit: '' },
   /** Density of the sentient civilization, as a fraction of PEOPLE_PER_KM2. */
   civilization: { type: 'f32', unit: '' },
   /** Fraction of the cell covered by white daisies (Daisyworld), 0..1. */

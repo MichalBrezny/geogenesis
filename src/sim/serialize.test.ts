@@ -3,11 +3,13 @@ import { restoreScenario } from './scenarios';
 import { compress, decompress, deserializeGame, SaveFormatError, serializeGame } from './serialize';
 import { createRandomWorld } from './world';
 import { surfacePressureOf } from './models/atmosphere/atmosphere';
+import { ERAS } from './eras';
 
 describe('save files', () => {
   it('round-trip a planet exactly', async () => {
     const world = createRandomWorld({ seed: 3, width: 32, height: 16 });
     for (let s = 0; s < 5; s++) world.simulation.step(world.planet, 1e6);
+    world.planet.history.era[0] = ERAS.indexOf('evolution');
     const bytes = await compress(
       serializeGame({ scenario: 'random', settings: world.settings, planet: world.planet }),
     );
@@ -17,6 +19,7 @@ describe('save files', () => {
     expect(loaded.planet).toEqual(world.planet);
     expect(loaded.planet.fields.elevation).toBeInstanceOf(Float32Array);
     expect(loaded.planet.plates[0]!.crust.owned).toBeInstanceOf(Uint8Array);
+    expect(loaded.planet.history.era).toEqual(world.planet.history.era);
   });
 
   it('resumes the simulation after loading', () => {
@@ -59,6 +62,7 @@ describe('save files', () => {
     delete (planet.history as Partial<typeof planet.history>).seaLevel;
     delete (planet.history as Partial<typeof planet.history>).surfacePressure;
     delete (planet.history as Partial<typeof planet.history>).water;
+    delete (planet.history as Partial<typeof planet.history>).era;
     delete (planet.controls as Partial<typeof planet.controls>).obliquity;
     delete (planet as Partial<typeof planet>).planetParams;
     delete (planet.globals as Partial<typeof planet.globals>).magneticField;
@@ -86,6 +90,7 @@ describe('save files', () => {
     expect(loaded.planet.history.seaLevel).toEqual(loaded.planet.history.year.map(() => 0));
     expect(loaded.planet.history.surfacePressure).toEqual(loaded.planet.history.year.map(() => 0));
     expect(loaded.planet.history.water).toEqual(loaded.planet.history.year.map(() => 0));
+    expect(loaded.planet.history.era).toEqual(loaded.planet.history.year.map(() => 0));
     expect(loaded.planet.controls.obliquity).toBe(23.44);
     expect(loaded.planet.planetParams.starType).toBe('G');
     expect(loaded.planet.planetParams.radius).toBe(loaded.planet.grid.radius);

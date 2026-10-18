@@ -11,6 +11,7 @@ import type { HistorySeries } from '../sim/history';
 import type { ScenarioId } from '../sim/scenarios';
 import type { Era } from '../sim/eras';
 import type { PlanetStart } from '../sim/world';
+import type { CellLife } from '../sim/models/biosphere/diversity';
 
 /** Messages from the UI to the simulation worker. */
 export type WorkerRequest =
@@ -29,6 +30,8 @@ export type WorkerRequest =
   | { type: 'controls'; controls: Partial<ModelControls> }
   | { type: 'unlimitedEnergy'; enabled: boolean }
   | { type: 'save' }
+  /** Ask for the life in one cell (the inspected one); answered with a `cellLife` response. */
+  | { type: 'inspect'; cell: number }
   /** Pause between steps while running, ms. */
   | { type: 'speed'; delayMs: number }
   /** Contents of a save file (gzip-compressed, see sim/serialize.ts). */
@@ -79,6 +82,7 @@ export interface Frame extends MapSource {
 /** Messages from the simulation worker to the UI. */
 export type WorkerResponse =
   | { type: 'frame'; frame: Frame }
+  | { type: 'cellLife'; life: CellLife }
   | { type: 'error'; message: string }
   /** A tool could not be used; the UI explains why. */
   | { type: 'toolRefused'; reason: 'energy' | 'notAllowed' }
