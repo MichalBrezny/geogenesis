@@ -23,6 +23,10 @@ export const FIELD_SPECS = {
   iceCover: { type: 'f32', unit: '' },
   /** Local CO2-frost column, in bar equivalent if spread over the whole cell. */
   co2Ice: { type: 'f32', unit: 'bar' },
+  /** Dissolved oxygen of the surface ocean relative to saturation, 0 (anoxic)..1; land 0. */
+  oceanOxygen: { type: 'f32', unit: '' },
+  /** Marine nutrient (phosphate) supply relative to the modern mean, 0..~3; land 0. */
+  nutrients: { type: 'f32', unit: '' },
   /** Thickness of grounded land ice; zero over the ocean. */
   iceThickness: { type: 'f32', unit: 'm' },
   /** Total cloud cover, 0..1 (cloud model). */

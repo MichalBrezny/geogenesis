@@ -126,6 +126,8 @@ function hydrateAddedState(planet: PlanetState): void {
   planet.globals.sedimentExport ??= 0;
   planet.fields.iceThickness ??= new Float32Array(planet.grid.cellCount);
   planet.fields.co2Ice ??= new Float32Array(planet.grid.cellCount);
+  planet.fields.oceanOxygen ??= new Float32Array(planet.grid.cellCount);
+  planet.fields.nutrients ??= new Float32Array(planet.grid.cellCount);
   planet.fields.seasonalAmplitude ??= new Float32Array(planet.grid.cellCount);
   planet.fields.lakeDepth ??= new Float32Array(planet.grid.cellCount);
   planet.fields.lakeType ??= new Int32Array(planet.grid.cellCount);
@@ -148,6 +150,11 @@ function hydrateAddedState(planet: PlanetState): void {
     planet.planetParams.crustalCarbonBar - planet.globals.atmosphere.co2 * 1e-6,
   );
   planet.globals.co2Ice ??= 0;
+  planet.globals.dust ??= 0;
+  planet.globals.oceanAcidity ??= 0;
+  planet.globals.clathrateCarbon ??= 0;
+  planet.globals.biodiversity ??= 0;
+  planet.globals.lastMassExtinctionYear ??= -1;
   planet.globals.escapedAtmosphere ??= { n2: 0, co2: 0, inert: 0, waterVapor: 0 };
   planet.globals.volcanicAerosol ??= 0;
   planet.globals.lipOutgassing ??= 0;

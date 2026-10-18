@@ -117,6 +117,16 @@ export interface GlobalState {
   crustalCarbon: number;
   /** Condensed surface CO2, bar equivalent when spread over the whole planet. */
   co2Ice: number;
+  /** Atmospheric dust optical depth (impacts, eruptions, nuclear war); 0 = clear sky. */
+  dust: number;
+  /** Surface-ocean acidification, pH units below the pre-perturbation value (0 = none). */
+  oceanAcidity: number;
+  /** Methane stored in clathrates and permafrost, microbar of CH₄ equivalent. */
+  clathrateCarbon: number;
+  /** Biodiversity index, 0..1 (life model). */
+  biodiversity: number;
+  /** Year of the last recorded mass extinction, or -1 if none. */
+  lastMassExtinctionYear: number;
   /** Cumulative non-water atmospheric escape, in partial-pressure equivalents. */
   escapedAtmosphere: { n2: number; co2: number; inert: number; waterVapor: number };
   /** Cumulative sediment exported beyond represented marine accommodation, m³. */
@@ -391,6 +401,11 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
         planetParams.crustalCarbonBar - planetParams.initialCo2Microbar * 1e-6,
       ),
       co2Ice: 0,
+      dust: 0,
+      oceanAcidity: 0,
+      clathrateCarbon: 0,
+      biodiversity: 0,
+      lastMassExtinctionYear: -1,
       escapedAtmosphere: { n2: 0, co2: 0, inert: 0, waterVapor: 0 },
       sedimentExport: 0,
       carbon: { outgassing: 1, weathering: 1, burial: 0 },

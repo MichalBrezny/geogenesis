@@ -18,6 +18,9 @@ import { cloudModel } from './models/atmosphere/clouds';
 import { co2FrostCycle } from './models/atmosphere/co2Frost';
 import { landIceMassBalance } from './models/atmosphere/ice';
 import { atmosphericWaterCycle } from './models/atmosphere/water';
+import { dustModel } from './models/atmosphere/dust';
+import { oceanChemistry } from './models/atmosphere/oceanChemistry';
+import { clathrateModel } from './models/atmosphere/clathrates';
 import { biomeModel } from './models/biosphere/biomes';
 import { createLife, seedPrimordialLife } from './models/biosphere/life';
 import { createLinearDiffuser } from './models/geosphere/diffusion';
@@ -181,6 +184,7 @@ export function randomWorldFromPlanet(
       withMinInterval(tectonicUplift, SLOW_PROCESS_INTERVAL),
       withMinInterval(volcanicActivityModel, SLOW_PROCESS_INTERVAL),
       eruptionModel,
+      dustModel,
       withMinInterval(flowRouting, SLOW_PROCESS_INTERVAL),
       withMinInterval(createStreamPowerEroder(), SLOW_PROCESS_INTERVAL),
       withMinInterval(createLinearDiffuser(), SLOW_PROCESS_INTERVAL),
@@ -197,6 +201,7 @@ export function randomWorldFromPlanet(
       atmosphericEscape,
       seaLevelModel,
       biomeModel,
+      oceanChemistry,
       withMinInterval(
         createLife({
           // The Quick start keeps the pre-M11 pace of the first microbial and complex steps.
@@ -206,6 +211,7 @@ export function randomWorldFromPlanet(
         EVOLUTION_INTERVAL,
       ),
       createCivilization(),
+      clathrateModel,
       biogeochemistry,
       createCarbonCycle(),
       co2FrostCycle,
