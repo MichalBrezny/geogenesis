@@ -203,7 +203,8 @@ body {
 
 /* Controls */
 button,
-select {
+select,
+input {
   font: inherit;
   font-size: 0.85rem;
   color: var(--text-primary);
@@ -299,6 +300,8 @@ button.primary:hover:not(:disabled) {
   border-radius: 6px;
   box-shadow: 0 8px 24px rgb(0 0 0 / 50%);
   font-size: 0.85rem;
+  max-height: min(80vh, 720px);
+  overflow-y: auto;
 }
 
 .popover label {
@@ -308,6 +311,40 @@ button.primary:hover:not(:disabled) {
 
 .popover p {
   margin: 0;
+}
+
+.popover fieldset {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--grid);
+}
+
+.popover input[type='checkbox'] {
+  width: auto;
+  margin: 0 6px 0 0;
+}
+
+.popover label:has(input[type='checkbox']) {
+  display: flex;
+  align-items: center;
+}
+
+.planet-parameters {
+  margin: 0;
+}
+
+.planet-parameters div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+.planet-parameters dd {
+  margin: 0;
+  text-align: right;
 }
 
 .actions {

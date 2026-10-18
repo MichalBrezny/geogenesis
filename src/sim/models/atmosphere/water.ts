@@ -1,8 +1,9 @@
 import type { SimComponent } from '../../core/component';
 import { recordEvent } from '../../events';
-import { atmosphericWaterGel, landIceWaterGel, WATER_GEL_PER_BAR } from '../geosphere/seaLevel';
+import { atmosphericWaterGel, landIceWaterGel, waterGelPerBar } from '../geosphere/seaLevel';
+import { hydrogenEscapeVelocityFactor } from '../planetary';
 import { REFERENCE_WATER_VAPOR, updateSurfacePressure } from './atmosphere';
-import { SUN_AGE } from './star';
+import { stellarXuvFactor as starXuvFactor } from './star';
 
 /** Ocean-to-steam e-folding time during a runaway greenhouse. */
 export const RUNAWAY_EVAPORATION_TIME = 1e6;
@@ -12,6 +13,14 @@ export const OCEAN_ESCAPE_TIME = 500e6;
 const TROPOSPHERIC_WATER_TIME = 1;
 const MOIST_GREENHOUSE_START = 50;
 const FAILED_COLD_TRAP = 100;
+/**
+ * Diffusion-limited/Jeans-like loss of a cold world's vapour column: fraction of
+ * the column lost per year at Earth XUV and 1x the Earth hydrogen factor excess.
+ * The driver is (hydrogenEscapeVelocityFactor - 1), which is exactly 0 for Earth
+ * and steep (~ (v_earth/v_esc)^4) for small planets; Mars-size loses of order
+ * 0.1-1 m GEL over 4 Gyr, a trickle next to the moist-greenhouse route.
+ */
+const JEANS_COLUMN_RATE = 1e-9;
 
 /** Smooth 0..1 transition with zero slope at both ends. */
 function smoothstep(low: number, high: number, value: number): number {
@@ -19,10 +28,8 @@ function smoothstep(low: number, high: number, value: number): number {
   return x * x * (3 - 2 * x);
 }
 
-/** Young Sun-like stars drive substantially faster hydrogen escape. */
-export function stellarXuvFactor(ageYears: number): number {
-  return Math.max(0.25, Math.min(20, Math.pow(SUN_AGE / Math.max(1e8, ageYears), 1.2)));
-}
+/** Backward-compatible G-star-at-1-AU helper used by existing callers/tests. */
+export const stellarXuvFactor = (ageYears: number): number => starXuvFactor(ageYears);
 
 /**
  * Exchanges the conserved water inventory between ocean/ice and atmospheric
@@ -36,6 +43,7 @@ export const atmosphericWaterCycle: SimComponent = {
   runOneStep(state, dtYears) {
     const { globals } = state;
     const atmosphere = globals.atmosphere;
+    const gelPerBar = waterGelPerBar(state.planetParams.surfaceGravity);
     const ice = Math.min(globals.water, landIceWaterGel(state));
     const condensable = Math.max(0, globals.water - ice);
     const currentVapor = Math.min(condensable, atmosphericWaterGel(state));
@@ -48,7 +56,7 @@ export const atmosphericWaterCycle: SimComponent = {
       // 6.5%/K while liquid surface water is available.
       targetVapor = Math.min(
         condensable,
-        REFERENCE_WATER_VAPOR * WATER_GEL_PER_BAR *
+        REFERENCE_WATER_VAPOR * gelPerBar *
           Math.exp(0.065 * (Math.max(-80, Math.min(60, globals.meanTemperature)) - 15)),
       );
     } else {
@@ -61,7 +69,7 @@ export const atmosphericWaterCycle: SimComponent = {
         : TROPOSPHERIC_WATER_TIME;
       const response = 1 - Math.exp(-dtYears / responseTime);
       const nextVapor = currentVapor + (targetVapor - currentVapor) * response;
-      atmosphere.waterVapor = Math.max(0, nextVapor / WATER_GEL_PER_BAR);
+      atmosphere.waterVapor = Math.max(0, nextVapor / gelPerBar);
 
       const coldTrapFailure = smoothstep(
         MOIST_GREENHOUSE_START,
@@ -74,26 +82,46 @@ export const atmosphericWaterCycle: SimComponent = {
       );
       const escapeRate =
         (globals.initialWater / OCEAN_ESCAPE_TIME) *
-        stellarXuvFactor(globals.year) *
+        starXuvFactor(
+          globals.year,
+          state.planetParams.starType,
+          state.planetParams.orbitalDistanceAu,
+        ) *
+        hydrogenEscapeVelocityFactor(state) *
         coldTrapFailure *
         moistEnough;
+      const xuv = starXuvFactor(
+        globals.year,
+        state.planetParams.starType,
+        state.planetParams.orbitalDistanceAu,
+      );
+      const jeansRate =
+        JEANS_COLUMN_RATE *
+        xuv *
+        Math.max(0, hydrogenEscapeVelocityFactor(state) - 1) *
+        atmosphericWaterGel(state);
+      const waterAtStart = globals.water;
+      // The moist-greenhouse route is limited by the standing vapour; the slow
+      // Jeans-like trickle is resupplied from the surface, so only the water bounds it.
       const escaped = Math.min(
         globals.water,
-        atmosphericWaterGel(state),
-        Math.max(0, escapeRate * dtYears),
+        Math.min(atmosphericWaterGel(state), Math.max(0, escapeRate * dtYears)) +
+          Math.max(0, jeansRate * dtYears),
       );
       if (escaped > 0) {
         globals.water -= escaped;
         globals.escapedWater += escaped;
         atmosphere.waterVapor = Math.max(
           0,
-          atmosphere.waterVapor - escaped / WATER_GEL_PER_BAR,
+          atmosphere.waterVapor - escaped / gelPerBar,
         );
       }
 
       const lostThreshold = Math.max(0.01, globals.initialWater * 1e-6);
       if (globals.water <= lostThreshold) {
-        const wasWet = globals.water > 0 || atmosphere.waterVapor > 0;
+        // Judged from the water held before this step's escape, so draining the
+        // last water in one step still counts as losing the oceans.
+        const wasWet = waterAtStart > 0 || globals.escapedWater > 0 || globals.initialWater > 0;
         globals.escapedWater += globals.water;
         globals.water = 0;
         atmosphere.waterVapor = 0;

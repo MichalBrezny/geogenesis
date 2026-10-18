@@ -49,13 +49,18 @@ export const ABYSSAL_DEPTH = -4500;
  * converge or diverge and on the crust type on each side.
  */
 export function generateTectonicPlanet(state: PlanetState, options: TectonicsOptions = {}): void {
-  const opts = { ...DEFAULTS, ...options };
   const { grid } = state;
+  const areaRatio = (grid.radius / 6_371_000) ** 2;
+  const opts = {
+    ...DEFAULTS,
+    ...options,
+    plateCount: options.plateCount ?? Math.max(4, Math.round(DEFAULTS.plateCount * areaRatio)),
+  };
   const rng = createRng(state.seed ^ 0x9e3779b9);
   const pos = grid.cellPosition;
 
   state.plates = Array.from({ length: opts.plateCount }, (_, id) => randomPlate(rng, id, grid));
-  const speedFactor = mantleHeat(state.globals.year);
+  const speedFactor = mantleHeat(state.globals.year, state.planetParams.radius);
   for (const plate of state.plates) {
     plate.angularSpeed *= speedFactor;
     plate.targetSpeed *= speedFactor;
@@ -104,9 +109,12 @@ export function generateTectonicPlanet(state: PlanetState, options: TectonicsOpt
   updateUplift(state, opts.maxUpliftRate);
 }
 
-/** Creates 10–20 major mantle plumes, comparable with the major hotspots on Earth. */
+/** Creates an area-scaled population (10–20 on Earth) of major mantle plumes. */
 function initializeHotspots(state: PlanetState, rng: Rng): void {
-  const count = rng.int(10, 21);
+  const areaRatio = (state.grid.radius / 6_371_000) ** 2;
+  const minimum = Math.max(3, Math.round(10 * areaRatio));
+  const maximum = Math.max(minimum + 1, Math.round(20 * areaRatio) + 1);
+  const count = rng.int(minimum, maximum);
   const now = state.globals.year;
   state.geosphere.hotspots = Array.from({ length: count }, (_, id) => ({
     id,
@@ -306,6 +314,10 @@ export const tectonicUplift: SimComponent = {
   inputs: ['elevation', 'upliftRate'],
   outputs: ['elevation'],
   runOneStep(state, dtYears) {
+    if (state.globals.tectonicRegime === 'stagnant') {
+      state.fields.upliftRate.fill(0);
+      return;
+    }
     const { elevation, upliftRate } = state.fields;
     for (let i = 0; i < elevation.length; i++) {
       elevation[i] = elevation[i]! + upliftRate[i]! * dtYears;

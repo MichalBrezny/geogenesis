@@ -4,7 +4,7 @@ import { createPlanet, type PlanetState } from '../../core/planet';
 import { createRng } from '../../core/rng';
 import { lifeClassIndex } from '../../data/lifeClasses';
 import { generateTectonicPlanet } from '../geosphere/tectonics';
-import { createCarbonCycle, mantleHeat } from './carbon';
+import { createCarbonCycle, DRY_DEGASSING_TIME, mantleHeat } from './carbon';
 import { circulationModel } from './circulation';
 import { createClimate } from './climate';
 import { landIceMassBalance } from './ice';
@@ -105,5 +105,53 @@ describe('carbon cycle', () => {
     expect(mantleHeat(4.5e9)).toBeCloseTo(1, 6);
     expect(mantleHeat(1e9)).toBeGreaterThan(1.4);
     expect(mantleHeat(9e9)).toBeLessThan(1);
+    expect(mantleHeat(4.5e9, 3_390_000)).toBeLessThan(mantleHeat(4.5e9));
+  });
+
+  function dryPlanet(): PlanetState {
+    const planet = createPlanet({ width: 8, height: 4 });
+    planet.globals.water = 0;
+    planet.globals.initialWater = 0;
+    planet.globals.atmosphere.waterVapor = 0;
+    planet.globals.atmosphere.co2 = 1000;
+    planet.globals.crustalCarbon = 0.01;
+    return planet;
+  }
+
+  it('degasses a dry planet from its finite crustal reservoir, independent of step length', () => {
+    const planet = dryPlanet();
+    const carbon = createCarbonCycle();
+    carbon.runOneStep(planet, 1e6, rng);
+    const rate = planet.globals.carbon.outgassing / DRY_DEGASSING_TIME;
+    const expectedBar = 0.01 * -Math.expm1(-rate * 1e6);
+    // Small steps add CO2 at the outgassing rate (≈ linear in dt).
+    expect(expectedBar).toBeCloseTo(0.01 * rate * 1e6, 6);
+    expect(planet.globals.atmosphere.co2).toBeCloseTo(1000 + expectedBar * 1e6, 2);
+    expect(planet.globals.crustalCarbon).toBeCloseTo(0.01 - expectedBar, 8);
+    // Ten 1-Myr steps equal one 10-Myr step.
+    const stepped = dryPlanet();
+    const once = dryPlanet();
+    for (let i = 0; i < 10; i++) carbon.runOneStep(stepped, 1e6, rng);
+    carbon.runOneStep(once, 1e7, rng);
+    expect(stepped.globals.atmosphere.co2).toBeCloseTo(once.globals.atmosphere.co2, 3);
+    // The reservoir is the limit: carbon is conserved and never exceeded.
+    carbon.runOneStep(planet, 100e9, rng);
+    expect(planet.globals.crustalCarbon).toBeLessThan(1e-9);
+    expect(planet.globals.atmosphere.co2).toBeCloseTo(11_000, 1);
+  });
+
+  it('does not grow CO2 geometrically on a frozen planet without a weathering sink', () => {
+    const planet = dryPlanet();
+    planet.globals.water = 1;
+    planet.globals.tectonicRegime = 'stagnant';
+    planet.fields.airTemperature.fill(-60);
+    planet.fields.iceCover.fill(1);
+    const carbon = createCarbonCycle();
+    carbon.runOneStep(planet, 1e8, rng);
+    expect(planet.globals.atmosphere.co2 * 1e-6 + planet.globals.crustalCarbon).toBeCloseTo(
+      0.011,
+      9,
+    );
+    expect(planet.globals.atmosphere.co2).toBeLessThan(11_000);
   });
 });

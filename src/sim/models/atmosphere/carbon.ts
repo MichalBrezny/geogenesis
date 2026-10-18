@@ -1,5 +1,5 @@
 import type { SimComponent } from '../../core/component';
-import { areaWeightedMean } from '../../core/grid';
+import { areaWeightedMean, EARTH_RADIUS } from '../../core/grid';
 import type { PlanetState } from '../../core/planet';
 import { Biome, BIOMES } from '../../data/biomes';
 import { isOcean, liquidWaterGel } from '../geosphere/seaLevel';
@@ -9,6 +9,8 @@ import { updateSurfacePressure } from './atmosphere';
 export interface CarbonCycleOptions {
   /** Multiplier on volcanic CO₂ outgassing (a future player control). */
   volcanism?: number;
+  /** Ceiling on CO₂ (microbar) for this instance; the spin-up honours a requested inventory. */
+  maxCo2?: number;
 }
 
 /**
@@ -67,6 +69,16 @@ const MIN_CO2 = 1;
 export const MAX_CO2 = 1e8;
 /** Rain-bearing planets weather before reaching the former 1-bar CO2 guardrail. */
 const MAX_WET_CO2 = 3e6;
+/**
+ * E-folding time (years) of the crustal carbon reservoir at unit volcanic activity
+ * when nothing takes CO₂ back. Net degassing is first order in the carbon left: the
+ * carbonates and carbon-bearing mantle that volcanism, burial heating and crustal
+ * recycling liberate get scarcer as they are used up. A far-future Earth that lost its
+ * oceans (stagnant lid, activity ≈ 0.08) then releases its ~80 bar at ~20 bar/Gyr
+ * at first and approaches a Venus-like inventory over a few Gyr; a cold, small,
+ * nearly extinct Mars (activity ≈ 0.02) releases almost nothing.
+ */
+export const DRY_DEGASSING_TIME = 3e8;
 
 /**
  * Long-term (geological) carbon cycle: the silicate-weathering thermostat.
@@ -85,6 +97,7 @@ const MAX_WET_CO2 = 3e6;
  */
 export function createCarbonCycle(options: CarbonCycleOptions = {}): SimComponent {
   const volcanism = options.volcanism ?? 1;
+  const ceiling = options.maxCo2 ?? MAX_CO2;
   return {
     name: 'carbonCycle',
     inputs: [
@@ -127,7 +140,21 @@ export function createCarbonCycle(options: CarbonCycleOptions = {}): SimComponen
           Math.pow(co2 / 280, SEAFLOOR_CO2_EXPONENT) *
           (co2 / (co2 + WEATHERING_CO2_HALF_SATURATION));
 
-      if (dtYears > 0) {
+      // Most net degassing the crust can supply in this step (bar): exact first-order
+      // release of the remaining reservoir, so it does not depend on the step length.
+      const reservoir = Math.max(0, state.globals.crustalCarbon);
+      const maxRise = Math.min(
+        reservoir * -Math.expm1((-Math.max(0, outgassing) * dtYears) / DRY_DEGASSING_TIME),
+        Math.max(0, (Math.min(MAX_CO2, ceiling) - before) * 1e-6),
+      );
+      // No silicate-weathering sink: no liquid water, or all of it frozen with no
+      // ice-free rained-on land and no seafloor weathering (a stagnant lid).
+      const sinkless = current <= 0 && seafloor <= 0;
+      if (dtYears > 0 && sinkless) {
+        // A finite flux from the crust, not the multiplicative implicit solve, which
+        // without a sink grows CO₂ geometrically up to the guardrail.
+        atmosphere.co2 = before + maxRise / 1e-6;
+      } else if (dtYears > 0) {
         const k = dtYears / RESERVOIR_TIME;
         // (C − C₀)/C₀ − k·(V − W(C) − B(C)) increases with C, since weathering and burial rise with C.
         const residual = (logC: number) => {
@@ -138,15 +165,25 @@ export function createCarbonCycle(options: CarbonCycleOptions = {}): SimComponen
         // A wet silicate-weathering planet cannot naturally accumulate a Venus
         // atmosphere during one implicit solve; once rain is gone, the full
         // representable 100-bar range is available to volcanic outgassing.
-        let high = Math.log(liquidWaterGel(state) > 1e-6 ? MAX_WET_CO2 : MAX_CO2);
-        if (residual(low) >= 0) high = low;
-        else if (residual(high) <= 0) low = high;
-        for (let iteration = 0; iteration < 60 && high - low > 1e-6; iteration++) {
-          const mid = (low + high) / 2;
-          if (residual(mid) > 0) high = mid;
+        const high = Math.log(Math.max(MIN_CO2, Math.min(MAX_WET_CO2, ceiling)));
+        let upper = high;
+        if (residual(low) >= 0) upper = low;
+        else if (residual(upper) <= 0) low = upper;
+        for (let iteration = 0; iteration < 60 && upper - low > 1e-6; iteration++) {
+          const mid = (low + upper) / 2;
+          if (residual(mid) > 0) upper = mid;
           else low = mid;
         }
-        atmosphere.co2 = Math.exp((low + high) / 2);
+        // The relative (Earth-calibrated) solve cannot raise CO₂ faster than the crust
+        // supplies it; this only binds on weak-sink planets (cold Mars-like worlds).
+        atmosphere.co2 = Math.min(Math.exp((low + upper) / 2), before + maxRise / 1e-6);
+      }
+      if (dtYears > 0) {
+        // Net degassing comes out of the crustal reservoir; weathering returns it.
+        state.globals.crustalCarbon = Math.max(
+          0,
+          state.globals.crustalCarbon - (atmosphere.co2 - before) * 1e-6,
+        );
       }
       state.globals.carbon = {
         outgassing,
@@ -166,7 +203,7 @@ export function spatialVolcanicActivity(state: PlanetState): number {
   const mean = areaWeightedMean(state.grid, state.fields.volcanicActivity);
   return mean > 0
     ? mean
-    : HOTSPOT_SHARE * mantleHeat(state.globals.year) +
+    : HOTSPOT_SHARE * mantleHeat(state.globals.year, state.planetParams.radius) +
         (1 - HOTSPOT_SHARE) * tectonicActivity(state);
 }
 
@@ -174,9 +211,15 @@ export function spatialVolcanicActivity(state: PlanetState): number {
  * Internal heat of the planet relative to an Earth-like planet at 4.5 Gyr: young
  * planets have hotter mantles and far more volcanism.
  */
-export function mantleHeat(ageYears: number): number {
-  const excess = (age: number) => 1 + 1.5 * Math.exp(-age / MANTLE_COOLING_TIME);
-  return excess(ageYears) / excess(4.5e9);
+export function mantleHeat(ageYears: number, radius = EARTH_RADIUS): number {
+  const radiusRatio = Math.max(0.1, radius / EARTH_RADIUS);
+  // Heat production per surface area scales with size, while the cooling time
+  // scales roughly with radius. Earth remains the exact normalization point.
+  const excess = (age: number, coolingTime: number) => 1 + 1.5 * Math.exp(-age / coolingTime);
+  return (
+    (radiusRatio * excess(ageYears, MANTLE_COOLING_TIME * radiusRatio)) /
+    excess(4.5e9, MANTLE_COOLING_TIME)
+  );
 }
 
 /**
@@ -185,6 +228,7 @@ export function mantleHeat(ageYears: number): number {
  * speeds, so temporary stalls in collisions do not swing the climate.
  */
 export function tectonicActivity(state: PlanetState): number {
+  if (state.globals.tectonicRegime === 'stagnant') return 0;
   const { plates, grid } = state;
   if (plates.length === 0) return 1;
   const cells = new Float64Array(plates.length);
@@ -214,7 +258,7 @@ function seafloorWeathering(state: PlanetState): number {
     SEAFLOOR_SHARE *
     (ocean / REFERENCE_OCEAN_FRACTION) *
     tectonicActivity(state) *
-    mantleHeat(globals.year) *
+    mantleHeat(globals.year, state.planetParams.radius) *
     Math.exp(SEAFLOOR_TEMPERATURE_SENSITIVITY * (globals.meanTemperature - 15))
   );
 }

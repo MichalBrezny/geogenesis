@@ -1,5 +1,10 @@
 import type { MapSource } from '../render/mapRenderer';
-import type { CivilizationState, ModelControls } from '../sim/core/planet';
+import type {
+  CivilizationState,
+  ModelControls,
+  PlanetParameters,
+  TectonicRegime,
+} from '../sim/core/planet';
 import type { ToolUse } from '../sim/tools/tools';
 import type { PlanetEvent } from '../sim/events';
 import type { HistorySeries } from '../sim/history';
@@ -16,6 +21,7 @@ export type WorkerRequest =
       width: number;
       height: number;
       start: PlanetStart;
+      planetParams?: Partial<PlanetParameters>;
     }
   | { type: 'run'; running: boolean }
   | { type: 'step' }
@@ -61,6 +67,9 @@ export interface Frame extends MapSource {
   energy: number;
   unlimitedEnergy: boolean;
   controls: ModelControls;
+  planetParams: PlanetParameters;
+  magneticField: number;
+  tectonicRegime: TectonicRegime;
   /** Milliseconds per simulation component in the last step. */
   timings: Record<string, number>;
   /** The whole recorded history, one array per series. */

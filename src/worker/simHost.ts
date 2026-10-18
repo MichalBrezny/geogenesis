@@ -37,6 +37,7 @@ export class SimHost {
             width: request.width,
             height: request.height,
             start: request.start,
+            planetParams: request.planetParams,
           });
           this.sendFrame();
           break;
@@ -161,6 +162,9 @@ export class SimHost {
       energy: planet.globals.energy,
       unlimitedEnergy: planet.globals.unlimitedEnergy,
       controls: { ...planet.controls },
+      planetParams: { ...planet.planetParams },
+      magneticField: planet.globals.magneticField,
+      tectonicRegime: planet.globals.tectonicRegime,
       timings: Object.fromEntries(simulation.timings),
       history,
     };

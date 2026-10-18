@@ -109,6 +109,10 @@ export function createPlateDrift(options: DriftOptions = {}): SimComponent {
     inputs: ['elevation', 'plateId', 'crustType'],
     outputs: ['elevation', 'plateId', 'crustType', 'upliftRate'],
     runOneStep(state, stepYears, rng) {
+      if (state.globals.tectonicRegime === 'stagnant') {
+        state.fields.upliftRate.fill(0);
+        return;
+      }
       const speed = speedFactor * state.controls.driftSpeed;
       if (stepYears <= 0) return;
       // Collisions stall plates only after they are detected, so long steps let
@@ -245,7 +249,7 @@ function accreteContinents(state: PlanetState, dtYears: number, target: number, 
 
 /** Keeps stored plate velocities on the mantle-cooling curve without step-size drift. */
 function adjustPlateSpeedsForMantle(state: PlanetState, ageYears: number): void {
-  const desired = mantleHeat(ageYears);
+  const desired = mantleHeat(ageYears, state.planetParams.radius);
   const previous = state.geosphere.plateSpeedMantleFactor || 1;
   const ratio = desired / previous;
   if (Math.abs(ratio - 1) > 1e-12) {

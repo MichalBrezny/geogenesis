@@ -2,6 +2,7 @@ import type { SimComponent } from '../../core/component';
 import { areaWeightedMean } from '../../core/grid';
 import { isOcean } from '../geosphere/seaLevel';
 import { potentialEvapotranspiration } from '../hydrology';
+import { REFERENCE_WATER_VAPOR } from './atmosphere';
 
 /** Rain (mm/yr) at which convective and frontal cloud reaches half its maximum. */
 const CONVECTIVE_HALF_RAIN = 700;
@@ -23,6 +24,12 @@ export const REFERENCE_LOW_CLOUD = 0.31;
  * heat: they cool. High convective clouds roughly cancel and get no net term.
  */
 export const LOW_CLOUD_ALBEDO = 0.3;
+/**
+ * Share of the reference (Earth) water-vapour column below which low cloud thins out:
+ * clouds need water. Earth, even in glaciations, stays above it; a frozen Mars-like
+ * world (vapour ~1% of Earth) or a dry Venus (none) loses its water clouds.
+ */
+const CLOUD_VAPOR_SHARE = 0.05;
 
 /**
  * Cloud cover diagnosed from the moisture budget's results.
@@ -44,6 +51,10 @@ export const cloudModel: SimComponent = {
   runOneStep(state) {
     const { grid, fields, globals } = state;
     const { elevation, airTemperature, precipitation, oceanAnomaly, cloudCover, lowCloud } = fields;
+    const moisture = Math.min(
+      1,
+      globals.atmosphere.waterVapor / (CLOUD_VAPOR_SHARE * REFERENCE_WATER_VAPOR),
+    );
     for (let i = 0; i < grid.cellCount; i++) {
       const rain = Math.max(0, precipitation[i]!);
       const high = (MAX_CONVECTIVE_CLOUD * rain) / (rain + CONVECTIVE_HALF_RAIN);
@@ -56,7 +67,7 @@ export const cloudModel: SimComponent = {
         const humidity = pet > 0 ? Math.min(1, rain / pet) : 1;
         low = DRY_LAND_LOW_CLOUD + (HUMID_LAND_LOW_CLOUD - DRY_LAND_LOW_CLOUD) * humidity;
       }
-      low = Math.max(0, Math.min(0.9, low));
+      low = Math.max(0, Math.min(0.9, low)) * moisture;
       lowCloud[i] = low;
       cloudCover[i] = 1 - (1 - high) * (1 - low);
     }

@@ -14,6 +14,11 @@ const PASCALS_PER_BAR = 100_000;
 /** Metres GEL represented by one bar of atmospheric water vapour. */
 export const WATER_GEL_PER_BAR = PASCALS_PER_BAR / (STANDARD_GRAVITY * FRESH_WATER_DENSITY);
 
+/** Pressure/column-mass conversion for the planet's configured surface gravity. */
+export function waterGelPerBar(surfaceGravity: number): number {
+  return PASCALS_PER_BAR / (Math.max(0.1, surfaceGravity) * FRESH_WATER_DENSITY);
+}
+
 /** Whether an absolute terrain elevation is below the planet's current sea surface. */
 export function isOcean(elevation: number, seaLevel: number): boolean {
   return elevation < seaLevel;
@@ -73,7 +78,10 @@ export function landIceWaterGel(state: PlanetState): number {
 
 /** Water held in the atmosphere, in the same GEL units as the total inventory. */
 export function atmosphericWaterGel(state: PlanetState): number {
-  return Math.max(0, state.globals.atmosphere.waterVapor) * WATER_GEL_PER_BAR;
+  return (
+    Math.max(0, state.globals.atmosphere.waterVapor) *
+    waterGelPerBar(state.planetParams.surfaceGravity)
+  );
 }
 
 /** Water available to fill ocean basins after grounded ice and vapour are removed. */
@@ -144,7 +152,7 @@ export const seaLevelDatumModel: SimComponent = {
   inputs: ['elevation'],
   outputs: ['elevation'],
   runOneStep(state) {
-    const referenceVapor = 0.0025 * WATER_GEL_PER_BAR;
+    const referenceVapor = 0.0025 * waterGelPerBar(state.planetParams.surfaceGravity);
     const referenceLiquid = Math.max(0, state.globals.initialWater - referenceVapor);
     if (referenceLiquid <= 0) return;
     const shift = seaLevelForWaterGel(state.grid, state.fields.elevation, referenceLiquid);

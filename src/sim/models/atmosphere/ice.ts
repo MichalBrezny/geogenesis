@@ -1,6 +1,7 @@
 import type { SimComponent } from '../../core/component';
 import { areaWeightedMean } from '../../core/grid';
-import { isOcean } from '../geosphere/seaLevel';
+import type { PlanetState } from '../../core/planet';
+import { atmosphericWaterGel, isOcean, landIceWaterGel } from '../geosphere/seaLevel';
 import { fractionOfYearBelow, positiveDegreeDays } from './seasons';
 
 /** Annual-mean temperatures bounding the smooth snow-fall transition. */
@@ -22,6 +23,8 @@ export const FULL_GLACIER_COVER_THICKNESS = 40;
 /** Seasonal snow becomes spatially continuous around this annual precipitation. */
 const SNOW_COVER_HALF_SATURATION = 100;
 const WATER_TO_ICE = 1000 / 917;
+/** Largest share of a planet's non-vapour water its land ice can lock up. */
+const MAX_ICE_SHARE = 0.8;
 
 /** Temperature-controlled sea-ice fraction, preserving the ice-albedo hysteresis. */
 export function iceFractionAt(temperature: number): number {
@@ -106,6 +109,29 @@ export function surfaceIceCover(
 }
 
 /**
+ * Land ice cannot hold more water than the planet has. The mass balance is driven
+ * by last step's precipitation, so on a nearly dry world (Mars: 0.1 m GEL) it could
+ * lock up more than the whole inventory, emptying the sea that fed the snow; the next
+ * step then had no snow, the ice vanished and the sea returned (a period-two flip).
+ * The ice volume D is limited smoothly against the non-vapour water A: unchanged up
+ * to D = A/2, then saturating (continuous slope) towards MAX_ICE_SHARE · A. The snow
+ * that feeds the ice evaporates from the sea, and a sea shrunk to its deepest pools
+ * stops supplying it before it is gone, so a small sea and a steady state remain.
+ * Earth's ice (< 3 % of its water) is never touched.
+ */
+function limitIceToInventory(state: PlanetState): void {
+  const available = Math.max(0, state.globals.water - atmosphericWaterGel(state));
+  const demand = landIceWaterGel(state);
+  if (demand <= available / 2) return;
+  const excess = demand - available / 2;
+  const room = (MAX_ICE_SHARE - 0.5) * available;
+  const allowed = available / 2 + (room * excess) / (excess + room);
+  const scale = Math.max(0, allowed / demand);
+  const thickness = state.fields.iceThickness;
+  for (let i = 0; i < thickness.length; i++) thickness[i] = thickness[i]! * scale;
+}
+
+/**
  * Grounded land ice from a climatological snow mass balance.
  *
  * Accumulation is snowfall converted to ice-equivalent depth. Ablation combines
@@ -125,7 +151,9 @@ export const landIceMassBalance: SimComponent = {
     const { elevation, airTemperature, seasonalAmplitude, precipitation, iceThickness, iceCover } =
       fields;
     const balance = new Float32Array(grid.cellCount);
+    const frozen = new Uint8Array(grid.cellCount);
     let landArea = 0;
+    let oceanArea = 0;
     let viableArea = 0;
 
     for (let y = 0; y < grid.height; y++) {
@@ -134,6 +162,7 @@ export const landIceMassBalance: SimComponent = {
         const i = y * grid.width + x;
         if (isOcean(elevation[i]!, globals.seaLevel)) {
           iceThickness[i] = 0;
+          oceanArea += area;
           continue;
         }
         landArea += area;
@@ -144,6 +173,7 @@ export const landIceMassBalance: SimComponent = {
         const melt = MELT_RATE * positiveDegreeDays(airTemperature[i]!, seasonalAmplitude[i]!);
         const net = snowfall - melt - SUBLIMATION_RATE;
         balance[i] = net;
+        if (melt <= 0) frozen[i] = 1;
         if (net > 0) viableArea += area;
       }
     }
@@ -155,6 +185,10 @@ export const landIceMassBalance: SimComponent = {
       for (let i = 0; i < grid.cellCount; i++) {
         if (isOcean(elevation[i]!, globals.seaLevel)) continue;
         const net = balance[i]!;
+        // With no sea left to carry it away, ice that never melts only sublimates and
+        // frosts out again nearby (cold trapping), so it persists instead of vanishing
+        // for want of snowfall (which needs a sea to evaporate from).
+        if (oceanArea === 0 && frozen[i] && net <= 0) continue;
         const target = net > 0 ? sheetThickness * (net / (net + ACCUMULATION_HALF_SATURATION)) : 0;
         // Warm ice responds faster in proportion to its potential melt rate.
         const responseTime =
@@ -164,6 +198,7 @@ export const landIceMassBalance: SimComponent = {
         const response = 1 - Math.exp(-dtYears / responseTime);
         iceThickness[i] = Math.max(0, iceThickness[i]! + (target - iceThickness[i]!) * response);
       }
+      limitIceToInventory(state);
     }
 
     for (let i = 0; i < grid.cellCount; i++) {

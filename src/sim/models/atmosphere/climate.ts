@@ -6,7 +6,11 @@ import {
   NEIGHBOR_COUNT,
   type Grid,
 } from '../../core/grid';
-import type { Atmosphere } from '../../core/planet';
+import {
+  EARTH_ROTATION_PERIOD_HOURS,
+  EARTH_SURFACE_GRAVITY,
+  type Atmosphere,
+} from '../../core/planet';
 import { recordEvent } from '../../events';
 import { isOcean } from '../geosphere/seaLevel';
 import {
@@ -65,6 +69,41 @@ const SEA_ICE_HEAT_CAPACITY_FACTOR = 0.2;
 const LAND_ICE_HEAT_CAPACITY_FACTOR = 0.25;
 /** Distance from the sea (m) over which maritime air loses its hold on the seasons. */
 const MARITIME_LENGTH = 1_000_000;
+/**
+ * Greenhouse effect built into the North OLR fit that a near-vacuum loses, W/m².
+ * The fit A + B·T contains Earth's ~33 K greenhouse; a bare surface emits σT⁴
+ * instead, which at the −50…−60 °C of thin-atmosphere worlds is ~39–42 W/m² more
+ * than the fit (117 vs 78 W/m² at −60 °C). Faded in below 0.1 bar, so it never
+ * touches Earth-like atmospheres. With it, Mars (absorbed ≈ 110 W/m²) lands near
+ * its observed −60 °C mean (210 K effective temperature).
+ */
+const THIN_ATMOSPHERE_COOLING = 40;
+/** Pressure (bar) below which the atmosphere's heat transport falls off faster. */
+const THIN_TRANSPORT_PRESSURE = 0.1;
+/**
+ * Below THIN_TRANSPORT_PRESSURE heat transport falls linearly with pressure: a thin
+ * atmosphere's heat capacity and eddy heat flux scale with its mass while radiative
+ * relaxation gets faster than transport, so surface temperatures follow local
+ * insolation (Mars: ~50–60 K equator–pole contrast at 6 mbar).
+ */
+const THIN_TRANSPORT_EXPONENT = 1;
+const MIN_TRANSPORT_SCALE = 0.002;
+const MAX_TRANSPORT_SCALE = 80;
+/**
+ * Extra heat transport on a tidally locked planet. Its day–night contrast is erased
+ * by a thermally direct overturning and stationary equatorial waves, much more
+ * efficient than the zonal-mean eddy diffusion this EBM is tuned for: GCMs give
+ * ~40–60 K day–night contrast at 1 bar and < 20–25 K at several bar (Yang, Cowan &
+ * Abbot 2013; Koll & Abbot 2016, weak-temperature-gradient scaling with pressure).
+ */
+const LOCKED_HEAT_TRANSPORT = 2.5;
+/**
+ * Water inventory (m GEL) below which the atmosphere counts as dry: a comet's trace
+ * of water on a Venus-like world must not switch it to the wet radiation limit.
+ */
+const TRACE_WATER_GEL = 0.01;
+/** Ocean share of the surface above which lapse-rate heights are measured from the sea. */
+const LAPSE_DATUM_OCEAN_FRACTION = 0.2;
 
 export interface ClimateOptions {
   /** Heat transport coefficient; larger values even out the pole-equator contrast. */
@@ -114,8 +153,7 @@ export function outgoingLongwaveRadiation(temperatureC: number, hasWater: boolea
     WET_OLR_LIMIT -
     (WET_OLR_LIMIT - WET_TRANSITION_OLR) *
       Math.exp(
-        (-OLR_B * (temperatureC - WET_OLR_TRANSITION)) /
-          (WET_OLR_LIMIT - WET_TRANSITION_OLR),
+        (-OLR_B * (temperatureC - WET_OLR_TRANSITION)) / (WET_OLR_LIMIT - WET_TRANSITION_OLR),
       )
   );
 }
@@ -147,6 +185,38 @@ export function firstAnnualInsolationHarmonic(
   obliquityDeg = 23.44,
 ): number {
   return insolationHarmonics(latitudeDeg, obliquityDeg).firstAnnual * solarInput;
+}
+
+const lockedInsolationNormalization = new WeakMap<Grid, number>();
+
+/** Fixed-substellar insolation, discretely normalized to the same global S/4 mean. */
+export function tidallyLockedInsolation(grid: Grid, cell: number, solarInput: number): number {
+  let normalization = lockedInsolationNormalization.get(grid);
+  if (normalization === undefined) {
+    let rawMean = 0;
+    for (let y = 0; y < grid.height; y++) {
+      for (let x = 0; x < grid.width; x++) {
+        const i = y * grid.width + x;
+        rawMean += Math.max(0, grid.cellPosition[i * 3]!) * grid.rowAreaWeight[y]!;
+      }
+    }
+    normalization = rawMean > 0 ? 0.25 / rawMean : 1;
+    lockedInsolationNormalization.set(grid, normalization);
+  }
+  return SOLAR_CONSTANT * solarInput * Math.max(0, grid.cellPosition[cell * 3]!) * normalization;
+}
+
+/** Slow rotation permits broader eddies and stronger horizontal heat transport. */
+export function rotationHeatTransportScale(rotationPeriodHours: number): number {
+  const period = Math.max(1, Math.abs(rotationPeriodHours));
+  return Math.max(0.25, Math.min(4, Math.sqrt(period / EARTH_ROTATION_PERIOD_HOURS)));
+}
+
+/** Sulfuric-acid haze on a hot, dry CO₂-rich world (Venus reaches about 0.75). */
+export function sulfurCloudAlbedo(atmosphere: Atmosphere, hasWater: boolean): number {
+  if (hasWater) return 0;
+  const share = Math.max(0, Math.min(1, (atmosphere.co2 * 1e-6 - 10) / 40));
+  return 0.75 * share * share * (3 - 2 * share);
 }
 
 function insolationHarmonics(latitudeDeg: number, obliquityDeg: number): InsolationHarmonics {
@@ -229,34 +299,40 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
       const previous = lag > 1e-6 ? Float32Array.from(airTemperature) : null;
       const hasClouds = globals.cloudCover !== undefined;
       const climate = getClimateGrid(grid, diffusivity);
-      // Meridional heat transport rises with atmospheric mass. A 0.7 power is
-      // between the linear and square-root scalings used by simple EBMs.
-      climate.transportScale = Math.max(
-        0.02,
-        Math.min(50, Math.pow(globals.surfacePressure / REFERENCE_SURFACE_PRESSURE, 0.7)),
+      climate.transportScale = heatTransportScale(
+        globals.surfacePressure,
+        state.planetParams.rotationPeriodHours,
+        state.planetParams.tidallyLocked,
       );
-      const hasWater = globals.water > 0;
-      const hasSeasons = state.controls.obliquity > 1e-6;
+      const hasWater = globals.water > TRACE_WATER_GEL;
+      const hasSeasons = !state.planetParams.tidallyLocked && state.controls.obliquity > 1e-6;
       const continentality = hasSeasons
         ? continentalityField(grid, elevation, globals.seaLevel)
         : null;
       const seasonalForcing = new Float64Array(grid.height);
       for (let y = 0; y < grid.height; y++) {
-        seasonalForcing[y] = Math.abs(
-          firstAnnualInsolationHarmonic(
-            grid.rowLatitude[y]!,
-            globals.solarInput,
-            state.controls.obliquity,
-          ),
-        );
+        seasonalForcing[y] = hasSeasons
+          ? Math.abs(
+              firstAnnualInsolationHarmonic(
+                grid.rowLatitude[y]!,
+                globals.solarInput,
+                state.controls.obliquity,
+              ),
+            )
+          : 0;
       }
       const forcing =
-        greenhouseForcing(globals.atmosphere) - globals.volcanicAerosol + globals.impactHeating;
+        greenhouseForcing(globals.atmosphere) -
+        thinAtmosphereCooling(globals.surfacePressure) -
+        globals.volcanicAerosol +
+        globals.impactHeating;
+      const hazeAlbedo = sulfurCloudAlbedo(globals.atmosphere, hasWater);
+      const lapseDatum = lapseRateDatum(grid, elevation, globals.seaLevel);
       let crossedRunawayLimit = false;
 
       // Start from last step's albedo where it exists, so the ice state persists (hysteresis).
       for (let i = 0; i < grid.cellCount; i++) {
-        const base = surfaceAlbedo[i]!;
+        const base = Math.max(surfaceAlbedo[i]!, hazeAlbedo);
         if (albedo[i] === 0) albedo[i] = base * (1 - iceCover[i]!) + iceAlbedo * iceCover[i]!;
       }
 
@@ -268,6 +344,7 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
             albedo,
             globals.solarInput,
             state.controls.obliquity,
+            state.planetParams.tidallyLocked,
             forcing,
             hasWater,
             hasWater && (globals.runawayGreenhouse || globals.meanTemperature >= 50),
@@ -278,7 +355,8 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
           grid,
           elevation,
           fields.oceanAnomaly,
-          globals.seaLevel,
+          lapseDatum,
+          state.planetParams.surfaceGravity,
           airTemperature,
         );
         let maxChange = 0;
@@ -304,7 +382,7 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
             : 0;
           const target = Math.min(
             0.9,
-            Math.max(0.03, surfaceAlbedo[i]! * (1 - ice) + iceAlbedo * ice + cloud),
+            Math.max(0.03, hazeAlbedo, surfaceAlbedo[i]! * (1 - ice) + iceAlbedo * ice + cloud),
           );
           // Damped update: the albedo–temperature iteration can oscillate at ice edges.
           const next = iteration === 0 ? target : 0.5 * (albedo[i]! + target);
@@ -314,7 +392,8 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
         }
         if (maxChange < 1e-3) break;
       }
-      if (crossedRunawayLimit && !globals.runawayGreenhouse) {
+      // Only a planet with water can cross the moist runaway limit; a dry Venus is hot, not runaway.
+      if (crossedRunawayLimit && hasWater && !globals.runawayGreenhouse) {
         globals.runawayGreenhouse = true;
         recordEvent(state, 'runawayGreenhouse');
       }
@@ -562,6 +641,7 @@ function solveCoarse(
   albedo: Float32Array,
   solarInput: number,
   obliquity: number,
+  tidallyLocked: boolean,
   forcing: number,
   hasWater: boolean,
   forcedRunaway: boolean,
@@ -584,10 +664,15 @@ function solveCoarse(
   let absorbedSum = 0;
   let areaSum = 0;
   for (let y = 0; y < coarse.height; y++) {
-    const insolation = annualInsolation(coarse.rowLatitude[y]!, solarInput, obliquity);
+    const zonalInsolation = tidallyLocked
+      ? 0
+      : annualInsolation(coarse.rowLatitude[y]!, solarInput, obliquity);
     for (let x = 0; x < coarse.width; x++) {
       const c = y * coarse.width + x;
       coarseAlbedo[c] = coarseAlbedo[c]! / weight[c]!;
+      const insolation = tidallyLocked
+        ? tidallyLockedInsolation(coarse, c, solarInput)
+        : zonalInsolation;
       const absorbed = insolation * (1 - coarseAlbedo[c]!);
       rhs[c] = rowArea[y]! * (absorbed - (OLR_A - forcing));
       absorbedSum += rowArea[y]! * absorbed;
@@ -708,6 +793,67 @@ function conjugateGradient(climate: ClimateGrid): void {
 }
 
 /**
+ * Multiplier on the EBM's heat transport. Above 0.1 bar it rises with atmospheric
+ * mass as P^0.7 (between the linear and square-root scalings of simple EBMs); below,
+ * it falls linearly with mass. Slow rotation and tidal locking strengthen it.
+ * Earth (1 bar, 24 h, not locked) gives exactly the calibrated value.
+ */
+export function heatTransportScale(
+  surfacePressure: number,
+  rotationPeriodHours: number,
+  tidallyLocked: boolean,
+): number {
+  const ratio = surfacePressure / REFERENCE_SURFACE_PRESSURE;
+  const thin = THIN_TRANSPORT_PRESSURE / REFERENCE_SURFACE_PRESSURE;
+  const pressureScale =
+    ratio >= thin
+      ? Math.pow(ratio, 0.7)
+      : Math.pow(thin, 0.7) * Math.pow(Math.max(0, ratio) / thin, THIN_TRANSPORT_EXPONENT);
+  return Math.max(
+    MIN_TRANSPORT_SCALE,
+    Math.min(
+      MAX_TRANSPORT_SCALE,
+      pressureScale *
+        rotationHeatTransportScale(rotationPeriodHours) *
+        (tidallyLocked ? LOCKED_HEAT_TRANSPORT : 1),
+    ),
+  );
+}
+
+/**
+ * Reference the lapse-rate cooling is measured from. With a real ocean it is the sea
+ * surface. A planet whose sea has shrunk to its deepest basins, or vanished, measures
+ * heights from its area-mean surface instead (cooling highlands, warming basins), so
+ * a dry world is not chilled by the kilometres down to a sea level that sank with its
+ * oceans. The two blend as the ocean shrinks below LAPSE_DATUM_OCEAN_FRACTION; an
+ * Earth-like ocean gives exactly the sea level.
+ */
+interface LapseDatum {
+  seaLevel: number;
+  /** Weight of the sea-level reference, 0..1. */
+  seaWeight: number;
+  meanSurface: number;
+}
+
+function lapseRateDatum(grid: Grid, elevation: Float32Array, seaLevel: number): LapseDatum {
+  let ocean = 0;
+  let mean = 0;
+  for (let y = 0; y < grid.height; y++) {
+    const weight = grid.rowAreaWeight[y]!;
+    for (let x = 0; x < grid.width; x++) {
+      const value = elevation[y * grid.width + x]!;
+      mean += weight * value;
+      if (isOcean(value, seaLevel)) ocean += weight;
+    }
+  }
+  return {
+    seaLevel,
+    seaWeight: Math.min(1, ocean / LAPSE_DATUM_OCEAN_FRACTION),
+    meanSurface: mean,
+  };
+}
+
+/**
  * Bilinear interpolation of coarse sea-level temperatures, then cooling with
  * altitude and the warm or cold ocean currents' anomaly.
  */
@@ -716,10 +862,13 @@ function interpolateToFine(
   grid: Grid,
   elevation: Float32Array,
   oceanAnomaly: Float32Array,
-  seaLevel: number,
+  datum: LapseDatum,
+  surfaceGravity: number,
   out: Float32Array,
 ): void {
   const { coarse, factor, temperature } = climate;
+  const { seaLevel, seaWeight, meanSurface } = datum;
+  const gravityRatio = surfaceGravity / EARTH_SURFACE_GRAVITY;
   const cw = coarse.width;
   for (let fy = 0; fy < grid.height; fy++) {
     const cy = (fy + 0.5) / factor - 0.5;
@@ -741,10 +890,20 @@ function interpolateToFine(
           MAX_CLIMATE_TEMPERATURE,
           top * (1 - ty) +
             bottom * ty -
-            Math.max(0, elevation[i]! - seaLevel) * LAPSE_RATE +
+            (seaWeight >= 1
+              ? Math.max(0, elevation[i]! - seaLevel)
+              : seaWeight * Math.max(0, elevation[i]! - seaLevel) +
+                (1 - seaWeight) * (elevation[i]! - meanSurface)) *
+              LAPSE_RATE *
+              gravityRatio +
             oceanAnomaly[i]!,
         ),
       );
     }
   }
+}
+
+function thinAtmosphereCooling(surfacePressure: number): number {
+  const share = Math.max(0, Math.min(1, (0.1 - surfacePressure) / 0.1));
+  return THIN_ATMOSPHERE_COOLING * share * share * (3 - 2 * share);
 }

@@ -17,6 +17,8 @@ import { useShortcuts, type Shortcuts } from './shortcuts';
 import { ToolPalette } from './ToolPalette';
 import { RESOLUTIONS, SPEEDS, TopBar, type Speed } from './TopBar';
 import type { PlanetStart } from '../sim/world';
+import type { PlanetParameters } from '../sim/core/planet';
+import { PlanetPanel } from './PlanetPanel';
 
 /** How long a tool notice stays on screen, ms. */
 const NOTICE_DURATION = 3000;
@@ -92,6 +94,16 @@ const SCENARIO_VIEW: Record<
     ],
     layer: 'life',
   },
+  mars: {
+    charts: ['meanTemperature', 'co2', 'surfacePressure', 'water', 'iceFraction', 'solarInput'],
+    layers: ['terrain', 'airTemperature', 'pressure', 'wind', 'precipitation', 'clouds', 'volcanism'],
+    layer: 'airTemperature',
+  },
+  venus: {
+    charts: ['meanTemperature', 'co2', 'surfacePressure', 'water', 'solarInput'],
+    layers: ['airTemperature', 'pressure', 'clouds', 'wind', 'terrain', 'volcanism'],
+    layer: 'clouds',
+  },
 };
 
 /** Keys listed in the shortcut help, with their descriptions. */
@@ -156,14 +168,24 @@ export function App() {
   const send = useCallback((request: WorkerRequest) => workerRef.current?.postMessage(request), []);
 
   const createPlanet = useCallback(
-    (scenario: ScenarioId, resolutionIndex: number, start: PlanetStart = 'young') => {
+    (
+      scenario: ScenarioId,
+      resolutionIndex: number,
+      start: PlanetStart = 'young',
+      planetParams?: Partial<PlanetParameters>,
+    ) => {
       const [width, height] = RESOLUTIONS[resolutionIndex]!;
-      send({ type: 'create', scenario, seed: randomSeed(), width, height, start });
+      send({ type: 'create', scenario, seed: randomSeed(), width, height, start, planetParams });
     },
     [send],
   );
-  const newPlanet = (scenario: ScenarioId, resolutionIndex: number, start: PlanetStart) => {
-    createPlanet(scenario, resolutionIndex, start);
+  const newPlanet = (
+    scenario: ScenarioId,
+    resolutionIndex: number,
+    start: PlanetStart,
+    planetParams?: Partial<PlanetParameters>,
+  ) => {
+    createPlanet(scenario, resolutionIndex, start, planetParams);
     setLayer(SCENARIO_VIEW[scenario].layer);
     setError(null);
   };
@@ -295,6 +317,9 @@ export function App() {
               controls={frame.controls}
               onChange={(controls) => send({ type: 'controls', controls })}
             />
+          </Collapsible>
+          <Collapsible title={t('planet.title')}>
+            <PlanetPanel frame={frame} />
           </Collapsible>
         </aside>
       )}

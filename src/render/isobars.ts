@@ -8,6 +8,8 @@ export interface PressureField {
   elevation?: ArrayLike<number>;
   /** Current sea-surface elevation used with `elevation`. */
   seaLevel?: number;
+  /** Planet radius in km for label spacing; defaults to Earth's. */
+  radiusKm?: number;
 }
 
 export interface GeoPoint {
@@ -51,7 +53,7 @@ export const PRESSURE_LABEL_MIN_SPACING_KM = 3_000;
 const MIN_PROMINENCE = 2.5;
 const MAX_LABELS = 12;
 const EARTH_RADIUS_KM = 6_371;
-const KM_PER_DEGREE = (Math.PI * EARTH_RADIUS_KM) / 180;
+const kmPerDegree = (radiusKm = EARTH_RADIUS_KM) => (Math.PI * radiusKm) / 180;
 
 /** Extracts pressure contours at absolute multiples of `interval` hPa. */
 export function extractIsobars(field: PressureField, interval = 4): Isobar[] {
@@ -84,6 +86,7 @@ export function extractIsobars(field: PressureField, interval = 4): Isobar[] {
 export function findPressureExtrema(field: PressureField): PressureExtremum[] {
   const { width, height, values } = field;
   if (width < 2 || height < 2 || values.length < width * height) return [];
+  const KM_PER_DEGREE = kmPerDegree(field.radiusKm);
   const radiusDegrees = EXTREMUM_RADIUS_KM / KM_PER_DEGREE;
   const latitudeStep = 180 / height;
   const beltRadius = Math.max(1, Math.ceil(radiusDegrees / latitudeStep));
@@ -185,7 +188,7 @@ function addBeltCandidates(
 
   const beltCandidates: ExtremumCandidate[] = [];
   const longitudeStep = 360 / width;
-  const radiusDegrees = EXTREMUM_RADIUS_KM / KM_PER_DEGREE;
+  const radiusDegrees = EXTREMUM_RADIUS_KM / kmPerDegree(field.radiusKm);
   for (let x = 0; x < width; x++) {
     const latitude = sampleLatitude(trackRows[x]!, height);
     const longitudinalRadius = Math.min(

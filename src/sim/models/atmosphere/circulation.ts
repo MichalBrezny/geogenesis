@@ -1,5 +1,6 @@
 import type { SimComponent } from '../../core/component';
 import type { Grid } from '../../core/grid';
+import { EARTH_ROTATION_PERIOD_HOURS, EARTH_SURFACE_GRAVITY } from '../../core/planet';
 import {
   averageToCoarse,
   getAtmosphereGrid,
@@ -22,6 +23,9 @@ const LAND_WIND_FACTOR = 0.7;
 const HADLEY_WIDTH = 30;
 /** Equator-to-pole temperature contrast (°C) of present-day Earth. */
 const REFERENCE_CONTRAST = 45;
+/** Hadley width (degrees) where the Ferrel and polar cells start to vanish, and where they are gone. */
+const SINGLE_CELL_START = 45;
+const SINGLE_CELL_FULL = 60;
 /** The ITCZ stays within this many degrees of the equator. */
 const MAX_ITCZ_LATITUDE = 20;
 /** Longitudes (degrees, either side) over which the thermal equator is smoothed. */
@@ -72,11 +76,12 @@ export const circulationModel: SimComponent = {
     const n = coarse.cellCount;
     const { elevation, airTemperature } = fields;
     const seaLevel = state.globals.seaLevel;
+    const gravityScale = state.planetParams.surfaceGravity / EARTH_SURFACE_GRAVITY;
 
     const seaLevelTemperature = new Float64Array(grid.cellCount);
     for (let i = 0; i < grid.cellCount; i++) {
       seaLevelTemperature[i] =
-        airTemperature[i]! + Math.max(0, elevation[i]! - seaLevel) * LAPSE_RATE;
+        airTemperature[i]! + Math.max(0, elevation[i]! - seaLevel) * LAPSE_RATE * gravityScale;
     }
     const temperature = averageToCoarse(atmosphere, grid, seaLevelTemperature, new Float64Array(n));
     const land = averageToCoarse(
@@ -86,13 +91,40 @@ export const circulationModel: SimComponent = {
       new Float64Array(n),
     );
 
+    const thermalPressure = thermalPressureAnomaly(coarse, temperature, land);
+    if (state.planetParams.tidallyLocked) {
+      lockedCirculation(
+        coarse,
+        thermalPressure,
+        land,
+        fields.windU,
+        fields.windV,
+        fields.pressure,
+        atmosphere,
+        grid,
+      );
+      state.globals.circulation = { hadleyWidth: 90, meanItcz: 0 };
+      return;
+    }
+
     const itcz = thermalEquator(coarse, temperature);
+    const periodRatio =
+      Math.abs(state.planetParams.rotationPeriodHours) / EARTH_ROTATION_PERIOD_HOURS;
+    // Held–Hou: the Hadley edge scales as Ω^-1 (Kaspi & Showman 2015 find the same
+    // trend in GCMs), so slow rotators scale linearly; fast ones keep the gentler sqrt.
+    const rotationScale = Math.max(
+      0.5,
+      Math.min(30, periodRatio >= 1 ? periodRatio : Math.sqrt(periodRatio)),
+    );
     const hadleyWidth =
-      HADLEY_WIDTH * Math.sqrt(contrast(coarse, temperature) / REFERENCE_CONTRAST);
-    const width = Math.max(20, Math.min(40, hadleyWidth));
+      HADLEY_WIDTH * Math.sqrt(contrast(coarse, temperature) / REFERENCE_CONTRAST) * rotationScale;
+    const width = Math.max(
+      20 * Math.max(1, rotationScale),
+      Math.min(Math.min(90, 40 * rotationScale), hadleyWidth),
+    );
+    const zonalSign = state.planetParams.rotationPeriodHours < 0 ? -1 : 1;
     state.globals.circulation = { hadleyWidth: width, meanItcz: mean(itcz) };
 
-    const thermalPressure = thermalPressureAnomaly(coarse, temperature, land);
     const u = new Float64Array(n);
     const v = new Float64Array(n);
     const pressure = new Float64Array(n);
@@ -102,18 +134,60 @@ export const circulationModel: SimComponent = {
         const c = y * coarse.width + x;
         const [eastward, northward] = cellWind(latitude, itcz[x]!, width);
         const friction = 1 - (1 - LAND_WIND_FACTOR) * land[c]!;
-        u[c] = eastward * friction;
+        u[c] = zonalSign * eastward * friction;
         v[c] = northward * friction;
         pressure[c] =
           STANDARD_PRESSURE + zonalPressureAnomaly(latitude, itcz[x]!, width) + thermalPressure[c]!;
       }
     }
-    addThermalWind(coarse, thermalPressure, land, u, v);
+    addThermalWind(
+      coarse,
+      thermalPressure,
+      land,
+      u,
+      v,
+      EARTH_ROTATION_PERIOD_HOURS / state.planetParams.rotationPeriodHours,
+    );
     toFine(atmosphere, grid, u, fields.windU);
     toFine(atmosphere, grid, v, fields.windV);
     toFine(atmosphere, grid, pressure, fields.pressure);
   },
 };
+
+/** Surface return flow from the nightside towards the fixed substellar rain belt. */
+function lockedCirculation(
+  coarse: Grid,
+  thermalPressure: Float64Array,
+  land: Float64Array,
+  fineU: Float32Array,
+  fineV: Float32Array,
+  finePressure: Float32Array,
+  atmosphere: AtmosphereGrid,
+  fineGrid: Grid,
+): void {
+  const u = new Float64Array(coarse.cellCount);
+  const v = new Float64Array(coarse.cellCount);
+  const pressure = new Float64Array(coarse.cellCount);
+  const speed = 6;
+  for (let i = 0; i < coarse.cellCount; i++) {
+    const x = coarse.cellPosition[i * 3]!;
+    const y = coarse.cellPosition[i * 3 + 1]!;
+    const z = coarse.cellPosition[i * 3 + 2]!;
+    const longitude = Math.atan2(y, x);
+    const latitude = Math.asin(z);
+    const east = -Math.sin(longitude);
+    const north = -Math.sin(latitude) * Math.cos(longitude);
+    const length = Math.hypot(east, north);
+    const friction = 1 - (1 - LAND_WIND_FACTOR) * land[i]!;
+    u[i] = length > 1e-8 ? (speed * friction * east) / length : 0;
+    v[i] = length > 1e-8 ? (speed * friction * north) / length : 0;
+    pressure[i] = STANDARD_PRESSURE + thermalPressure[i]!;
+  }
+  addThermalWind(coarse, thermalPressure, land, u, v, 0);
+  toFine(atmosphere, fineGrid, u, fineU);
+  toFine(atmosphere, fineGrid, v, fineV);
+  toFine(atmosphere, fineGrid, pressure, finePressure);
+}
 
 function toFine(atmosphere: AtmosphereGrid, grid: Grid, values: Float64Array, out: Float32Array) {
   if (atmosphere.coarse === grid) out.set(values);
@@ -122,9 +196,23 @@ function toFine(atmosphere: AtmosphereGrid, grid: Grid, values: Float64Array, ou
 
 /**
  * Surface wind (eastward, northward; m/s) at a latitude for an ITCZ at `itcz`
- * and Hadley cells `width` degrees wide.
+ * and Hadley cells `width` degrees wide. Beyond ~60 degrees the Hadley cell
+ * reaches the pole and the Ferrel and polar cells disappear.
  */
 export function cellWind(latitude: number, itcz: number, width: number): [number, number] {
+  const single = singleCellWeight(width);
+  const [u, v] = multiCellWind(latitude, itcz, width);
+  if (single <= 0) return [u, v];
+  const [us, vs] = singleCellWind(latitude, itcz);
+  return [u + (us - u) * single, v + (vs - v) * single];
+}
+
+/** Weight of the single-cell regime: 0 below 45 degrees of Hadley width, 1 from 60. */
+function singleCellWeight(width: number): number {
+  return smoothMix(0, 1, (width - SINGLE_CELL_START) / (SINGLE_CELL_FULL - SINGLE_CELL_START));
+}
+
+function multiCellWind(latitude: number, itcz: number, width: number): [number, number] {
   const north = latitude >= itcz;
   // Distances from the ITCZ: to this point, to the pole, to the Hadley cell's edge
   // and to the polar front, which lies halfway between that edge and the pole.
@@ -146,10 +234,21 @@ export function cellWind(latitude: number, itcz: number, width: number): [number
   return [-POLAR_EASTERLY * t, -poleward * POLAR_OUTFLOW * t];
 }
 
+/** One Hadley cell per hemisphere, from the ITCZ to the pole: easterlies and equatorward flow. */
+function singleCellWind(latitude: number, itcz: number): [number, number] {
+  const north = latitude >= itcz;
+  const s = Math.abs(latitude - itcz);
+  const toPole = Math.max(1, north ? 90 - itcz : 90 + itcz);
+  const poleward = north ? 1 : -1;
+  const t = Math.sin((Math.PI * s) / toPole);
+  return [-TRADE_WIND * t, -poleward * HADLEY_INFLOW * t];
+}
+
 /**
  * Zonal sea-level pressure relative to 1013 hPa. Smooth interpolation places
  * the ITCZ trough at −4 hPa, subtropical highs at +6, subpolar lows at −10,
  * and polar highs at +4, following the same cell boundaries as `cellWind`.
+ * In the single-cell regime pressure rises from the ITCZ trough to a polar high.
  */
 export function zonalPressureAnomaly(latitude: number, itcz: number, width: number): number {
   const north = latitude >= itcz;
@@ -157,11 +256,15 @@ export function zonalPressureAnomaly(latitude: number, itcz: number, width: numb
   const toPole = north ? 90 - itcz : 90 + itcz;
   const hadley = Math.min(width, 0.6 * toPole);
   const polarFront = (hadley + toPole) / 2;
-  if (distance < hadley) return smoothMix(-4, 6, distance / hadley);
-  if (distance < polarFront) {
-    return smoothMix(6, -10, (distance - hadley) / (polarFront - hadley));
-  }
-  return smoothMix(-10, 4, (distance - polarFront) / Math.max(1, toPole - polarFront));
+  let multi: number;
+  if (distance < hadley) multi = smoothMix(-4, 6, distance / hadley);
+  else if (distance < polarFront) {
+    multi = smoothMix(6, -10, (distance - hadley) / (polarFront - hadley));
+  } else multi = smoothMix(-10, 4, (distance - polarFront) / Math.max(1, toPole - polarFront));
+  const single = singleCellWeight(width);
+  if (single <= 0) return multi;
+  const one = smoothMix(-4, 4, distance / Math.max(1, toPole));
+  return multi + (one - multi) * single;
 }
 
 /** Broad pressure anomaly made by continents departing from their latitude's mean temperature. */
@@ -233,6 +336,7 @@ function addThermalWind(
   land: Float64Array,
   u: Float64Array,
   v: Float64Array,
+  rotationFactor = 1,
 ): void {
   const { width, height, rowDx, dy, rowLatitude } = grid;
   for (let y = 0; y < height; y++) {
@@ -240,7 +344,7 @@ function addThermalWind(
     const south = Math.min(height - 1, y + 1);
     const meridionalSpan = (south - north) * dy;
     const latitude = (rowLatitude[y]! * Math.PI) / 180;
-    const coriolis = 2 * ROTATION_RATE * Math.sin(latitude);
+    const coriolis = 2 * ROTATION_RATE * rotationFactor * Math.sin(latitude);
     for (let x = 0; x < width; x++) {
       const c = y * width + x;
       const east = y * width + ((x + 1) % width);

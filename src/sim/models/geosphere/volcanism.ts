@@ -109,13 +109,20 @@ export const volcanicActivityModel: SimComponent = {
     const plateMean = areaWeightedMean(grid, boundary);
     const hotspotMean = areaWeightedMean(grid, hotspot);
     const plateTarget = (1 - HOTSPOT_SHARE) * tectonicActivity(state);
+    const mantle = mantleHeat(state.globals.year, state.planetParams.radius);
+    // A stagnant lid has plume volcanism only. It is less efficient than mobile
+    // recycling and fades rapidly as the smaller/older mantle cools.
+    const hotspotTarget =
+      state.globals.tectonicRegime === 'stagnant'
+        ? HOTSPOT_SHARE * 0.35 * mantle * mantle
+        : HOTSPOT_SHARE * mantle;
     const boostDecay = Math.exp(-Math.max(0, dtYears) / HOTSPOT_BOOST_DECAY);
     for (let i = 0; i < volcanicActivity.length; i++) {
       state.geosphere.volcanicBoost[i] = state.geosphere.volcanicBoost[i]! * boostDecay;
       volcanicActivity[i] =
         (plateMean > 0 ? (boundary[i]! * plateTarget) / plateMean : 0) +
         (hotspotMean > 0
-          ? (hotspot[i]! * HOTSPOT_SHARE * mantleHeat(state.globals.year)) / hotspotMean
+          ? (hotspot[i]! * hotspotTarget) / hotspotMean
           : 0) +
         state.geosphere.volcanicBoost[i]!;
       if (dtYears > 0 && !crustType[i] && hotspot[i]! > 0.01) {

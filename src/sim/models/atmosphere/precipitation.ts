@@ -1,5 +1,6 @@
 import type { SimComponent } from '../../core/component';
 import { getTopology, type Grid } from '../../core/grid';
+import { EARTH_SURFACE_GRAVITY } from '../../core/planet';
 import {
   averageToCoarse,
   getAtmosphereGrid,
@@ -93,6 +94,8 @@ export const precipitationModel: SimComponent = {
       fields,
       state.globals.seaLevel,
       state.globals.circulation,
+      state.planetParams.surfaceGravity,
+      state.planetParams.tidallyLocked,
     );
     const fine = fields.precipitation;
     if (atmosphere.coarse === grid) {
@@ -113,6 +116,8 @@ function moistureBudget(
   fields: Fields,
   seaLevel: number,
   circulation: { hadleyWidth: number; meanItcz: number } | undefined,
+  surfaceGravity: number,
+  tidallyLocked: boolean,
 ): Float64Array {
   const { coarse } = atmosphere;
   const n = coarse.cellCount;
@@ -124,7 +129,10 @@ function moistureBudget(
   const seaLevelTemperature = new Float64Array(grid.cellCount);
   for (let i = 0; i < grid.cellCount; i++) {
     seaLevelTemperature[i] =
-      airTemperature[i]! + Math.max(0, elevation[i]! - seaLevel) * LAPSE_RATE;
+      airTemperature[i]! +
+      Math.max(0, elevation[i]! - seaLevel) *
+        LAPSE_RATE *
+        (surfaceGravity / EARTH_SURFACE_GRAVITY);
   }
   const reducedTemperature = averageToCoarse(
     atmosphere,
@@ -172,6 +180,7 @@ function moistureBudget(
     // near the local ITCZ, and polar-front convergence is unaffected.
     const distanceFromItcz = Math.abs(coarse.rowLatitude[y]! - itcz[x]!);
     const inDescendingHadley =
+      !tidallyLocked &&
       convergence > 0 &&
       distanceFromItcz > DEEP_ASCENT_WIDTH &&
       distanceFromItcz < (circulation?.hadleyWidth ?? 30);

@@ -1,5 +1,6 @@
 import type { SimComponent } from '../../core/component';
 import type { Grid } from '../../core/grid';
+import { EARTH_ROTATION_PERIOD_HOURS } from '../../core/planet';
 import {
   averageToCoarse,
   getAtmosphereGrid,
@@ -115,6 +116,15 @@ export const oceanModel: SimComponent = {
     const psi = solveGyres(coarse, sea, curl(coarse, stressX, stressY));
     const { gyreU, gyreV } = gyreCurrents(coarse, sea, psi);
     const upwelling = ekmanUpwelling(coarse, sea, stressX, stressY);
+    const rotation = state.planetParams.rotationPeriodHours;
+    const coriolisScale =
+      Math.sign(rotation || 1) *
+      Math.min(1, EARTH_ROTATION_PERIOD_HOURS / Math.max(1, Math.abs(rotation)));
+    for (let c = 0; c < n; c++) {
+      gyreU[c] = gyreU[c]! * coriolisScale;
+      gyreV[c] = gyreV[c]! * coriolisScale;
+      upwelling[c] = upwelling[c]! * coriolisScale;
+    }
     const anomaly = surfaceAnomaly(coarse, sea, temperature, gyreV, upwelling);
     // What a drifting buoy would follow: the gyres plus the wind's drag.
     const currentU = gyreU.map((value, c) => (sea[c] ? value + WIND_DRIFT * u[c]! : 0));

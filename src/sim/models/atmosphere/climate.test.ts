@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { areaWeightedMean } from '../../core/grid';
+import { areaWeightedMean, createGrid } from '../../core/grid';
 import { createPlanet, type PlanetState } from '../../core/planet';
 import { createRng } from '../../core/rng';
 import { generateTectonicPlanet } from '../geosphere/tectonics';
@@ -8,11 +8,14 @@ import {
   createClimate,
   firstAnnualInsolationHarmonic,
   greenhouseForcing,
+  heatTransportScale,
   outgoingLongwaveRadiation,
   seasonalTemperatureAmplitude,
+  tidallyLockedInsolation,
   WET_OLR_LIMIT,
 } from './climate';
-import { SOLAR_CONSTANT, stellarLuminosity, SUN_AGE } from './star';
+import { REFERENCE_SURFACE_PRESSURE } from './atmosphere';
+import { SOLAR_CONSTANT, starProperties, stellarLuminosity, SUN_AGE } from './star';
 import { createSurfaceAlbedo } from './surfaceAlbedo';
 
 const rng = createRng(1);
@@ -37,6 +40,18 @@ describe('star', () => {
     expect(stellarLuminosity(0)).toBeCloseTo(0.714, 2);
     expect(stellarLuminosity(SUN_AGE)).toBeCloseTo(1, 6);
     expect(stellarLuminosity(8e9)).toBeGreaterThan(1.3);
+  });
+
+  it('scales luminosity and main-sequence lifetime with stellar mass', () => {
+    const f = starProperties('F');
+    const g = starProperties('G');
+    const k = starProperties('K');
+    const m = starProperties('M');
+    expect(f.luminosity).toBeGreaterThan(g.luminosity);
+    expect(k.luminosity).toBeLessThan(g.luminosity);
+    expect(m.lifetime).toBeGreaterThan(k.lifetime);
+    expect(f.lifetime).toBeLessThan(g.lifetime);
+    expect(stellarLuminosity(SUN_AGE, 'G')).toBe(1);
   });
 });
 
@@ -81,6 +96,32 @@ describe('climate', () => {
       }
       expect(mean).toBeCloseTo(SOLAR_CONSTANT / 4, 1);
     }
+  });
+
+  it('gives a locked dayside the same global mean insolation as the zonal case', () => {
+    const grid = createGrid(128, 64);
+    const locked = new Float32Array(grid.cellCount);
+    for (let i = 0; i < grid.cellCount; i++) locked[i] = tidallyLockedInsolation(grid, i, 1);
+    expect(areaWeightedMean(grid, locked)).toBeCloseTo(SOLAR_CONSTANT / 4, 4);
+    expect(locked.some((value) => value === 0)).toBe(true);
+  });
+
+  it('keeps the explicit Earth parameters numerically identical to defaults', () => {
+    const defaults = oceanPlanet();
+    const explicit = oceanPlanet();
+    explicit.planetParams = {
+      ...defaults.planetParams,
+      radius: 6_371_000,
+      surfaceGravity: 9.80665,
+      orbitalDistanceAu: 1,
+      starType: 'G',
+      rotationPeriodHours: 24,
+    };
+    const climate = createClimate();
+    climate.runOneStep(defaults, 0, rng);
+    climate.runOneStep(explicit, 0, rng);
+    expect(explicit.globals.meanTemperature).toBe(defaults.globals.meanTemperature);
+    expect(explicit.fields.airTemperature).toEqual(defaults.fields.airTemperature);
   });
 
   it('makes oceans maritime, coasts intermediate and interiors continental', () => {
@@ -192,5 +233,44 @@ describe('climate', () => {
     expect(warm.globals.iceFraction).toBeLessThan(0.5);
     expect(frozen.globals.iceFraction).toBeGreaterThan(0.95);
     expect(frozen.globals.meanTemperature).toBeLessThan(warm.globals.meanTemperature - 30);
+  });
+
+  it('transports heat as before on Earth, weaker in thin air and stronger when locked', () => {
+    const earth = heatTransportScale(REFERENCE_SURFACE_PRESSURE, 24, false);
+    expect(earth).toBe(1);
+    expect(heatTransportScale(0.5, 24, false)).toBe(
+      Math.pow(0.5 / REFERENCE_SURFACE_PRESSURE, 0.7),
+    );
+    // Below 0.1 bar it falls linearly with atmospheric mass.
+    expect(heatTransportScale(0.006, 24, false)).toBeLessThan(0.015);
+    expect(heatTransportScale(0.8, 24, true)).toBeGreaterThan(
+      2 * heatTransportScale(0.8, 24, false),
+    );
+  });
+
+  it('does not chill a dry planet by the depth of a sea level that sank with its oceans', () => {
+    const run = (seaLevel: number) => {
+      const planet = earthLike();
+      planet.globals.water = 0;
+      planet.globals.atmosphere.waterVapor = 0;
+      planet.globals.seaLevel = seaLevel;
+      createClimate().runOneStep(planet, 0, rng);
+      return planet;
+    };
+    const sunken = run(-9800);
+    const datum = run(-20_000);
+    // Measured from the sea, 10 km of sea-level difference would be ~65 K of cooling.
+    expect(Math.abs(sunken.globals.meanTemperature - datum.globals.meanTemperature)).toBeLessThan(
+      3,
+    );
+    // Lapse rates are measured from the mean surface: highlands cool, basins warm.
+    const { elevation, airTemperature } = sunken.fields;
+    let high = 0;
+    let low = 0;
+    for (let i = 0; i < elevation.length; i++) {
+      if (elevation[i]! > elevation[high]!) high = i;
+      if (elevation[i]! < elevation[low]!) low = i;
+    }
+    expect(airTemperature[low]!).toBeGreaterThan(airTemperature[high]!);
   });
 });

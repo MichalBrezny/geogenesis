@@ -60,6 +60,11 @@ describe('save files', () => {
     delete (planet.history as Partial<typeof planet.history>).surfacePressure;
     delete (planet.history as Partial<typeof planet.history>).water;
     delete (planet.controls as Partial<typeof planet.controls>).obliquity;
+    delete (planet as Partial<typeof planet>).planetParams;
+    delete (planet.globals as Partial<typeof planet.globals>).magneticField;
+    delete (planet.globals as Partial<typeof planet.globals>).tectonicRegime;
+    delete (planet.globals as Partial<typeof planet.globals>).crustalCarbon;
+    delete (planet.globals as Partial<typeof planet.globals>).escapedAtmosphere;
     const loaded = deserializeGame(serializeGame({ scenario: 'random', planet }));
     expect(loaded.planet.globals.seaLevel).toBe(0);
     expect(loaded.planet.globals.sedimentExport).toBe(0);
@@ -82,6 +87,10 @@ describe('save files', () => {
     expect(loaded.planet.history.surfacePressure).toEqual(loaded.planet.history.year.map(() => 0));
     expect(loaded.planet.history.water).toEqual(loaded.planet.history.year.map(() => 0));
     expect(loaded.planet.controls.obliquity).toBe(23.44);
+    expect(loaded.planet.planetParams.starType).toBe('G');
+    expect(loaded.planet.planetParams.radius).toBe(loaded.planet.grid.radius);
+    expect(loaded.planet.globals.magneticField).toBe(1);
+    expect(loaded.planet.globals.tectonicRegime).toBe('mobile');
   });
 
   it('rejects files that are not saves', () => {

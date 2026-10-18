@@ -27,6 +27,9 @@ export type EventKey =
   | 'largeIgneousProvince'
   | 'runawayGreenhouse'
   | 'oceansLost'
+  | 'magneticFieldLost'
+  | 'stagnantLid'
+  | 'atmosphereLost'
   | 'monolith'
   | 'eraReached';
 

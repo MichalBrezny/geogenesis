@@ -4,6 +4,71 @@ import { createHistory, type History } from '../history';
 import { LIFE_CLASS_COUNT } from '../data/lifeClasses';
 import { createGrid, type Grid } from './grid';
 import type { Era } from '../eras';
+import { EARTH_RADIUS } from './grid';
+
+export const EARTH_SURFACE_GRAVITY = 9.80665;
+export const EARTH_ROTATION_PERIOD_HOURS = 24;
+
+export type StarType = 'F' | 'G' | 'K' | 'M';
+export type TectonicRegime = 'mobile' | 'stagnant';
+
+/** Fixed physical parameters and initial volatile/carbon inventories. */
+export interface PlanetParameters {
+  /** Mean solid-body radius, m. */
+  radius: number;
+  /** Surface gravity, m/s². May be overridden independently of radius. */
+  surfaceGravity: number;
+  /** Semi-major axis, astronomical units. */
+  orbitalDistanceAu: number;
+  starType: StarType;
+  /** Sidereal rotation period, hours; negative values are retrograde. */
+  rotationPeriodHours: number;
+  hasMoon: boolean;
+  /** Synchronously rotating, with a fixed equatorial substellar point. */
+  tidallyLocked: boolean;
+  /** Initial water inventory, m global-equivalent layer. */
+  initialWaterGel: number;
+  /** Initial nitrogen partial pressure, bar. */
+  initialN2Bar: number;
+  /** Initial carbon-dioxide partial pressure, microbar. */
+  initialCo2Microbar: number;
+  /** Total accessible crustal carbon, bar of CO₂ equivalent. */
+  crustalCarbonBar: number;
+  /** Initial tectonic style. It may later switch irreversibly to stagnant. */
+  tectonicRegime: TectonicRegime;
+  /** Dynamo efficiency relative to Earth; zero represents a permanently dead core. */
+  dynamoStrength: number;
+}
+
+export const EARTH_PLANET_PARAMETERS: Readonly<PlanetParameters> = {
+  radius: EARTH_RADIUS,
+  surfaceGravity: EARTH_SURFACE_GRAVITY,
+  orbitalDistanceAu: 1,
+  starType: 'G',
+  rotationPeriodHours: EARTH_ROTATION_PERIOD_HOURS,
+  hasMoon: true,
+  tidallyLocked: false,
+  initialWaterGel: 2700,
+  initialN2Bar: 0.78084,
+  initialCo2Microbar: 280,
+  crustalCarbonBar: 80,
+  tectonicRegime: 'mobile',
+  dynamoStrength: 1,
+};
+
+/** Earth-density gravity used when a custom radius does not override gravity. */
+export function earthDensityGravity(radius: number): number {
+  return EARTH_SURFACE_GRAVITY * (radius / EARTH_RADIUS);
+}
+
+/**
+ * Default accessible crustal carbon, bar of CO₂ equivalent. Carbon mass scales with
+ * planet mass (same composition); spread over the surface it is a column ∝ g that
+ * weighs ∝ g again, so its pressure ∝ g² (Earth 80 bar, a Mars-size planet ~11 bar).
+ */
+export function defaultCrustalCarbonBar(surfaceGravity: number): number {
+  return EARTH_PLANET_PARAMETERS.crustalCarbonBar * (surfaceGravity / EARTH_SURFACE_GRAVITY) ** 2;
+}
 
 /** Well-mixed atmospheric gases. */
 export interface Atmosphere {
@@ -44,6 +109,14 @@ export interface GlobalState {
   escapedWater: number;
   /** Whether the planet has crossed the moist/runaway-greenhouse threshold. */
   runawayGreenhouse: boolean;
+  /** Present dipole shielding strength, 0 (none) to 1 (modern Earth). */
+  magneticField: number;
+  /** Current tectonic style; ocean loss can irreversibly stop mobile-lid tectonics. */
+  tectonicRegime: TectonicRegime;
+  /** Carbon still available for net degassing, bar of CO₂ equivalent. */
+  crustalCarbon: number;
+  /** Cumulative non-water atmospheric escape, in partial-pressure equivalents. */
+  escapedAtmosphere: { n2: number; co2: number; inert: number; waterVapor: number };
   /** Cumulative sediment exported beyond represented marine accommodation, m³. */
   sedimentExport: number;
   /** Area-mean total cloud cover, 0..1 (written by the cloud model). */
@@ -147,6 +220,9 @@ export interface GeosphereState {
   impactCount: number;
   /** Abiogenesis is prevented until this planet age after a sterilising impact. */
   abiogenesisSuppressedUntil: number;
+  /** Next deterministic moonless-obliquity update and its sequence index. */
+  nextObliquityUpdateYear: number;
+  obliquityUpdateIndex: number;
 }
 
 /** Life on the planet (see models/biosphere/life.ts). */
@@ -206,6 +282,7 @@ export const DEFAULT_CONTROLS: Readonly<ModelControls> = {
 /** Complete simulation state. Must stay plain data so it can be serialized and sent to a worker. */
 export interface PlanetState {
   grid: Grid;
+  planetParams: PlanetParameters;
   fields: Fields;
   globals: GlobalState;
   plates: Plate[];
@@ -227,27 +304,45 @@ export interface PlanetOptions {
   width?: number;
   height?: number;
   seed?: number;
+  /** Physical parameters; omitted values inherit the Earth calibration. */
+  planetParams?: Partial<PlanetParameters>;
 }
 
 export const DEFAULT_GRID_WIDTH = 128;
 export const DEFAULT_GRID_HEIGHT = 64;
 
 export function createPlanet(options: PlanetOptions = {}): PlanetState {
+  const radius = options.planetParams?.radius ?? EARTH_PLANET_PARAMETERS.radius;
+  const planetParams: PlanetParameters = {
+    ...EARTH_PLANET_PARAMETERS,
+    ...options.planetParams,
+    radius,
+    surfaceGravity:
+      options.planetParams?.surfaceGravity ??
+      (options.planetParams?.radius === undefined
+        ? EARTH_PLANET_PARAMETERS.surfaceGravity
+        : earthDensityGravity(radius)),
+  };
+  if (options.planetParams?.crustalCarbonBar === undefined) {
+    planetParams.crustalCarbonBar = defaultCrustalCarbonBar(planetParams.surfaceGravity);
+  }
   const grid = createGrid(
     options.width ?? DEFAULT_GRID_WIDTH,
     options.height ?? DEFAULT_GRID_HEIGHT,
+    radius,
   );
   const seed = (options.seed ?? 1) >>> 0;
   return {
     grid,
+    planetParams,
     fields: createFields(grid.cellCount),
     globals: {
       year: 0,
       solarInput: 1,
       atmosphere: {
-        n2: 0.78084,
+        n2: planetParams.initialN2Bar,
         inert: 0.00934,
-        co2: 280,
+        co2: planetParams.initialCo2Microbar,
         ch4: 0.7,
         o2: 0.21,
         waterVapor: 0.0025,
@@ -261,6 +356,13 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
       initialWater: 2700,
       escapedWater: 0,
       runawayGreenhouse: false,
+      magneticField: planetParams.dynamoStrength > 0 ? 1 : 0,
+      tectonicRegime: planetParams.tectonicRegime,
+      crustalCarbon: Math.max(
+        0,
+        planetParams.crustalCarbonBar - planetParams.initialCo2Microbar * 1e-6,
+      ),
+      escapedAtmosphere: { n2: 0, co2: 0, inert: 0, waterVapor: 0 },
       sedimentExport: 0,
       carbon: { outgassing: 1, weathering: 1, burial: 0 },
       volcanicAerosol: 0,
@@ -285,6 +387,8 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
       impactHeat: 0,
       impactCount: 0,
       abiogenesisSuppressedUntil: 0,
+      nextObliquityUpdateYear: 0,
+      obliquityUpdateIndex: 0,
     },
     history: createHistory(),
     biota: {

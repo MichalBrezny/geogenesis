@@ -25,6 +25,22 @@ describe('clouds', () => {
     expect(fields.lowCloud[3]!).toBeGreaterThan(fields.lowCloud[2]! + 0.2);
   });
 
+  it('need water vapour: a dry or frozen atmosphere has no low cloud', () => {
+    const planet = createPlanet({ width: 8, height: 4 });
+    const { fields } = planet;
+    fields.airTemperature.fill(-60);
+    fields.elevation.fill(300);
+    fields.elevation[2] = -3000;
+    fields.precipitation.fill(0);
+    cloudModel.runOneStep(planet, 0, rng);
+    const wet = fields.lowCloud[0]!;
+    planet.globals.atmosphere.waterVapor = 0;
+    cloudModel.runOneStep(planet, 0, rng);
+    expect(wet).toBeGreaterThan(0.3);
+    expect(fields.lowCloud[0]).toBe(0);
+    expect(fields.lowCloud[2]).toBe(0);
+  });
+
   it('cool the planet when there is more low cloud', () => {
     const temperature = (lowCloud: number) => {
       const planet = createPlanet({ width: 64, height: 32 });

@@ -1,6 +1,7 @@
 import type { PlanetOptions, PlanetState } from '../core/planet';
 import {
   createRandomWorld,
+  createPlanetPreset,
   randomWorldFromPlanet,
   type PlanetStart,
   type RandomWorldSettings,
@@ -35,6 +36,14 @@ export const SCENARIOS = {
         continentalFraction: 0,
         start: settings?.start ?? 'quick',
       }),
+  },
+  mars: {
+    create: (options) => createPlanetPreset('mars', options),
+    restore: (planet, settings) => randomWorldFromPlanet(planet, settings),
+  },
+  venus: {
+    create: (options) => createPlanetPreset('venus', options),
+    restore: (planet, settings) => randomWorldFromPlanet(planet, settings),
   },
 } satisfies Record<string, Scenario>;
 

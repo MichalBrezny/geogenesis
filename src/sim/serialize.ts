@@ -1,4 +1,8 @@
-import { DEFAULT_CONTROLS, type PlanetState } from './core/planet';
+import {
+  DEFAULT_CONTROLS,
+  EARTH_PLANET_PARAMETERS,
+  type PlanetState,
+} from './core/planet';
 import { HISTORY_SERIES } from './history';
 import type { RandomWorldSettings } from './world';
 import { surfacePressureOf } from './models/atmosphere/atmosphere';
@@ -103,6 +107,21 @@ export function deserializeGame(bytes: Uint8Array): SavedGame {
 
 /** Hydrates optional state added within the current save version. */
 function hydrateAddedState(planet: PlanetState): void {
+  const missingPlanetParams = planet.planetParams === undefined;
+  planet.planetParams ??= { ...EARTH_PLANET_PARAMETERS, radius: planet.grid.radius };
+  planet.planetParams.radius ??= planet.grid.radius;
+  planet.planetParams.surfaceGravity ??= EARTH_PLANET_PARAMETERS.surfaceGravity;
+  planet.planetParams.orbitalDistanceAu ??= 1;
+  planet.planetParams.starType ??= 'G';
+  planet.planetParams.rotationPeriodHours ??= EARTH_PLANET_PARAMETERS.rotationPeriodHours;
+  planet.planetParams.hasMoon ??= true;
+  planet.planetParams.tidallyLocked ??= false;
+  planet.planetParams.initialWaterGel ??= EARTH_PLANET_PARAMETERS.initialWaterGel;
+  planet.planetParams.initialN2Bar ??= EARTH_PLANET_PARAMETERS.initialN2Bar;
+  planet.planetParams.initialCo2Microbar ??= EARTH_PLANET_PARAMETERS.initialCo2Microbar;
+  planet.planetParams.crustalCarbonBar ??= EARTH_PLANET_PARAMETERS.crustalCarbonBar;
+  planet.planetParams.tectonicRegime ??= 'mobile';
+  planet.planetParams.dynamoStrength ??= 1;
   planet.globals.seaLevel ??= 0;
   planet.globals.sedimentExport ??= 0;
   planet.fields.iceThickness ??= new Float32Array(planet.grid.cellCount);
@@ -121,6 +140,13 @@ function hydrateAddedState(planet: PlanetState): void {
   planet.globals.initialWater ??= planet.globals.water;
   planet.globals.escapedWater ??= 0;
   planet.globals.runawayGreenhouse ??= false;
+  planet.globals.magneticField ??= 1;
+  planet.globals.tectonicRegime ??= planet.planetParams.tectonicRegime;
+  planet.globals.crustalCarbon ??= Math.max(
+    0,
+    planet.planetParams.crustalCarbonBar - planet.globals.atmosphere.co2 * 1e-6,
+  );
+  planet.globals.escapedAtmosphere ??= { n2: 0, co2: 0, inert: 0, waterVapor: 0 };
   planet.globals.volcanicAerosol ??= 0;
   planet.globals.lipOutgassing ??= 0;
   planet.globals.impactFlux ??= 0;
@@ -139,13 +165,18 @@ function hydrateAddedState(planet: PlanetState): void {
     impactHeat: 0,
     impactCount: 0,
     abiogenesisSuppressedUntil: 0,
+    nextObliquityUpdateYear: 0,
+    obliquityUpdateIndex: 0,
   };
   planet.geosphere.cleanupElapsedYears ??= 0;
   planet.geosphere.plateSpeedMantleFactor ??= 1;
   planet.geosphere.impactHeat ??= 0;
   planet.geosphere.impactCount ??= 0;
   planet.geosphere.abiogenesisSuppressedUntil ??= 0;
+  planet.geosphere.nextObliquityUpdateYear ??= 0;
+  planet.geosphere.obliquityUpdateIndex ??= 0;
   planet.controls.obliquity ??= DEFAULT_CONTROLS.obliquity;
+  if (missingPlanetParams) planet.planetParams.initialWaterGel = planet.globals.initialWater;
   const samples = planet.history.year?.length ?? 0;
   for (const name of HISTORY_SERIES) planet.history[name] ??= Array(samples).fill(0);
 }

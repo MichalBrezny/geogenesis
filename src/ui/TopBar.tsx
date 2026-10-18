@@ -4,6 +4,7 @@ import { SCENARIO_IDS, type ScenarioId } from '../sim/scenarios';
 import type { Frame } from '../worker/protocol';
 import { PLANET_STARTS, type PlanetStart } from '../sim/world';
 import { formatGyr, formatPpm, formatStep } from './format';
+import type { PlanetParameters, StarType } from '../sim/core/planet';
 
 /** Pause between simulation steps for each speed setting, ms. */
 export const SPEEDS = { slow: 500, normal: 120, fast: 0 } as const;
@@ -23,7 +24,12 @@ interface Props {
   onStep: () => void;
   speed: Speed;
   onSpeedChange: (speed: Speed) => void;
-  onNewPlanet: (scenario: ScenarioId, resolutionIndex: number, start: PlanetStart) => void;
+  onNewPlanet: (
+    scenario: ScenarioId,
+    resolutionIndex: number,
+    start: PlanetStart,
+    planetParams?: Partial<PlanetParameters>,
+  ) => void;
   onSave: () => void;
   onLoad: (file: File) => void;
   onShowHelp: () => void;
@@ -141,6 +147,12 @@ function NewPlanetMenu({ onCreate }: { onCreate: Props['onNewPlanet'] }) {
   const [scenario, setScenario] = useState<ScenarioId>('random');
   const [resolution, setResolution] = useState(1);
   const [start, setStart] = useState<PlanetStart>('young');
+  const [radiusKm, setRadiusKm] = useState(6371);
+  const [distanceAu, setDistanceAu] = useState(1);
+  const [starType, setStarType] = useState<StarType>('G');
+  const [rotationHours, setRotationHours] = useState(24);
+  const [hasMoon, setHasMoon] = useState(true);
+  const [initialWater, setInitialWater] = useState('');
   const anchor = useRef<HTMLDivElement>(null);
 
   // A press anywhere outside the menu closes it.
@@ -167,7 +179,18 @@ function NewPlanetMenu({ onCreate }: { onCreate: Props['onNewPlanet'] }) {
           className="popover"
           onSubmit={(event) => {
             event.preventDefault();
-            onCreate(scenario, resolution, start);
+            const planetParams =
+              scenario === 'random'
+                ? {
+                    radius: radiusKm * 1000,
+                    orbitalDistanceAu: distanceAu,
+                    starType,
+                    rotationPeriodHours: rotationHours,
+                    hasMoon,
+                    ...(initialWater === '' ? {} : { initialWaterGel: Number(initialWater) }),
+                  }
+                : undefined;
+            onCreate(scenario, resolution, start, planetParams);
             setOpen(false);
           }}
           onKeyDown={(event) => {
@@ -189,17 +212,102 @@ function NewPlanetMenu({ onCreate }: { onCreate: Props['onNewPlanet'] }) {
             </select>
           </label>
           <p className="muted">{t(`scenarioHelp.${scenario}`)}</p>
-          <label title={t('controls.startHint')}>
-            {t('controls.start')}
-            <select value={start} onChange={(e) => setStart(e.target.value as PlanetStart)}>
-              {PLANET_STARTS.map((id) => (
-                <option key={id} value={id} title={t(`startHelp.${id}`)}>
-                  {t(`start.${id}`)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <p className="muted">{t(`startHelp.${start}`)}</p>
+          {(scenario === 'random' || scenario === 'aquarium') && (
+            <>
+              <label title={t('controls.startHint')}>
+                {t('controls.start')}
+                <select
+                  value={start}
+                  onChange={(e) => setStart(e.target.value as PlanetStart)}
+                  title={t('controls.startHint')}
+                >
+                  {PLANET_STARTS.map((id) => (
+                    <option key={id} value={id} title={t(`startHelp.${id}`)}>
+                      {t(`start.${id}`)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="muted">{t(`startHelp.${start}`)}</p>
+            </>
+          )}
+          {scenario === 'random' && (
+            <fieldset>
+              <legend>{t('planet.custom')}</legend>
+              <label title={t('planet.radiusHint')}>
+                {t('planet.radius')} (km)
+                <input
+                  type="number"
+                  min="1000"
+                  max="20000"
+                  step="1"
+                  value={radiusKm}
+                  onChange={(event) => setRadiusKm(Number(event.target.value))}
+                  title={t('planet.radiusHint')}
+                />
+              </label>
+              <label title={t('planet.distanceHint')}>
+                {t('planet.distance')} (AU)
+                <input
+                  type="number"
+                  min="0.02"
+                  max="20"
+                  step="0.001"
+                  value={distanceAu}
+                  onChange={(event) => setDistanceAu(Number(event.target.value))}
+                  title={t('planet.distanceHint')}
+                />
+              </label>
+              <label title={t('planet.starTypeHint')}>
+                {t('planet.starType')}
+                <select
+                  value={starType}
+                  onChange={(event) => setStarType(event.target.value as StarType)}
+                  title={t('planet.starTypeHint')}
+                >
+                  {(['F', 'G', 'K', 'M'] as const).map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label title={t('planet.rotationHint')}>
+                {t('planet.rotation')} (h)
+                <input
+                  type="number"
+                  min="-10000"
+                  max="10000"
+                  step="0.1"
+                  value={rotationHours}
+                  onChange={(event) => setRotationHours(Number(event.target.value))}
+                  title={t('planet.rotationHint')}
+                />
+              </label>
+              <label title={t('planet.moonHint')}>
+                <input
+                  type="checkbox"
+                  checked={hasMoon}
+                  onChange={(event) => setHasMoon(event.target.checked)}
+                  title={t('planet.moonHint')}
+                />
+                {t('planet.moon')}
+              </label>
+              <label title={t('planet.waterHint')}>
+                {t('planet.water')} (m GEL)
+                <input
+                  type="number"
+                  min="0"
+                  max="100000"
+                  step="1"
+                  value={initialWater}
+                  placeholder="auto"
+                  onChange={(event) => setInitialWater(event.target.value)}
+                  title={t('planet.waterHint')}
+                />
+              </label>
+            </fieldset>
+          )}
           <label>
             {t('controls.resolution')}
             <select value={resolution} onChange={(e) => setResolution(Number(e.target.value))}>

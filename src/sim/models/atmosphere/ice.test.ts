@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createPlanet } from '../../core/planet';
 import { createRng } from '../../core/rng';
+import { landIceWaterGel } from '../geosphere/seaLevel';
 import { landIceMassBalance, seasonalSnowFractionAt, snowFractionAt, surfaceIceCover } from './ice';
 
 const rng = createRng(1);
@@ -50,5 +51,29 @@ describe('landIceMassBalance', () => {
     expect(frozen).toBeGreaterThan(500);
     expect(planet.fields.iceThickness[0]).toBeLessThan(1);
     expect(planet.fields.iceCover[0]).toBeLessThan(0.01);
+  });
+
+  it('cannot lock up more water than the planet has', () => {
+    const planet = createPlanet({ width: 8, height: 4 });
+    planet.fields.elevation.fill(200);
+    planet.fields.elevation[0] = -1000;
+    planet.fields.airTemperature.fill(-10);
+    planet.fields.precipitation.fill(500);
+    planet.globals.water = 0.1;
+    planet.globals.atmosphere.waterVapor = 0;
+    landIceMassBalance.runOneStep(planet, 1e6, rng);
+    const ice = landIceWaterGel(planet);
+    expect(ice).toBeGreaterThan(0.05);
+    expect(ice).toBeLessThanOrEqual(0.08 + 1e-9);
+  });
+
+  it('keeps cold ice when no sea is left to receive its meltwater', () => {
+    const planet = createPlanet({ width: 8, height: 4 });
+    planet.fields.elevation.fill(200);
+    planet.fields.airTemperature.fill(-40);
+    planet.fields.iceThickness.fill(50);
+    planet.fields.precipitation.fill(0);
+    landIceMassBalance.runOneStep(planet, 1e7, rng);
+    expect(planet.fields.iceThickness[0]).toBe(50);
   });
 });

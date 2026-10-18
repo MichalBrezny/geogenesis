@@ -210,6 +210,7 @@ export function PlanetView({
         values: frame.fields.pressure,
         elevation: frame.fields.elevation,
         seaLevel: frame.seaLevel,
+        radiusKm: frame.planetParams.radius / 1000,
       },
       project,
       { width: w, height: h },

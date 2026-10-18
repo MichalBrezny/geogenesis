@@ -5,6 +5,8 @@ import { continentalCrustTarget } from './models/geosphere/drift';
 import { equilibriumSeaLevel } from './models/geosphere/seaLevel';
 import { updateSurfacePressure } from './models/atmosphere/atmosphere';
 import { createRandomWorld, PLANET_START_AGES } from './world';
+import { createScenario, restoreScenario } from './scenarios';
+import { deserializeGame, serializeGame } from './serialize';
 
 describe('random-world starts', () => {
   it('runs a dry planet without oceans or non-finite climate fields', () => {
@@ -61,4 +63,20 @@ describe('continental growth target', () => {
     expect(continentalCrustTarget(2.5e9)).toBeGreaterThan(0.28);
     expect(continentalCrustTarget(3e9)).toBeLessThanOrEqual(0.3);
   });
+});
+
+describe('planet presets', () => {
+  for (const scenario of ['mars', 'venus'] as const) {
+    it(`creates, steps, saves and restores ${scenario} without non-finite state`, () => {
+      const world = createScenario(scenario, { seed: 9, width: 32, height: 16 });
+      world.simulation.step(world.planet, 10e6);
+      const loaded = deserializeGame(serializeGame({ scenario, planet: world.planet }));
+      const restored = restoreScenario(scenario, loaded.planet, loaded.settings);
+      restored.simulation.step(restored.planet, 10e6);
+      expect(Number.isFinite(restored.planet.globals.meanTemperature)).toBe(true);
+      expect(Number.isFinite(restored.planet.globals.surfacePressure)).toBe(true);
+      expect(restored.planet.fields.airTemperature.every(Number.isFinite)).toBe(true);
+      expect(restored.planet.planetParams.radius).toBe(scenario === 'mars' ? 3_390_000 : 6_052_000);
+    });
+  }
 });
