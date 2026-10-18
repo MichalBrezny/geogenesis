@@ -15,6 +15,7 @@ import { stellarEvolution } from './models/atmosphere/star';
 import { createSurfaceAlbedo } from './models/atmosphere/surfaceAlbedo';
 import { biogeochemistry } from './models/atmosphere/biogeochemistry';
 import { cloudModel } from './models/atmosphere/clouds';
+import { co2FrostCycle } from './models/atmosphere/co2Frost';
 import { landIceMassBalance } from './models/atmosphere/ice';
 import { atmosphericWaterCycle } from './models/atmosphere/water';
 import { biomeModel } from './models/biosphere/biomes';
@@ -207,6 +208,7 @@ export function randomWorldFromPlanet(
       createCivilization(),
       biogeochemistry,
       createCarbonCycle(),
+      co2FrostCycle,
       energyIncome,
       // One sample per million years keeps the long history readable in the charts.
       withMinInterval(recordHistory, HISTORY_INTERVAL),
@@ -218,6 +220,7 @@ export function randomWorldFromPlanet(
       'airTemperature',
       'seasonalAmplitude',
       'iceCover',
+      'co2Ice',
       'iceThickness',
       'lowCloud',
       'precipitation',
@@ -248,8 +251,11 @@ export function createPlanetPreset(preset: PlanetPreset, options: PlanetOptions 
   planet.globals.year = 4.5e9;
   planet.controls.obliquity = definition.obliquity;
   planet.globals.atmosphere = { ...definition.atmosphere };
+  planet.globals.co2Ice = definition.co2IceBar;
+  planet.globals.crustalCarbon = Math.max(0, planet.globals.crustalCarbon - definition.co2IceBar);
   planet.globals.tectonicRegime = 'stagnant';
   planet.globals.magneticField = 0;
+  planet.geosphere.fixedObliquity = true;
   planet.globals.energy = STARTING_ENERGY;
   generateTectonicPlanet(planet, { oceanFraction: definition.oceanFraction });
   initializeWaterInventory(planet);
@@ -276,6 +282,7 @@ const PRESET_DEFINITIONS: Readonly<
       atmosphere: PlanetState['globals']['atmosphere'];
       obliquity: number;
       oceanFraction: number;
+      co2IceBar: number;
     }
   >
 > = {
@@ -299,6 +306,7 @@ const PRESET_DEFINITIONS: Readonly<
     atmosphere: { n2: 0.00008, inert: 0.00002, co2: 5900, ch4: 0, o2: 0, waterVapor: 0 },
     obliquity: 25,
     oceanFraction: 0.65,
+    co2IceBar: 0.0059,
   },
   venus: {
     planetParams: {
@@ -317,6 +325,7 @@ const PRESET_DEFINITIONS: Readonly<
     atmosphere: { n2: 3, inert: 0, co2: 90e6, ch4: 0, o2: 0, waterVapor: 0 },
     obliquity: 3,
     oceanFraction: 0.7,
+    co2IceBar: 0,
   },
 };
 

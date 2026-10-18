@@ -115,6 +115,8 @@ export interface GlobalState {
   tectonicRegime: TectonicRegime;
   /** Carbon still available for net degassing, bar of CO₂ equivalent. */
   crustalCarbon: number;
+  /** Condensed surface CO2, bar equivalent when spread over the whole planet. */
+  co2Ice: number;
   /** Cumulative non-water atmospheric escape, in partial-pressure equivalents. */
   escapedAtmosphere: { n2: number; co2: number; inert: number; waterVapor: number };
   /** Cumulative sediment exported beyond represented marine accommodation, m³. */
@@ -223,6 +225,8 @@ export interface GeosphereState {
   /** Next deterministic moonless-obliquity update and its sequence index. */
   nextObliquityUpdateYear: number;
   obliquityUpdateIndex: number;
+  /** Scenario calibration may hold the present-day obliquity fixed. */
+  fixedObliquity: boolean;
 }
 
 /** Life on the planet (see models/biosphere/life.ts). */
@@ -386,6 +390,7 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
         0,
         planetParams.crustalCarbonBar - planetParams.initialCo2Microbar * 1e-6,
       ),
+      co2Ice: 0,
       escapedAtmosphere: { n2: 0, co2: 0, inert: 0, waterVapor: 0 },
       sedimentExport: 0,
       carbon: { outgassing: 1, weathering: 1, burial: 0 },
@@ -413,6 +418,7 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
       abiogenesisSuppressedUntil: 0,
       nextObliquityUpdateYear: 0,
       obliquityUpdateIndex: 0,
+      fixedObliquity: false,
     },
     history: createHistory(),
     biota: {

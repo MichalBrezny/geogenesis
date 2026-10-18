@@ -77,6 +77,15 @@ describe('planet presets', () => {
       expect(Number.isFinite(restored.planet.globals.surfacePressure)).toBe(true);
       expect(restored.planet.fields.airTemperature.every(Number.isFinite)).toBe(true);
       expect(restored.planet.planetParams.radius).toBe(scenario === 'mars' ? 3_390_000 : 6_052_000);
+      if (scenario === 'mars') {
+        expect(restored.planet.globals.co2Ice).toBeGreaterThan(0);
+        expect(
+          restored.planet.globals.atmosphere.co2 * 1e-6 +
+            restored.planet.globals.co2Ice +
+            restored.planet.globals.crustalCarbon,
+        ).toBeCloseTo(0.0559, 3);
+        expect(restored.planet.geosphere.fixedObliquity).toBe(true);
+      }
     });
   }
 });

@@ -2,6 +2,7 @@ import type { Fields } from '../sim/core/fields';
 import type { Grid } from '../sim/core/grid';
 import { Biome, BIOMES } from '../sim/data/biomes';
 import { LakeType } from '../sim/models/geosphere/flowRouting';
+import { co2FrostCover } from '../sim/models/atmosphere/co2Frost';
 import {
   diversityPalette,
   elevationPalette,
@@ -33,6 +34,7 @@ export const RENDERED_FIELDS = [
   'airTemperature',
   'seasonalAmplitude',
   'iceCover',
+  'co2Ice',
   'precipitation',
   'daisyWhite',
   'daisyBlack',
@@ -80,6 +82,8 @@ export const SALT_LAKE_COLOR: Rgb = [205, 225, 226];
 export const SALT_FLAT_COLOR: Rgb = [181, 171, 150];
 const LAND_ICE_COLOR: Rgb = [238, 242, 246];
 const SEA_ICE_COLOR: Rgb = [200, 215, 230];
+/** Pale lavender distinguishes CO2 frost from blue-white water ice. */
+export const CO2_FROST_COLOR: Rgb = [232, 220, 244];
 const BARE_GROUND: Rgb = [196, 168, 118];
 /** Settlements on the civilization layer (categorical slot 2, orange). */
 const CIVILIZATION_COLOR: Rgb = [235, 104, 52];
@@ -102,7 +106,7 @@ type CellColor = (state: MapSource, i: number, temperatureMonth: TemperatureMont
 
 const layerColors: Record<MapLayer, CellColor> = {
   terrain(state, i) {
-    const { elevation, discharge, iceCover, lakeType } = state.fields;
+    const { elevation, discharge, iceCover, co2Ice, lakeType } = state.fields;
     const ocean = elevation[i]! < state.seaLevel;
     const lake = lakeType[i]!;
     let color = elevationPalette(elevation[i]! - state.seaLevel);
@@ -120,7 +124,9 @@ const layerColors: Record<MapLayer, CellColor> = {
       color = mix(color, RIVER_COLOR, t);
     }
     const ice = iceCover[i]!;
-    return ice > 0 ? mix(color, ocean ? SEA_ICE_COLOR : LAND_ICE_COLOR, 0.2 + 0.8 * ice) : color;
+    if (ice > 0) color = mix(color, ocean ? SEA_ICE_COLOR : LAND_ICE_COLOR, 0.2 + 0.8 * ice);
+    const frost = co2FrostCover(co2Ice[i]!);
+    return frost > 0 ? mix(color, CO2_FROST_COLOR, 0.25 + 0.75 * frost) : color;
   },
   plates(state, i) {
     const base = PLATE_PALETTE[state.fields.plateId[i]! % PLATE_PALETTE.length]!;

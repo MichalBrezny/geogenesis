@@ -45,6 +45,9 @@ export function CellInspector({
     ['inspect.biome', t(`biome.${BIOMES[f.biome[i] as Biome].key}` as MessageKey)],
     ['inspect.life', t(`lifeTier.${tier === 0 ? 'none' : LIFE_TIERS[tier - 1]!}` as MessageKey)],
   ];
+  if (f.co2Ice[i]! > 0) {
+    rows.splice(5, 0, ['inspect.co2Ice', `${(f.co2Ice[i]! * 1000).toFixed(2)} mbar`]);
+  }
   if (frame.scenario !== 'daisyworld') {
     rows.splice(3, 0, ['inspect.pressure', `${f.pressure[i]!.toFixed(0)} hPa`]);
   }

@@ -21,6 +21,8 @@ export const FIELD_SPECS = {
   seasonalAmplitude: { type: 'f32', unit: '°C' },
   /** Fraction of the cell covered by snow or ice, 0..1. */
   iceCover: { type: 'f32', unit: '' },
+  /** Local CO2-frost column, in bar equivalent if spread over the whole cell. */
+  co2Ice: { type: 'f32', unit: 'bar' },
   /** Thickness of grounded land ice; zero over the ocean. */
   iceThickness: { type: 'f32', unit: 'm' },
   /** Total cloud cover, 0..1 (cloud model). */

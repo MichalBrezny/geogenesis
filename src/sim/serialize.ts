@@ -125,6 +125,7 @@ function hydrateAddedState(planet: PlanetState): void {
   planet.globals.seaLevel ??= 0;
   planet.globals.sedimentExport ??= 0;
   planet.fields.iceThickness ??= new Float32Array(planet.grid.cellCount);
+  planet.fields.co2Ice ??= new Float32Array(planet.grid.cellCount);
   planet.fields.seasonalAmplitude ??= new Float32Array(planet.grid.cellCount);
   planet.fields.lakeDepth ??= new Float32Array(planet.grid.cellCount);
   planet.fields.lakeType ??= new Int32Array(planet.grid.cellCount);
@@ -146,6 +147,7 @@ function hydrateAddedState(planet: PlanetState): void {
     0,
     planet.planetParams.crustalCarbonBar - planet.globals.atmosphere.co2 * 1e-6,
   );
+  planet.globals.co2Ice ??= 0;
   planet.globals.escapedAtmosphere ??= { n2: 0, co2: 0, inert: 0, waterVapor: 0 };
   planet.globals.volcanicAerosol ??= 0;
   planet.globals.lipOutgassing ??= 0;
@@ -167,6 +169,7 @@ function hydrateAddedState(planet: PlanetState): void {
     abiogenesisSuppressedUntil: 0,
     nextObliquityUpdateYear: 0,
     obliquityUpdateIndex: 0,
+    fixedObliquity: false,
   };
   planet.geosphere.cleanupElapsedYears ??= 0;
   planet.geosphere.plateSpeedMantleFactor ??= 1;
@@ -175,6 +178,7 @@ function hydrateAddedState(planet: PlanetState): void {
   planet.geosphere.abiogenesisSuppressedUntil ??= 0;
   planet.geosphere.nextObliquityUpdateYear ??= 0;
   planet.geosphere.obliquityUpdateIndex ??= 0;
+  planet.geosphere.fixedObliquity ??= false;
   planet.controls.obliquity ??= DEFAULT_CONTROLS.obliquity;
   planet.controls.greenhouse ??= DEFAULT_CONTROLS.greenhouse;
   planet.controls.cloudAlbedo ??= DEFAULT_CONTROLS.cloudAlbedo;

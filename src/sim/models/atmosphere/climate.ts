@@ -21,6 +21,7 @@ import {
   updateSurfacePressure,
 } from './atmosphere';
 import { LOW_CLOUD_ALBEDO, REFERENCE_LOW_CLOUD } from './clouds';
+import { CO2_FROST_ALBEDO, co2FrostCover, co2FrostPointK } from './co2Frost';
 import { surfaceIceCover } from './ice';
 import { SOLAR_CONSTANT } from './star';
 
@@ -89,6 +90,10 @@ const THIN_TRANSPORT_PRESSURE = 0.1;
 const THIN_TRANSPORT_EXPONENT = 1;
 const MIN_TRANSPORT_SCALE = 0.002;
 const MAX_TRANSPORT_SCALE = 80;
+/** Weak atmospheric heat sharing lets thin-air land follow the seasonal forcing more closely. */
+const MAX_THIN_SEASONAL_AMPLITUDE_SCALE = 2.25;
+/** Near-vacuum surfaces follow the latitude pattern of sunlight more directly than the Earth fit. */
+const MAX_THIN_INSOLATION_CONTRAST_SCALE = 1.75;
 /**
  * Extra heat transport on a tidally locked planet. Its day–night contrast is erased
  * by a thermally direct overturning and stationary equatorial waves, much more
@@ -278,6 +283,7 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
       'precipitation',
       'iceThickness',
       'lowCloud',
+      'co2Ice',
     ],
     outputs: ['airTemperature', 'seasonalAmplitude', 'iceCover', 'albedo'],
     runOneStep(state, dtYears) {
@@ -313,6 +319,11 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
         ? continentalityField(grid, elevation, globals.seaLevel)
         : null;
       const seasonalForcing = new Float64Array(grid.height);
+      const seasonalAmplitudeScale = thinSeasonalAmplitudeScale(globals.surfacePressure);
+      const hasCo2Frost = globals.co2Ice > 0;
+      const co2FrostTemperatureC = hasCo2Frost
+        ? co2FrostPointK(globals.atmosphere.co2 * 1e-6) - 273.15
+        : 0;
       for (let y = 0; y < grid.height; y++) {
         seasonalForcing[y] = hasSeasons
           ? Math.abs(
@@ -341,7 +352,13 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
       // Start from last step's albedo where it exists, so the ice state persists (hysteresis).
       for (let i = 0; i < grid.cellCount; i++) {
         const base = Math.max(scaledSurface(i), hazeAlbedo);
-        if (albedo[i] === 0) albedo[i] = base * (1 - iceCover[i]!) + iceAlbedo * iceCover[i]!;
+        if (albedo[i] === 0) {
+          albedo[i] = base * (1 - iceCover[i]!) + iceAlbedo * iceCover[i]!;
+          if (hasCo2Frost) {
+            const frost = co2FrostCover(fields.co2Ice[i]!);
+            if (frost > 0) albedo[i] = albedo[i]! * (1 - frost) + CO2_FROST_ALBEDO * frost;
+          }
+        }
       }
 
       for (let iteration = 0; iteration < 12; iteration++) {
@@ -369,13 +386,28 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
         );
         let maxChange = 0;
         for (let i = 0; i < grid.cellCount; i++) {
-          seasonalAmplitude[i] = seasonalAmplitudeFromHarmonic(
-            seasonalForcing[Math.floor(i / grid.width)]!,
-            albedo[i]!,
-            isOcean(elevation[i]!, globals.seaLevel),
-            continentality?.[i] ?? 0,
-            iceCover[i]!,
-          );
+          seasonalAmplitude[i] =
+            seasonalAmplitudeScale *
+            seasonalAmplitudeFromHarmonic(
+              seasonalForcing[Math.floor(i / grid.width)]!,
+              albedo[i]!,
+              isOcean(elevation[i]!, globals.seaLevel),
+              continentality?.[i] ?? 0,
+              iceCover[i]!,
+            );
+          if (
+            hasCo2Frost &&
+            (fields.co2Ice[i]! > 0 ||
+              airTemperature[i]! - seasonalAmplitude[i]! < co2FrostTemperatureC)
+          ) {
+            if (airTemperature[i]! < co2FrostTemperatureC) {
+              airTemperature[i] = co2FrostTemperatureC;
+            }
+            seasonalAmplitude[i] = Math.min(
+              seasonalAmplitude[i]!,
+              Math.max(0, airTemperature[i]! - co2FrostTemperatureC),
+            );
+          }
           const ice = surfaceIceCover(
             isOcean(elevation[i]!, globals.seaLevel),
             airTemperature[i]!,
@@ -391,10 +423,14 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
               (fields.lowCloud[i]! - REFERENCE_LOW_CLOUD) *
               (1 - ice)
             : 0;
-          const target = Math.min(
+          let target = Math.min(
             0.9,
             Math.max(0.03, hazeAlbedo, scaledSurface(i) * (1 - ice) + iceAlbedo * ice + cloud),
           );
+          if (hasCo2Frost) {
+            const frost = co2FrostCover(fields.co2Ice[i]!);
+            if (frost > 0) target = target * (1 - frost) + CO2_FROST_ALBEDO * frost;
+          }
           // Damped update: the albedo–temperature iteration can oscillate at ice edges.
           const next = iteration === 0 ? target : 0.5 * (albedo[i]! + target);
           maxChange = Math.max(maxChange, Math.abs(next - albedo[i]!));
@@ -411,6 +447,19 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
       if (previous) {
         for (let i = 0; i < grid.cellCount; i++) {
           airTemperature[i] = airTemperature[i]! + (previous[i]! - airTemperature[i]!) * lag;
+          if (
+            hasCo2Frost &&
+            (fields.co2Ice[i]! > 0 ||
+              airTemperature[i]! - seasonalAmplitude[i]! < co2FrostTemperatureC)
+          ) {
+            if (airTemperature[i]! < co2FrostTemperatureC) {
+              airTemperature[i] = co2FrostTemperatureC;
+            }
+            seasonalAmplitude[i] = Math.min(
+              seasonalAmplitude[i]!,
+              Math.max(0, airTemperature[i]! - co2FrostTemperatureC),
+            );
+          }
           iceCover[i] = surfaceIceCover(
             isOcean(elevation[i]!, globals.seaLevel),
             airTemperature[i]!,
@@ -674,6 +723,8 @@ function solveCoarse(
   }
   let absorbedSum = 0;
   let areaSum = 0;
+  const meanInsolation = (SOLAR_CONSTANT * solarInput) / 4;
+  const insolationContrast = thinInsolationContrastScale(surfacePressure);
   for (let y = 0; y < coarse.height; y++) {
     const zonalInsolation = tidallyLocked
       ? 0
@@ -681,9 +732,12 @@ function solveCoarse(
     for (let x = 0; x < coarse.width; x++) {
       const c = y * coarse.width + x;
       coarseAlbedo[c] = coarseAlbedo[c]! / weight[c]!;
-      const insolation = tidallyLocked
+      const rawInsolation = tidallyLocked
         ? tidallyLockedInsolation(coarse, c, solarInput)
         : zonalInsolation;
+      const insolation = tidallyLocked || insolationContrast === 1
+        ? rawInsolation
+        : Math.max(0, meanInsolation + (rawInsolation - meanInsolation) * insolationContrast);
       const absorbed = insolation * (1 - coarseAlbedo[c]!);
       rhs[c] = rowArea[y]! * (absorbed - (OLR_A - forcing));
       absorbedSum += rowArea[y]! * absorbed;
@@ -829,6 +883,24 @@ export function heatTransportScale(
         (tidallyLocked ? LOCKED_HEAT_TRANSPORT : 1),
     ),
   );
+}
+
+/**
+ * Seasonal land temperatures swing farther in a tenuous atmosphere because
+ * little air is available to share heat between the summer and winter hemispheres.
+ * The Earth path returns exactly one.
+ */
+export function thinSeasonalAmplitudeScale(surfacePressure: number): number {
+  if (surfacePressure >= THIN_TRANSPORT_PRESSURE) return 1;
+  const thinness = 1 - Math.max(0, surfacePressure) / THIN_TRANSPORT_PRESSURE;
+  return 1 + (MAX_THIN_SEASONAL_AMPLITUDE_SCALE - 1) * thinness;
+}
+
+/** Amplifies annual-mean latitude forcing only below 0.1 bar; Earth is exactly unchanged. */
+export function thinInsolationContrastScale(surfacePressure: number): number {
+  if (surfacePressure >= THIN_TRANSPORT_PRESSURE) return 1;
+  const thinness = 1 - Math.max(0, surfacePressure) / THIN_TRANSPORT_PRESSURE;
+  return 1 + (MAX_THIN_INSOLATION_CONTRAST_SCALE - 1) * thinness;
 }
 
 /**

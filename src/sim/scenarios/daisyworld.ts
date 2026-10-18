@@ -70,6 +70,7 @@ export function daisyworldFromPlanet(planet: PlanetState, withDaisies = true): W
     'oceanAnomaly',
     'precipitation',
     'iceThickness',
+    'co2Ice',
     'lowCloud',
     'daisyWhite',
     'daisyBlack',

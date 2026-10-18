@@ -99,7 +99,7 @@ export const planetaryEvolution: SimComponent = {
     // spin–orbit resonances (Laskar & Robutel 1993), so their tilt stays put.
     const slowRotator =
       planetParams.tidallyLocked || Math.abs(planetParams.rotationPeriodHours) > SLOW_ROTATOR_HOURS;
-    if (planetParams.hasMoon || slowRotator || dtYears <= 0) return;
+    if (planetParams.hasMoon || slowRotator || geosphere.fixedObliquity || dtYears <= 0) return;
     if (geosphere.nextObliquityUpdateYear <= state.globals.year) {
       geosphere.nextObliquityUpdateYear = state.globals.year + OBLIQUITY_INTERVAL;
     }

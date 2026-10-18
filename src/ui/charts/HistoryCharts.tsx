@@ -19,6 +19,11 @@ const CHARTS: readonly ChartSpec[] = [
   { series: 'meanTemperature', title: 'chart.temperature', format: (v) => `${v.toFixed(1)} °C` },
   { series: 'co2', title: 'chart.co2', format: (v) => `${formatPpm(v)} ppm`, log: true },
   {
+    series: 'co2Ice',
+    title: 'chart.co2Ice',
+    format: (v) => `${(v * 1000).toFixed(2)} mbar`,
+  },
+  {
     series: 'surfacePressure',
     title: 'chart.surfacePressure',
     format: (v) => `${v.toFixed(2)} bar`,

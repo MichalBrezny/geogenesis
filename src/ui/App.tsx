@@ -98,7 +98,15 @@ const SCENARIO_VIEW: Record<
     layer: 'life',
   },
   mars: {
-    charts: ['meanTemperature', 'co2', 'surfacePressure', 'water', 'iceFraction', 'solarInput'],
+    charts: [
+      'meanTemperature',
+      'co2',
+      'co2Ice',
+      'surfacePressure',
+      'water',
+      'iceFraction',
+      'solarInput',
+    ],
     layers: [
       'terrain',
       'airTemperature',

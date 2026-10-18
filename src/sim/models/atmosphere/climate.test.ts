@@ -11,6 +11,8 @@ import {
   heatTransportScale,
   outgoingLongwaveRadiation,
   seasonalTemperatureAmplitude,
+  thinInsolationContrastScale,
+  thinSeasonalAmplitudeScale,
   tidallyLockedInsolation,
   WET_OLR_LIMIT,
 } from './climate';
@@ -246,6 +248,13 @@ describe('climate', () => {
     expect(heatTransportScale(0.8, 24, true)).toBeGreaterThan(
       2 * heatTransportScale(0.8, 24, false),
     );
+  });
+
+  it('amplifies annual and seasonal forcing only in thin atmospheres', () => {
+    expect(thinInsolationContrastScale(1)).toBe(1);
+    expect(thinSeasonalAmplitudeScale(1)).toBe(1);
+    expect(thinInsolationContrastScale(0.006)).toBeGreaterThan(1.6);
+    expect(thinSeasonalAmplitudeScale(0.006)).toBeGreaterThan(2);
   });
 
   it('does not chill a dry planet by the depth of a sea level that sank with its oceans', () => {
