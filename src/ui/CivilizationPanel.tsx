@@ -69,8 +69,10 @@ function describe(event: Frame['events'][number]): string {
         ? t(`age.${subject}` as MessageKey)
         : event.key === 'eraReached'
           ? t(`era.${subject}` as MessageKey)
-          : subject
-            ? t(`lifeClass.${subject}` as MessageKey)
-            : '';
+          : event.key === 'massExtinction'
+            ? t(`extinctionCause.${subject}` as MessageKey)
+            : subject
+              ? t(`lifeClass.${subject}` as MessageKey)
+              : '';
   return t(`event.${event.key}`, { name });
 }

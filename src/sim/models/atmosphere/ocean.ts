@@ -66,9 +66,12 @@ const MIN_EKMAN_LATITUDE = 5;
 export const oceanModel: SimComponent = {
   name: 'ocean',
   inputs: ['elevation', 'airTemperature', 'windU', 'windV', 'oceanAnomaly'],
-  outputs: ['oceanCurrentU', 'oceanCurrentV', 'oceanAnomaly'],
+  outputs: ['oceanCurrentU', 'oceanCurrentV', 'upwelling', 'oceanAnomaly'],
   runOneStep(state) {
     const { grid, fields } = state;
+    // Saves predating M13 have no upwelling field; derived ocean state is safe to
+    // hydrate here and is then included in the next save automatically.
+    fields.upwelling ??= new Float32Array(grid.cellCount);
     const seaLevel = state.globals.seaLevel;
     let hasSea = false;
     for (const elevation of fields.elevation) {
@@ -80,6 +83,7 @@ export const oceanModel: SimComponent = {
     if (!hasSea) {
       fields.oceanCurrentU.fill(0);
       fields.oceanCurrentV.fill(0);
+      fields.upwelling.fill(0);
       fields.oceanAnomaly.fill(0);
       return;
     }
@@ -133,12 +137,20 @@ export const oceanModel: SimComponent = {
 
     toFine(atmosphere, grid, currentU, fields.oceanCurrentU);
     toFine(atmosphere, grid, currentV, fields.oceanCurrentV);
+    // The Ekman solver works in m/s; expose the conventional oceanographic m/day.
+    toFine(
+      atmosphere,
+      grid,
+      upwelling.map((value) => value * 86_400),
+      fields.upwelling,
+    );
     toFine(atmosphere, grid, anomaly, fields.oceanAnomaly);
     // Currents exist only at sea.
     for (let i = 0; i < grid.cellCount; i++) {
       if (!isSea(i)) {
         fields.oceanCurrentU[i] = 0;
         fields.oceanCurrentV[i] = 0;
+        fields.upwelling[i] = 0;
       }
     }
   },

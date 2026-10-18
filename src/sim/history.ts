@@ -23,6 +23,7 @@ export const HISTORY_SERIES = [
   'o2',
   'ch4',
   'livingClasses',
+  'biodiversity',
   'impactFlux',
   'era',
 ] as const;
@@ -68,6 +69,7 @@ export const recordHistory: SimComponent = {
       o2: globals.atmosphere.o2,
       ch4: globals.atmosphere.ch4,
       livingClasses: state.biota.cover.filter((cover) => cover > 0).length,
+      biodiversity: globals.biodiversity,
       impactFlux: globals.impactFlux,
       era: ERAS.indexOf(planetEra(state)),
     };

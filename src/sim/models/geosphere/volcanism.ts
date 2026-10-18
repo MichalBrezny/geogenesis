@@ -4,6 +4,7 @@ import type { LargeIgneousProvince, PlanetState, Plate } from '../../core/planet
 import type { Rng } from '../../core/rng';
 import { recordEvent } from '../../events';
 import { HOTSPOT_SHARE, mantleHeat, tectonicActivity } from '../atmosphere/carbon';
+import { addDustSource, DUST_SULFATE } from '../atmosphere/dust';
 import { randomUnitVector } from './plates';
 
 export { HOTSPOT_SHARE } from '../atmosphere/carbon';
@@ -24,6 +25,12 @@ const LARGE_ERUPTION_INTERVAL = 200;
 /** A 1.5-year e-folding leaves substantial forcing through two post-eruption summers. */
 const AEROSOL_EFOLDING_TIME = 1.5;
 const MAX_AEROSOL_STEP = 10_000;
+/**
+ * Sulfate optical depth emitted per year by one active LIP: repeated large pulses
+ * averaged to a steady source holding tau ~ 0.05 (about -1 W/m2; Deccan/Siberian
+ * sulfur estimates, Schmidt et al. 2016). A steady source, so short and long steps agree.
+ */
+const LIP_DUST_RATE = 0.05 / 1.5;
 /** Mean LIP recurrence; hotter young mantles shorten it through mantleHeat in the caller. */
 const LIP_INTERVAL = 35e6;
 const LIP_DURATION = 1e6;
@@ -366,7 +373,11 @@ function releaseLipCarbon(state: PlanetState, dt: number): void {
   let flux = 0;
   for (const lip of state.geosphere.activeLips) {
     const overlap = Math.min(end, lip.endYear) - Math.max(start, lip.startYear);
-    if (overlap > 0 && dt > 0) flux += (lip.outgassing * overlap) / dt;
+    if (overlap > 0 && dt > 0) {
+      flux += (lip.outgassing * overlap) / dt;
+      const from = Math.max(start, lip.startYear);
+      addDustSource(state, DUST_SULFATE, LIP_DUST_RATE * overlap, from, from + overlap);
+    }
   }
   state.globals.lipOutgassing = flux;
   state.geosphere.activeLips = state.geosphere.activeLips.filter((lip) => lip.endYear > end);

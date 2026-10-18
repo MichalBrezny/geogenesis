@@ -24,6 +24,7 @@ import { LOW_CLOUD_ALBEDO, REFERENCE_LOW_CLOUD } from './clouds';
 import { CO2_FROST_ALBEDO, co2FrostCover, co2FrostPointK } from './co2Frost';
 import { surfaceIceCover } from './ice';
 import { SOLAR_CONSTANT } from './star';
+import { dustForcing } from './dust';
 
 export { iceFractionAt } from './ice';
 
@@ -338,7 +339,8 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
       const forcing =
         greenhouseForcing(globals.atmosphere) * state.controls.greenhouse -
         thinAtmosphereCooling(globals.surfacePressure) -
-        globals.volcanicAerosol +
+        globals.volcanicAerosol -
+        dustForcing(globals.dust) +
         globals.impactHeating;
       const hazeAlbedo = sulfurCloudAlbedo(globals.atmosphere, hasWater);
       const albedoScale = state.controls.surfaceAlbedo;

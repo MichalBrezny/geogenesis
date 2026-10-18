@@ -52,12 +52,20 @@ export const biogeochemistry: SimComponent = {
     if (dtYears > 0) {
       atmosphere.o2 += (target - atmosphere.o2) * (1 - Math.exp(-dtYears / OXYGEN_RESPONSE_TIME));
     }
-    const methanogens = cover[lifeClassIndex('prokaryotes')]!;
-    const anoxia = Math.exp(-atmosphere.o2 / METHANE_OXYGEN_SCALE);
-    atmosphere.ch4 =
-      BACKGROUND_METHANE * Math.min(1, methanogens * 4) + ANOXIC_METHANE * methanogens * anoxia;
+    // The clathrate component integrates this target together with methane
+    // pulses. Scenarios without that component retain the old diagnostic path.
+    if (state.globals.clathrateReferenceTemperature === undefined) {
+      atmosphere.ch4 = methaneTarget(state);
+    }
   },
 };
+
+/** Methane sustained by geology and methanogens at the current oxygen level. */
+export function methaneTarget(state: Parameters<SimComponent['runOneStep']>[0]): number {
+  const methanogens = state.biota.cover[lifeClassIndex('prokaryotes')]!;
+  const anoxia = Math.exp(-state.globals.atmosphere.o2 / METHANE_OXYGEN_SCALE);
+  return BACKGROUND_METHANE * Math.min(1, methanogens * 4) + ANOXIC_METHANE * methanogens * anoxia;
+}
 
 /** Photosynthesis the planet's reducing sinks use up before oxygen can build up, at an age. */
 export function oxygenSink(ageYears: number): number {

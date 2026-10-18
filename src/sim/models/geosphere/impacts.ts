@@ -2,6 +2,7 @@ import type { SimComponent } from '../../core/component';
 import type { PlanetState } from '../../core/planet';
 import type { Rng } from '../../core/rng';
 import { recordEvent } from '../../events';
+import { addDustPulse, DUST_FINE, DUST_SOOT, DUST_SULFATE } from '../atmosphere/dust';
 import { samplePoisson } from './volcanism';
 
 /** E-folding time of the remnant planetesimal population after formation. */
@@ -22,6 +23,28 @@ const STERILISING_DIAMETER_KM = 100;
 const GLOBAL_STERILISATION_DIAMETER_KM = 500;
 const GLOBAL_STERILISATION_MAX_AGE = 800e6;
 const IMPACT_HEAT_TIME = 200_000;
+/**
+ * Chicxulub-class reference (crater diameter, km): fine ejecta tau ~50 for months,
+ * sulfate ~3 and soot ~2 for years (Toon et al. 1997; Brugger et al. 2017). Lofted
+ * mass scales with excavated volume, roughly D^2.5 here. Sea impacts mostly make
+ * steam, so they loft a tenth as much.
+ */
+const DUST_REFERENCE_DIAMETER_KM = 180;
+const DUST_SIZE_POWER = 2.5;
+const DUST_FINE_TAU = 50;
+const DUST_SULFATE_TAU = 3;
+const DUST_SOOT_TAU = 2;
+const DUST_OCEAN_FACTOR = 0.1;
+const MAX_IMPACT_DUST_TAU = 1e4;
+
+/** Optical depth lofted by an impact, per reservoir: [fine dust, sulfate, soot]. */
+export function impactDustTau(diameterKm: number, ocean: boolean): [number, number, number] {
+  const scale =
+    Math.pow(diameterKm / DUST_REFERENCE_DIAMETER_KM, DUST_SIZE_POWER) *
+    (ocean ? DUST_OCEAN_FACTOR : 1);
+  const cap = (tau: number) => Math.min(MAX_IMPACT_DUST_TAU, tau * scale);
+  return [cap(DUST_FINE_TAU), cap(DUST_SULFATE_TAU), cap(DUST_SOOT_TAU)];
+}
 
 /** Instantaneous impact rate at a planet age, in impacts per year. */
 export function impactRate(ageYears: number): number {
@@ -105,6 +128,11 @@ function applyNaturalImpact(
   eventYear: number,
   rng: Rng,
 ): void {
+  const ocean = state.fields.elevation[centre]! < state.globals.seaLevel;
+  const [fine, sulfate, soot] = impactDustTau(diameterKm, ocean);
+  addDustPulse(state, DUST_FINE, fine, eventYear);
+  addDustPulse(state, DUST_SULFATE, sulfate, eventYear);
+  addDustPulse(state, DUST_SOOT, soot, eventYear);
   applyImpactCrater(state, centre, diameterKm);
   if (rng.next() < COMET_FRACTION) deliverWater(state, diameterKm, 1);
   if (diameterKm >= STERILISING_DIAMETER_KM) sterilise(state, centre, diameterKm, eventYear);

@@ -5,6 +5,7 @@ import type { Biome } from '../../data/biomes';
 import { PEOPLE_PER_KM2, SENTIENCE_POTENTIAL, TECH_AGES } from '../../data/civilization';
 import { LIFE_CLASSES, lifeClassIndex, PLANT_PRODUCTIVITY } from '../../data/lifeClasses';
 import { recordEvent } from '../../events';
+import { addDustPulse, DUST_SOOT } from '../atmosphere/dust';
 import { classSuitability } from '../biosphere/life';
 import { disperse } from '../dispersal';
 import { isOcean, landSurfaceFraction } from '../geosphere/seaLevel';
@@ -24,6 +25,8 @@ const FULL_HABITAT_SHARE = 0.3;
 const MIN_DENSITY = 1e-6;
 /** Yearly chance of a plague once cities exist (from the Bronze Age). */
 const PLAGUE_RATE = 2e-4;
+/** Soot optical depth of a full-scale nuclear war (Toon et al. 2007: tau 1-3). */
+const NUCLEAR_SOOT_TAU = 2;
 /** World population (billions) below which a civilization is gone. */
 const COLLAPSE_POPULATION = 1e-5;
 /** How far (m, along a row or column) a seafaring civilization can settle across water. */
@@ -200,6 +203,9 @@ function catastrophes(state: PlanetState, dtYears: number, rng: Rng): void {
     for (let i = 0; i < density.length; i++) density[i] = density[i]! * 0.3;
     // The survivors lose much of what the age had achieved, but not the age itself.
     civ.progress = Math.max(0, civ.progress - 0.5);
+    // Nuclear winter: stratospheric soot, tau ~2 (Toon et al. 2007), injected at the
+    // end of the step because this component runs after the dust model.
+    addDustPulse(state, DUST_SOOT, NUCLEAR_SOOT_TAU, state.globals.year + dtYears);
     recordEvent(state, 'nuclearWar');
   }
   civ.population = worldPopulation(state);

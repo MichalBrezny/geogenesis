@@ -61,6 +61,8 @@ export const FIELD_SPECS = {
   /** Wind-driven surface ocean current, eastward and northward (ocean model). */
   oceanCurrentU: { type: 'f32', unit: 'm/s' },
   oceanCurrentV: { type: 'f32', unit: 'm/s' },
+  /** Ekman vertical velocity, positive upward; zero on land. */
+  upwelling: { type: 'f32', unit: 'm/day' },
   /**
    * Sea surface temperature anomaly from currents and upwelling (warm and cold
    * currents), also felt on coasts; the climate model adds it to temperatures.

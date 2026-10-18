@@ -16,6 +16,8 @@ export type EventKey =
   | 'impact'
   | 'classAppeared'
   | 'classExtinct'
+  | 'massExtinction'
+  | 'cambrianExplosion'
   | 'sentience'
   | 'ageReached'
   | 'plague'
@@ -30,6 +32,7 @@ export type EventKey =
   | 'magneticFieldLost'
   | 'stagnantLid'
   | 'atmosphereLost'
+  | 'methaneRelease'
   | 'monolith'
   | 'eraReached';
 

@@ -123,6 +123,8 @@ export interface GlobalState {
   oceanAcidity: number;
   /** Methane stored in clathrates and permafrost, microbar of CH₄ equivalent. */
   clathrateCarbon: number;
+  /** Relaxing 10 kyr temperature reference used to diagnose rapid warming. */
+  clathrateReferenceTemperature?: number;
   /** Biodiversity index, 0..1 (life model). */
   biodiversity: number;
   /** Year of the last recorded mass extinction, or -1 if none. */

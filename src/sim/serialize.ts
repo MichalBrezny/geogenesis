@@ -153,6 +153,7 @@ function hydrateAddedState(planet: PlanetState): void {
   planet.globals.dust ??= 0;
   planet.globals.oceanAcidity ??= 0;
   planet.globals.clathrateCarbon ??= 0;
+  planet.globals.clathrateReferenceTemperature ??= planet.globals.meanTemperature;
   planet.globals.biodiversity ??= 0;
   planet.globals.lastMassExtinctionYear ??= -1;
   planet.globals.escapedAtmosphere ??= { n2: 0, co2: 0, inert: 0, waterVapor: 0 };

@@ -20,6 +20,14 @@ function waterWorld(): PlanetState {
   planet.fields.elevation.fill(-3000);
   for (let y = 0; y < 16; y++) planet.fields.elevation[cellIndex(planet.grid, 10, y)] = 200;
   planet.fields.airTemperature.fill(20);
+  // A well-mixed modern sea (what the ocean chemistry model gives in quiet times).
+  for (let i = 0; i < planet.grid.cellCount; i++) {
+    const sea = planet.fields.elevation[i]! < 0 ? 1 : 0;
+    planet.fields.oceanOxygen[i] = sea;
+    planet.fields.nutrients[i] = sea;
+  }
+  planet.globals.meanTemperature = 20;
+  planet.globals.atmosphere.co2 = 280;
   planet.globals.year = 4e9;
   return planet;
 }
