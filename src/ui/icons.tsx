@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import type { MapLayer } from '../render/mapRenderer';
 import type { ToolId } from '../sim/tools/tools';
 import type { Overlay, View } from './PlanetView';
+import type { ControlGroupId } from './ControlsPanel';
 
 /**
  * Line icons drawn on a 24-unit grid in the current text colour, so they follow
@@ -191,4 +192,18 @@ export const VIEW_ICONS: Record<View, ReactNode> = {
       <path d="M3 12h18" />
     </Icon>
   ),
+};
+
+export type FloatingWindowId = ControlGroupId | 'planet';
+
+export const WINDOW_ICONS: Record<FloatingWindowId, ReactNode> = {
+  geosphere: LAYER_ICONS.plates,
+  atmosphere: (
+    <Icon>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M4 9c4-2 7 2 11 0s5 1 6 2M3 14c4-2 7 2 11 0s5 1 6 2" />
+    </Icon>
+  ),
+  biosphere: LAYER_ICONS.life,
+  planet: VIEW_ICONS.globe,
 };

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { t, type MessageKey } from '../i18n/i18n';
 import type { ModelControls } from '../sim/core/planet';
 
@@ -27,30 +28,129 @@ const SLIDERS: readonly Slider[] = [
   { key: 'thermalTolerance', min: 0.5, max: 2, step: 0.05 },
 ];
 
+export type ControlGroupId = 'geosphere' | 'atmosphere' | 'biosphere';
+
+export const CONTROL_GROUPS: Record<ControlGroupId, readonly (keyof ModelControls)[]> = {
+  geosphere: ['volcanism', 'driftSpeed', 'erosion'],
+  atmosphere: [
+    'solarFactor',
+    'obliquity',
+    'greenhouse',
+    'cloudAlbedo',
+    'surfaceAlbedo',
+    'airSeaHeat',
+    'rainfall',
+  ],
+  biosphere: ['advanceRate', 'mutationRate', 'reproduction', 'thermalTolerance'],
+};
+
+function SliderControl(props: {
+  slider: Slider;
+  value: number;
+  defaultValue: number;
+  onChange: (value: number) => void;
+}) {
+  const { key, min, max, step, unit, digits = 2 } = props.slider;
+  const formattedValue = props.value.toFixed(digits);
+  const [draft, setDraft] = useState<string | null>(null);
+  const modified = props.value !== props.defaultValue;
+  const name = t(`control.${key}` as MessageKey);
+  const hint = t('controlsPanel.sliderHint', {
+    description: t(`controlHelp.${key}` as MessageKey),
+  });
+
+  const reset = () => props.onChange(props.defaultValue);
+  const revert = () => setDraft(null);
+  const applyDraft = () => {
+    if (draft === null) return;
+    const parsed = Number(draft);
+    if (draft.trim() === '' || !Number.isFinite(parsed)) {
+      revert();
+      return;
+    }
+    const clamped = Math.min(max, Math.max(min, parsed));
+    const stepped = min + Math.round((clamped - min) / step) * step;
+    const value = Number(Math.min(max, Math.max(min, stepped)).toFixed(digits));
+    setDraft(null);
+    props.onChange(value);
+  };
+
+  return (
+    <div className={modified ? 'modified' : undefined} title={hint}>
+      <label className="slider-name" htmlFor={`control-${key}`} onDoubleClick={reset}>
+        {name}
+      </label>
+      <input
+        id={`control-${key}`}
+        type="range"
+        title={hint}
+        min={min}
+        max={max}
+        step={step}
+        value={props.value}
+        onChange={(event) => props.onChange(Number(event.target.value))}
+        onDoubleClick={reset}
+      />
+      <span className="slider-value">
+        {unit ? '' : '×'}
+        <input
+          type="number"
+          aria-label={t('controlsPanel.valueLabel', { name })}
+          title={t('controlsPanel.valueHint', { name })}
+          min={min}
+          max={max}
+          step={step}
+          value={draft ?? formattedValue}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={applyDraft}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              applyDraft();
+            } else if (event.key === 'Escape') {
+              event.preventDefault();
+              revert();
+            }
+          }}
+        />
+        {unit}
+      </span>
+      {modified && (
+        <button
+          type="button"
+          className="slider-reset"
+          title={t('controlsPanel.resetHint', { name })}
+          onClick={reset}
+        >
+          <span aria-hidden="true">&#8635;</span>
+          <span className="visually-hidden">{t('controlsPanel.reset')}</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
 /** Model controls: multipliers on the planet's processes (1 = natural). */
 export function ControlsPanel(props: {
   controls: ModelControls;
+  group: ControlGroupId;
+  defaults: Readonly<ModelControls>;
   onChange: (controls: Partial<ModelControls>) => void;
 }) {
+  const sliders = CONTROL_GROUPS[props.group].map((key) =>
+    SLIDERS.find((slider) => slider.key === key)!,
+  );
+
   return (
     <div className="sliders">
-      {SLIDERS.map(({ key, min, max, step, unit, digits }) => (
-        <label key={key} title={t(`controlHelp.${key}` as MessageKey)}>
-          <span>{t(`control.${key}` as MessageKey)}</span>
-          <input
-            type="range"
-            min={min}
-            max={max}
-            step={step}
-            value={props.controls[key]}
-            onChange={(e) => props.onChange({ [key]: Number(e.target.value) })}
-          />
-          <span className="slider-value">
-            {unit ? '' : '×'}
-            {props.controls[key].toFixed(digits ?? 2)}
-            {unit}
-          </span>
-        </label>
+      {sliders.map((slider) => (
+        <SliderControl
+          key={slider.key}
+          slider={slider}
+          value={props.controls[slider.key]}
+          defaultValue={props.defaults[slider.key]}
+          onChange={(value) => props.onChange({ [slider.key]: value })}
+        />
       ))}
     </div>
   );

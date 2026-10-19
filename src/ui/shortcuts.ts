@@ -17,7 +17,8 @@ export function useShortcuts(shortcuts: Shortcuts): void {
       if (event.ctrlKey || event.metaKey || event.altKey) return;
       const target = event.target as HTMLElement | null;
       if (target?.closest('input, select, textarea, [contenteditable="true"]')) return;
-      const action = latest.current[event.key.length === 1 ? event.key.toLowerCase() : event.key];
+      const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+      const action = latest.current[key];
       if (!action) return;
       event.preventDefault();
       action();

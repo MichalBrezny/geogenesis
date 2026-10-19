@@ -233,6 +233,7 @@ button:disabled {
 
 button:focus-visible,
 select:focus-visible,
+input:focus-visible,
 summary:focus-visible {
   outline: 2px solid var(--series-1);
   outline-offset: 1px;
@@ -718,28 +719,186 @@ kbd {
 
 .sliders {
   display: grid;
-  gap: 6px;
+  gap: 7px;
 }
 
-.sliders label {
+.sliders > div {
   display: grid;
-  grid-template-columns: 1fr auto;
-  grid-template-areas: 'name value' 'slider slider';
+  grid-template-columns: minmax(7.5rem, auto) minmax(7rem, 1fr) 4.5rem 1.75rem;
   align-items: center;
-  gap: 0 8px;
+  gap: 8px;
 }
 
-.sliders input {
-  grid-area: slider;
+.sliders input[type='range'] {
   width: 100%;
-  margin: 2px 0;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--series-1);
+}
+
+.slider-name {
+  white-space: nowrap;
 }
 
 .slider-value {
-  grid-area: value;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
   text-align: right;
   font-variant-numeric: tabular-nums;
   color: var(--text-secondary);
+}
+
+.slider-value input {
+  width: 3.5rem;
+  min-width: 0;
+  padding: 2px 3px;
+  text-align: right;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  color: inherit;
+  background: var(--surface-control);
+}
+
+.sliders .modified .slider-name,
+.sliders .modified .slider-value {
+  color: #79b7ff;
+}
+
+.slider-reset {
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+}
+
+.window-launchers {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.window-launchers button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+  padding: 6px 8px;
+}
+
+.window-launchers button.selected {
+  background: var(--accent-strong);
+  border-color: var(--series-1);
+  box-shadow: inset 0 1px 3px rgb(0 0 0 / 45%);
+}
+
+.floating-window {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  width: min(430px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
+  overflow: hidden;
+  background: var(--surface-chart);
+  border: 1px solid #3b4652;
+  border-radius: 7px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 55%);
+  font-size: 0.82rem;
+}
+
+.floating-window:focus-visible {
+  outline: 2px solid var(--series-1);
+  outline-offset: 1px;
+}
+
+.floating-window-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 32px;
+  padding: 4px 5px 4px 11px;
+  background: var(--surface-control);
+  border-bottom: 1px solid var(--grid);
+  cursor: move;
+  touch-action: none;
+  user-select: none;
+}
+
+.floating-window-titlebar h2 {
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+.floating-window-actions {
+  display: flex;
+  gap: 3px;
+}
+
+.floating-window-actions button {
+  width: 26px;
+  height: 25px;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+}
+
+.floating-window-content {
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+}
+
+.floating-window-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 12px;
+  border-top: 1px solid var(--grid);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 699px) {
+  .floating-window {
+    inset: auto 0 0 0 !important;
+    width: auto;
+    max-height: min(70vh, 520px);
+    border-radius: 10px 10px 0 0;
+  }
+
+  .floating-window-titlebar {
+    cursor: default;
+    touch-action: auto;
+  }
+
+  .floating-window-actions button:first-child {
+    display: none;
+  }
+
+  .sliders > div {
+    grid-template-columns: minmax(6.5rem, auto) minmax(5rem, 1fr) 4rem 1.75rem;
+  }
+}
+
+@media (max-width: 380px) {
+  .sliders > div {
+    grid-template-columns: minmax(0, 1fr) 4rem 1.75rem;
+  }
+
+  .slider-name {
+    grid-column: 1 / -1;
+  }
 }
 
 .inspector {

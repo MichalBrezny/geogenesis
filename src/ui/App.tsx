@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { t } from '../i18n/i18n';
+import { t, type MessageKey } from '../i18n/i18n';
 import type { MapLayer, TemperatureMonth } from '../render/mapRenderer';
 import type { Frame, WorkerRequest, WorkerResponse } from '../worker/protocol';
 import type { ScenarioId } from '../sim/scenarios';
@@ -8,7 +8,9 @@ import type { CellLife } from '../sim/models/biosphere/diversity';
 import type { ToolId } from '../sim/tools/tools';
 import { HistoryCharts, type ChartSeries } from './charts/HistoryCharts';
 import { CivilizationPanel, EventLog } from './CivilizationPanel';
-import { ControlsPanel } from './ControlsPanel';
+import { CONTROL_GROUPS, ControlsPanel, type ControlGroupId } from './ControlsPanel';
+import { FloatingWindow } from './FloatingWindow';
+import { WINDOW_ICONS, type FloatingWindowId } from './icons';
 import { LayerBar } from './LayerBar';
 import { LifePanel } from './LifePanel';
 import { MapLegend } from './MapLegend';
@@ -19,10 +21,32 @@ import { ToolPalette } from './ToolPalette';
 import { RESOLUTIONS, SPEEDS, TopBar, type Speed } from './TopBar';
 import type { PlanetStart } from '../sim/world';
 import type { PlanetParameters } from '../sim/core/planet';
+import { DEFAULT_CONTROLS } from '../sim/core/planet';
 import { PlanetPanel } from './PlanetPanel';
 
 /** How long a tool notice stays on screen, ms. */
 const NOTICE_DURATION = 3000;
+
+const FLOATING_WINDOWS: readonly FloatingWindowId[] = [
+  'geosphere',
+  'atmosphere',
+  'biosphere',
+  'planet',
+];
+
+type WindowOpenState = Record<FloatingWindowId, boolean>;
+
+function loadWindowOpenState(): WindowOpenState {
+  return Object.fromEntries(
+    FLOATING_WINDOWS.map((id) => {
+      try {
+        return [id, localStorage.getItem(`geogenesis.floatingWindow.${id}.open`) === 'true'];
+      } catch {
+        return [id, false];
+      }
+    }),
+  ) as WindowOpenState;
+}
 
 /** Charts, map layers and the initial layer that suit each scenario. */
 const SCENARIO_VIEW: Record<
@@ -134,6 +158,7 @@ const SHORTCUT_HELP = [
   ['1–9 / 0', 'help.keyLayer'],
   ['G', 'help.keyView'],
   ['W / C / P', 'help.keyOverlay'],
+  ['E / A / B / D', 'help.keyWindows'],
   ['Esc', 'help.keyEscape'],
   ['?', 'help.keyHelp'],
 ] as const;
@@ -154,6 +179,8 @@ function randomSeed(): number {
 
 export function App() {
   const workerRef = useRef<Worker | null>(null);
+  const stageRef = useRef<HTMLElement>(null);
+  const captureObliquityDefault = useRef(true);
   const [frame, setFrame] = useState<Frame | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [layer, setLayer] = useState<MapLayer>('terrain');
@@ -185,6 +212,13 @@ export function App() {
   const [cellLife, setCellLife] = useState<CellLife | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [windowOpen, setWindowOpen] = useState<WindowOpenState>(loadWindowOpenState);
+  const [activeWindow, setActiveWindow] = useState<FloatingWindowId | null>(
+    () => [...FLOATING_WINDOWS].reverse().find((id) => loadWindowOpenState()[id]) ?? null,
+  );
+  const [focusedWindow, setFocusedWindow] = useState<FloatingWindowId | null>(null);
+  const [obliquityDefault, setObliquityDefault] = useState(DEFAULT_CONTROLS.obliquity);
+  const [narrowWindows, setNarrowWindows] = useState(() => window.innerWidth < 700);
   const noticeTimer = useRef<number | undefined>(undefined);
 
   const send = useCallback((request: WorkerRequest) => workerRef.current?.postMessage(request), []);
@@ -199,6 +233,7 @@ export function App() {
       planetParams?: Partial<PlanetParameters>,
     ) => {
       const [width, height] = RESOLUTIONS[resolutionIndex]!;
+      captureObliquityDefault.current = true;
       send({ type: 'create', scenario, seed: randomSeed(), width, height, start, planetParams });
     },
     [send],
@@ -220,8 +255,13 @@ export function App() {
     });
     worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
       const message = event.data;
-      if (message.type === 'frame') setFrame(message.frame);
-      else if (message.type === 'cellLife') setCellLife(message.life);
+      if (message.type === 'frame') {
+        setFrame(message.frame);
+        if (captureObliquityDefault.current) {
+          setObliquityDefault(message.frame.controls.obliquity);
+          captureObliquityDefault.current = false;
+        }
+      } else if (message.type === 'cellLife') setCellLife(message.life);
       else if (message.type === 'error') setError(message.message);
       else if (message.type === 'saved') download(message.bytes, message.fileName);
       else {
@@ -253,8 +293,44 @@ export function App() {
   };
   const load = async (file: File) => {
     setError(null);
+    captureObliquityDefault.current = true;
     const bytes = await file.arrayBuffer();
     workerRef.current?.postMessage({ type: 'load', bytes } satisfies WorkerRequest, [bytes]);
+  };
+
+  useEffect(() => {
+    for (const id of FLOATING_WINDOWS) {
+      try {
+        localStorage.setItem(`geogenesis.floatingWindow.${id}.open`, String(windowOpen[id]));
+      } catch {
+        // Storage can be unavailable in private or embedded browsing contexts.
+      }
+    }
+  }, [windowOpen]);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 699px)');
+    const update = () => setNarrowWindows(media.matches);
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+
+  const closeWindow = (id: FloatingWindowId) => {
+    setWindowOpen((current) => ({ ...current, [id]: false }));
+    setActiveWindow((current) => (current === id ? null : current));
+    setFocusedWindow((current) => (current === id ? null : current));
+  };
+
+  const toggleWindow = (id: FloatingWindowId) => {
+    if (narrowWindows && windowOpen[id] && activeWindow !== id) {
+      setActiveWindow(id);
+      setFocusedWindow(id);
+      return;
+    }
+    const opening = !windowOpen[id];
+    setWindowOpen((current) => ({ ...current, [id]: opening }));
+    setActiveWindow(opening ? id : null);
+    setFocusedWindow(opening ? id : null);
   };
 
   const shortcuts: Shortcuts = {
@@ -264,7 +340,19 @@ export function App() {
     w: () => toggleOverlay('wind'),
     c: () => toggleOverlay('currents'),
     p: () => toggleOverlay('isobars'),
+    e: () => toggleWindow('geosphere'),
+    a: () => toggleWindow('atmosphere'),
+    b: () => toggleWindow('biosphere'),
+    d: () => toggleWindow('planet'),
     Escape: () => {
+      if (helpOpen) {
+        setHelpOpen(false);
+        return;
+      }
+      if (focusedWindow && windowOpen[focusedWindow]) {
+        closeWindow(focusedWindow);
+        return;
+      }
       setTool(null);
       setHelpOpen(false);
     },
@@ -337,18 +425,27 @@ export function App() {
               onUnlimitedEnergyChange={(enabled) => send({ type: 'unlimitedEnergy', enabled })}
             />
           </Collapsible>
-          <Collapsible title={t('controlsPanel.title')}>
-            <ControlsPanel
-              controls={frame.controls}
-              onChange={(controls) => send({ type: 'controls', controls })}
-            />
-          </Collapsible>
-          <Collapsible title={t('planet.title')}>
-            <PlanetPanel frame={frame} />
-          </Collapsible>
+          <nav className="window-launchers" aria-label={t('window.launchers')}>
+            {FLOATING_WINDOWS.map((id) => {
+              const pressed = windowOpen[id] && (!narrowWindows || activeWindow === id);
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  className={pressed ? 'selected' : undefined}
+                  aria-pressed={pressed}
+                  title={t(`window.${id}Hint` as MessageKey)}
+                  onClick={() => toggleWindow(id)}
+                >
+                  {WINDOW_ICONS[id]}
+                  <span>{t(`window.${id}` as MessageKey)}</span>
+                </button>
+              );
+            })}
+          </nav>
         </aside>
       )}
-      <main className="stage">
+      <main className="stage" ref={stageRef}>
         {error && <p className="error">{error}</p>}
         {!frame && !error && <p className="loading">{t('app.creating')}</p>}
         {frame && (
@@ -395,6 +492,57 @@ export function App() {
           <TabbedPanel tabs={tabs} label="panel.label" />
         </aside>
       )}
+      {frame &&
+        FLOATING_WINDOWS.map((id, index) => {
+          if (!windowOpen[id]) return null;
+          if (narrowWindows && activeWindow !== id) return null;
+          const activate = () => {
+            setFocusedWindow(id);
+            setActiveWindow(id);
+          };
+          const group = id === 'planet' ? null : (id as ControlGroupId);
+          const defaults = { ...DEFAULT_CONTROLS, obliquity: obliquityDefault };
+          const resetAll = group
+            ? Object.fromEntries(CONTROL_GROUPS[group].map((key) => [key, defaults[key]]))
+            : null;
+          const hasChanges = group
+            ? CONTROL_GROUPS[group].some((key) => frame.controls[key] !== defaults[key])
+            : false;
+          return (
+            <FloatingWindow
+              key={id}
+              id={id}
+              title={t(`window.${id}Title` as MessageKey)}
+              cascadeIndex={index}
+              stageRef={stageRef}
+              onActivate={activate}
+              onClose={() => closeWindow(id)}
+              footer={
+                resetAll && (
+                  <button
+                    type="button"
+                    title={t('controlsPanel.resetAllHint')}
+                    disabled={!hasChanges}
+                    onClick={() => send({ type: 'controls', controls: resetAll })}
+                  >
+                    {t('controlsPanel.resetAll')}
+                  </button>
+                )
+              }
+            >
+              {id === 'planet' ? (
+                <PlanetPanel frame={frame} />
+              ) : (
+                <ControlsPanel
+                  controls={frame.controls}
+                  group={id as ControlGroupId}
+                  defaults={{ ...DEFAULT_CONTROLS, obliquity: obliquityDefault }}
+                  onChange={(controls) => send({ type: 'controls', controls })}
+                />
+              )}
+            </FloatingWindow>
+          );
+        })}
       {helpOpen && <ShortcutHelp onClose={() => setHelpOpen(false)} />}
     </div>
   );
