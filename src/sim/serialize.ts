@@ -4,6 +4,7 @@ import {
   type PlanetState,
 } from './core/planet';
 import { HISTORY_SERIES } from './history';
+import { LIFE_CLASSES } from './data/lifeClasses';
 import type { RandomWorldSettings } from './world';
 import { surfacePressureOf } from './models/atmosphere/atmosphere';
 import {
@@ -151,6 +152,10 @@ function hydrateAddedState(planet: PlanetState): void {
   );
   planet.globals.co2Ice ??= 0;
   planet.globals.dust ??= 0;
+  planet.globals.dustBurden ??= [0, 0, 0];
+  planet.globals.dustSources ??= [];
+  planet.globals.dustIntegralSinceLife ??= 0;
+  planet.globals.dustYearsSinceLife ??= 0;
   planet.globals.oceanAcidity ??= 0;
   planet.globals.clathrateCarbon ??= 0;
   planet.globals.clathrateReferenceTemperature ??= planet.globals.meanTemperature;
@@ -191,6 +196,19 @@ function hydrateAddedState(planet: PlanetState): void {
   planet.geosphere.nextObliquityUpdateYear ??= 0;
   planet.geosphere.obliquityUpdateIndex ??= 0;
   planet.geosphere.fixedObliquity ??= false;
+  const temperature = planet.globals.meanTemperature;
+  const complexBiomass = planet.biota.cover.reduce(
+    (sum, cover, index) => sum + (LIFE_CLASSES[index]?.tier === 'microbes' ? 0 : cover),
+    0,
+  );
+  planet.biota.ecology ??= {
+    initialized: true,
+    biomassReference: complexBiomass,
+    biosphereReference: complexBiomass,
+    adaptedTemperature: temperature,
+    previousTemperature: temperature,
+  };
+  planet.biota.ecology.initialized ??= true;
   planet.controls.obliquity ??= DEFAULT_CONTROLS.obliquity;
   planet.controls.greenhouse ??= DEFAULT_CONTROLS.greenhouse;
   planet.controls.cloudAlbedo ??= DEFAULT_CONTROLS.cloudAlbedo;

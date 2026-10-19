@@ -70,6 +70,11 @@ describe('save files', () => {
     delete (planet.globals as Partial<typeof planet.globals>).tectonicRegime;
     delete (planet.globals as Partial<typeof planet.globals>).crustalCarbon;
     delete (planet.globals as Partial<typeof planet.globals>).co2Ice;
+    delete (planet.globals as Partial<typeof planet.globals>).dustBurden;
+    delete (planet.globals as Partial<typeof planet.globals>).dustSources;
+    delete (planet.globals as Partial<typeof planet.globals>).dustIntegralSinceLife;
+    delete (planet.globals as Partial<typeof planet.globals>).dustYearsSinceLife;
+    delete (planet.biota as Partial<typeof planet.biota>).ecology;
     delete (planet.history as Partial<typeof planet.history>).co2Ice;
     delete (planet.globals as Partial<typeof planet.globals>).escapedAtmosphere;
     delete (planet.geosphere as Partial<typeof planet.geosphere>).plateRngState;
@@ -104,8 +109,16 @@ describe('save files', () => {
     expect(loaded.planet.globals.magneticField).toBe(1);
     expect(loaded.planet.globals.tectonicRegime).toBe('mobile');
     expect(loaded.planet.globals.co2Ice).toBe(0);
+    expect(loaded.planet.globals.dustBurden).toEqual([0, 0, 0]);
+    expect(loaded.planet.globals.dustSources).toEqual([]);
+    expect(loaded.planet.globals.dustIntegralSinceLife).toBe(0);
+    expect(loaded.planet.biota.ecology.adaptedTemperature).toBe(
+      loaded.planet.globals.meanTemperature,
+    );
     expect(loaded.planet.geosphere.plateRngState).toBe((planet.seed ^ 0x7f4a7c15) >>> 0);
     expect(loaded.planet.geosphere.sliverCleanupElapsedYears).toBe(0);
+    const restored = restoreScenario('random', loaded.planet, loaded.settings);
+    expect(() => restored.simulation.step(restored.planet, 5)).not.toThrow();
   });
 
   it('rejects files that are not saves', () => {
