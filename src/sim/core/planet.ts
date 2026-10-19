@@ -86,6 +86,15 @@ export interface Atmosphere {
   waterVapor: number;
 }
 
+/** A dust injection, added at one instant or spread evenly over an interval. */
+export interface DustSource {
+  kind: 0 | 1 | 2;
+  /** Total optical depth injected by this source. */
+  tau: number;
+  start: number;
+  end: number;
+}
+
 /** Planet-wide (non-gridded) state. */
 export interface GlobalState {
   /** Simulated years since the planet formed (the star is assumed to be the same age). */
@@ -119,6 +128,14 @@ export interface GlobalState {
   co2Ice: number;
   /** Atmospheric dust optical depth (impacts, eruptions, nuclear war); 0 = clear sky. */
   dust: number;
+  /** Optical depth currently aloft in the fine-dust, sulfate and soot reservoirs. */
+  dustBurden: number[];
+  /** Dust injections that have not yet been fully integrated. */
+  dustSources: DustSource[];
+  /** Integrated optical depth (tau-years) accumulated since the life model last ran. */
+  dustIntegralSinceLife: number;
+  /** Years represented by dustIntegralSinceLife. */
+  dustYearsSinceLife: number;
   /** Surface-ocean acidification, pH units below the pre-perturbation value (0 = none). */
   oceanAcidity: number;
   /** Methane stored in clathrates and permafrost, microbar of CH₄ equivalent. */
@@ -245,6 +262,20 @@ export interface GeosphereState {
   fixedObliquity: boolean;
 }
 
+/** Ecological memory of the life model (plain data, saved with the planet). */
+export interface EcologyMemory {
+  /** False until the life model records its first environmental baseline. */
+  initialized: boolean;
+  /** Peak-hold reference of complex biomass, fading over the short biomass memory. */
+  biomassReference: number;
+  /** Peak-hold reference of complex biomass, fading over the long biosphere memory. */
+  biosphereReference: number;
+  /** Global mean temperature (C) life is adapted to. */
+  adaptedTemperature: number;
+  /** Global mean temperature (C) at the previous life step. */
+  previousTemperature: number;
+}
+
 /** Life on the planet (see models/biosphere/life.ts). */
 export interface Biota {
   /** populations[c * cellCount + i]: class c in cell i, as a fraction of carrying capacity. */
@@ -253,6 +284,8 @@ export interface Biota {
   appeared: (number | null)[];
   /** Area-weighted mean population of each class over the planet (written each step). */
   cover: number[];
+  /** Life-model memory for climate adaptation and mass-extinction detection. */
+  ecology: EcologyMemory;
 }
 
 /** The planet's sentient species and its civilization (see models/civilization). */
@@ -408,6 +441,10 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
       ),
       co2Ice: 0,
       dust: 0,
+      dustBurden: [0, 0, 0],
+      dustSources: [],
+      dustIntegralSinceLife: 0,
+      dustYearsSinceLife: 0,
       oceanAcidity: 0,
       clathrateCarbon: 0,
       biodiversity: 0,
@@ -448,6 +485,13 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
       populations: new Float32Array(grid.cellCount * LIFE_CLASS_COUNT),
       appeared: Array.from({ length: LIFE_CLASS_COUNT }, () => null),
       cover: Array.from({ length: LIFE_CLASS_COUNT }, () => 0),
+      ecology: {
+        initialized: false,
+        biomassReference: 0,
+        biosphereReference: 0,
+        adaptedTemperature: 0,
+        previousTemperature: 0,
+      },
     },
     civilization: {
       species: null,

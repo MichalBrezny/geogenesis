@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createPlanet } from '../../core/planet';
 import { createRng } from '../../core/rng';
 import { impactDustTau } from '../geosphere/impacts';
+import { consumeIntervalMeanDust, globalStress } from '../biosphere/life';
 import {
   addDustPulse,
   addDustSource,
@@ -61,6 +62,28 @@ describe('dust model', () => {
     const a = integrate(small, 10, 10).integral;
     const b = integrate(small, 10, 1).integral;
     expect(dustForcing(a / 10) * 10).toBeCloseTo(dustForcing(b / 10) * 10, 6);
+  });
+
+  it("gives life the same interval-mean light after one long step or many short ones", () => {
+    const lightAfter = (dt: number) => {
+      const p = planet();
+      addDustSource(p, DUST_SOOT, 3, 0, 1);
+      const rng = createRng(1);
+      for (let elapsed = 0; elapsed < 10_000; elapsed += dt) {
+        dustModel.runOneStep(p, dt, rng);
+        p.globals.year += dt;
+      }
+      const meanDust = consumeIntervalMeanDust(p, 10_000);
+      return { light: globalStress(p, meanDust).light, meanDust };
+    };
+
+    const short = lightAfter(5);
+    const long = lightAfter(10_000);
+    const analyticMean = (3 * DUST_EFOLD[DUST_SOOT]) / 10_000;
+    expect(short.meanDust).toBeCloseTo(analyticMean, 12);
+    expect(long.meanDust).toBeCloseTo(analyticMean, 12);
+    expect(short.light).toBeCloseTo(Math.exp(-analyticMean), 12);
+    expect(long.light).toBeCloseTo(short.light, 12);
   });
 
   it('keeps a pulse that happens later than the step pending', () => {

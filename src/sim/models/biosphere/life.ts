@@ -1,6 +1,6 @@
 import type { SimComponent } from '../../core/component';
 import { getTopology, NEIGHBOR_COUNT } from '../../core/grid';
-import type { PlanetState } from '../../core/planet';
+import type { EcologyMemory, PlanetState } from '../../core/planet';
 import type { Rng } from '../../core/rng';
 import type { Biome } from '../../data/biomes';
 import {
@@ -175,24 +175,6 @@ export type ExtinctionCause = (typeof EXTINCTION_CAUSES)[number];
 type Stressor = Exclude<ExtinctionCause, 'impact'>;
 
 /** Ecological memory of the life model (plain data, saved with the planet). */
-export interface EcologyMemory {
-  /** Peak-hold reference of complex biomass, fading with BIOMASS_MEMORY_TIME. */
-  biomassReference: number;
-  /** Peak-hold reference of complex biomass, fading with BIOSPHERE_MEMORY_TIME. */
-  biosphereReference: number;
-  /** Global mean temperature (°C) life is adapted to, relaxing with ADAPTATION_TIME. */
-  adaptedTemperature: number;
-  /** Global mean temperature (°C) at the previous life step. */
-  previousTemperature: number;
-}
-
-declare module '../../core/planet' {
-  interface Biota {
-    /** Life model memory for climate adaptation and mass-extinction detection. */
-    ecology?: EcologyMemory;
-  }
-}
-
 /**
  * Life: a population of every class in every cell, and evolution of new classes.
  *
@@ -217,12 +199,13 @@ export function createLife(options: LifeOptions = {}): SimComponent {
     runOneStep(state, dtYears, rng) {
       const tally = emptyTally();
       if (dtYears > 0) {
+        const meanDust = consumeIntervalMeanDust(state, dtYears);
         attemptAbiogenesis(state, dtYears, rng);
         adaptToClimate(state, dtYears);
         // Only classes that exist, or could evolve now, need any work.
         const alive = presentClasses(state);
         const relevant = alive.map((isAlive, c) => isAlive || isEvolutionCandidate(c, alive));
-        const suitability = computeSuitability(state, relevant, tally);
+        const suitability = computeSuitability(state, relevant, tally, meanDust);
         applyCompetition(state, suitability, relevant);
         const recovery = windowBoost(
           state.globals.year,
@@ -237,6 +220,18 @@ export function createLife(options: LifeOptions = {}): SimComponent {
       summarize(state, dtYears, tally);
     },
   };
+}
+
+/** Returns life's interval-mean optical depth and starts a fresh integration interval. */
+export function consumeIntervalMeanDust(state: PlanetState, dtYears: number): number {
+  const { globals } = state;
+  const mean =
+    globals.dustYearsSinceLife > 0 && dtYears > 0
+      ? globals.dustIntegralSinceLife / dtYears
+      : globals.dust;
+  globals.dustIntegralSinceLife = 0;
+  globals.dustYearsSinceLife = 0;
+  return mean;
 }
 
 /**
@@ -259,17 +254,18 @@ export function windowBoost(
   return 1 + ((boost - 1) * overlap) / dtYears;
 }
 
-/** Ecological memory, created on first use (old saves and new planets alike). */
+/** Ecological memory is initialized with the planet and hydrated for old saves. */
 function ecology(state: PlanetState): EcologyMemory {
-  const temperature = state.globals.meanTemperature;
-  const biomass = complexBiomass(state.biota.cover);
-  state.biota.ecology ??= {
-    biomassReference: biomass,
-    biosphereReference: biomass,
-    adaptedTemperature: temperature,
-    previousTemperature: temperature,
-  };
-  return state.biota.ecology;
+  const memory = state.biota.ecology;
+  if (!memory.initialized) {
+    const biomass = complexBiomass(state.biota.cover);
+    memory.initialized = true;
+    memory.biomassReference = biomass;
+    memory.biosphereReference = biomass;
+    memory.adaptedTemperature = state.globals.meanTemperature;
+    memory.previousTemperature = state.globals.meanTemperature;
+  }
+  return memory;
 }
 
 /**
@@ -316,16 +312,16 @@ interface GlobalStress {
 }
 
 /** Global stress multipliers from the current atmosphere, ocean and climate memory. */
-export function globalStress(state: PlanetState): GlobalStress {
+export function globalStress(state: PlanetState, dust = state.globals.dust): GlobalStress {
   const { globals } = state;
-  const lag = state.biota.ecology
+  const lag = state.biota.ecology.initialized
     ? Math.abs(globals.meanTemperature - state.biota.ecology.adaptedTemperature)
     : 0;
   const fireLevel = clamp01(
     (globals.atmosphere.o2 - FIRE_OXYGEN_ONSET) / (FIRE_OXYGEN_FULL - FIRE_OXYGEN_ONSET),
   );
   return {
-    light: Math.exp(-Math.max(0, globals.dust ?? 0)),
+    light: Math.exp(-Math.max(0, dust)),
     climate: 1 - clamp01((lag - CLIMATE_LAG_TOLERANCE) / CLIMATE_LAG_LETHAL),
     fire: 1 - FIRE_MAX_LOSS * fireLevel,
     co2: clamp01(
@@ -492,10 +488,11 @@ function computeSuitability(
   state: PlanetState,
   relevant: readonly boolean[],
   tally?: StressTally,
+  dust = state.globals.dust,
 ): Float32Array {
   const n = state.grid.cellCount;
   const result = new Float32Array(n * LIFE_CLASS_COUNT);
-  const stress = globalStress(state);
+  const stress = globalStress(state, dust);
   for (let c = 0; c < LIFE_CLASS_COUNT; c++) {
     if (relevant[c]) {
       classSuitability(state, c, result.subarray(c * n, (c + 1) * n), tally, stress);
