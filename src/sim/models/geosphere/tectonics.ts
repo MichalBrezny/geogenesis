@@ -4,7 +4,13 @@ import { createValueNoise3D, fractalNoise, type Noise3D } from '../../core/noise
 import type { PlanetState, Plate } from '../../core/planet';
 import { createRng, type Rng } from '../../core/rng';
 import { mantleHeat } from '../atmosphere/carbon';
-import { anchorPlates, randomPlate, randomUnitVector, removePlateExclaves } from './plates';
+import {
+  anchorPlates,
+  orientMotionAcrossPlate,
+  randomPlate,
+  randomUnitVector,
+  removePlateExclaves,
+} from './plates';
 
 export interface TectonicsOptions {
   plateCount?: number;
@@ -105,6 +111,7 @@ export function generateTectonicPlanet(state: PlanetState, options: TectonicsOpt
     elevation[i] = elevation[i]! + relief[i]! + detail * (crustType[i] ? 400 : 250);
   }
   anchorPlates(state);
+  for (const plate of state.plates) orientMotionAcrossPlate(plate, grid);
   initializeHotspots(state, rng);
   updateUplift(state, opts.maxUpliftRate);
 }

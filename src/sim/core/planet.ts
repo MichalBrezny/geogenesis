@@ -226,8 +226,12 @@ export interface GeosphereState {
   lipCount: number;
   /** Accumulated plate time since the last connected-component cleanup. */
   cleanupElapsedYears: number;
+  /** Accumulated plate time since the last narrow-sliver cleanup. */
+  sliverCleanupElapsedYears: number;
   /** Mantle-heat multiplier already folded into plate angular speeds. */
   plateSpeedMantleFactor: number;
+  /** Independent deterministic random stream for step-length-neutral plate events. */
+  plateRngState: number;
   /** Instantaneous impact heat carried between steps, W/m². */
   impactHeat: number;
   /** Total natural impacts sampled since this planet was created. */
@@ -429,7 +433,9 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
       nextLipId: 1,
       lipCount: 0,
       cleanupElapsedYears: 0,
+      sliverCleanupElapsedYears: 0,
       plateSpeedMantleFactor: 1,
+      plateRngState: (seed ^ 0x7f4a7c15) >>> 0,
       impactHeat: 0,
       impactCount: 0,
       abiogenesisSuppressedUntil: 0,

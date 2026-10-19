@@ -35,6 +35,57 @@ export function randomizeMotion(plate: Plate, rng: Rng, radius: number): void {
   plate.targetSpeed = plate.angularSpeed;
 }
 
+/**
+ * Moves a plate's Euler pole onto the great circle 90 degrees from its centroid.
+ * The resulting motion is translation-like across the plate instead of spinning
+ * the plate around a pole within (or immediately beside) its own crust.
+ */
+export function orientMotionAcrossPlate(plate: Plate, grid: Grid): void {
+  const { owned } = plate.crust;
+  const positions = grid.cellPosition;
+  let cx = 0;
+  let cy = 0;
+  let cz = 0;
+  for (let i = 0; i < owned.length; i++) {
+    if (!owned[i]) continue;
+    cx += positions[i * 3]!;
+    cy += positions[i * 3 + 1]!;
+    cz += positions[i * 3 + 2]!;
+  }
+  const centreLength = Math.hypot(cx, cy, cz);
+  if (centreLength < 1e-9) return;
+  cx /= centreLength;
+  cy /= centreLength;
+  cz /= centreLength;
+
+  // The crust centroid is in the reference frame. Rotate it to the plate's
+  // current position before projecting the newly sampled pole.
+  const m = plate.rotation;
+  const x = m[0]! * cx + m[1]! * cy + m[2]! * cz;
+  const y = m[3]! * cx + m[4]! * cy + m[5]! * cz;
+  const z = m[6]! * cx + m[7]! * cy + m[8]! * cz;
+  const [px, py, pz] = plate.eulerPole;
+  const dot = px * x + py * y + pz * z;
+  let tx = px - dot * x;
+  let ty = py - dot * y;
+  let tz = pz - dot * z;
+  let tangentLength = Math.hypot(tx, ty, tz);
+  if (tangentLength < 1e-9) {
+    // Deterministic fallback when the random pole lands exactly at the centroid.
+    if (Math.abs(z) < 0.9) {
+      tx = -y;
+      ty = x;
+      tz = 0;
+    } else {
+      tx = 0;
+      ty = -z;
+      tz = y;
+    }
+    tangentLength = Math.hypot(tx, ty, tz);
+  }
+  plate.eulerPole = [tx / tangentLength, ty / tangentLength, tz / tangentLength];
+}
+
 export function randomUnitVector(rng: Rng): [number, number, number] {
   const z = rng.next() * 2 - 1;
   const lon = rng.next() * 2 * Math.PI;

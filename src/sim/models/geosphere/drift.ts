@@ -7,12 +7,14 @@ import {
   type Grid,
 } from '../../core/grid';
 import type { PlanetState, Plate } from '../../core/planet';
-import type { Rng } from '../../core/rng';
+import { createRng, type Rng } from '../../core/rng';
 import { mantleHeat } from '../atmosphere/carbon';
 import {
   componentArea,
   currentCell,
+  orientMotionAcrossPlate,
   randomPlate,
+  randomUnitVector,
   randomizeMotion,
   referenceCell,
   rotatePlate,
@@ -68,6 +70,14 @@ const SHELF_DEPTH = -3000;
 export const MIN_INDEPENDENT_PLATE_AREA = 200_000 * 1e6;
 /** Component cleanup cadence in plate time; an accumulator makes it step-length independent. */
 const PLATE_CLEANUP_INTERVAL = 5e6;
+/** Narrow tendrils evolve more slowly than detached raster crumbs. */
+const SLIVER_CLEANUP_INTERVAL = 25e6;
+/** Detached raster noise at or below this size is always absorbed by its surroundings. */
+const MAX_SPECK_CELLS = 3;
+/** Relief advantage required to overturn the plate already visible at a cell. */
+const OVERLAP_HYSTERESIS = 1000;
+/** Plates near a third of the globe stop gaining crust at ambiguous overlaps. */
+const MAX_STABLE_PLATE_SHARE = 0.28;
 
 /**
  * Continental crust grows from small Hadean/Archean nuclei to the modern target.
@@ -90,9 +100,9 @@ export function continentalCrustTarget(ageYears: number, maximum = 0.3): number 
  * - Several plates over one cell (convergence): continental crust wins over
  *   oceanic, which subducts and is removed from its plate; colliding
  *   continents thicken the winner (mountain building) and slow both plates;
- *   between two oceanic plates the higher id stays on top.
+ *   between two oceanic plates the shallower, younger floor stays on top.
  * - No plate over a cell (divergence): new ocean floor forms at ridge depth and
- *   is added to the plate that was there before.
+ *   is split between the nearest plates bordering the gap.
  *
  * Ocean floor cools and sinks with age. Occasionally plates reorganize: all
  * get new motions and the largest plate may split, which keeps the plate
@@ -108,13 +118,14 @@ export function createPlateDrift(options: DriftOptions = {}): SimComponent {
     name: 'plateDrift',
     inputs: ['elevation', 'plateId', 'crustType'],
     outputs: ['elevation', 'plateId', 'crustType', 'upliftRate'],
-    runOneStep(state, stepYears, rng) {
+    runOneStep(state, stepYears) {
       if (state.globals.tectonicRegime === 'stagnant') {
         state.fields.upliftRate.fill(0);
         return;
       }
       const speed = speedFactor * state.controls.driftSpeed;
       if (stepYears <= 0) return;
+      const rng = createRng(state.geosphere.plateRngState);
       // Collisions stall plates only after they are detected, so long steps let
       // continents plough through each other: move in sub-steps of at most MAX_STEP.
       const substeps = Math.ceil(stepYears / MAX_STEP);
@@ -122,6 +133,7 @@ export function createPlateDrift(options: DriftOptions = {}): SimComponent {
         const dt = stepYears / substeps;
         driftOnce(state, dt, speed, state.globals.year + (k + 0.5) * dt, rng);
       }
+      state.geosphere.plateRngState = rng.state;
     },
   };
 
@@ -148,10 +160,28 @@ export function createPlateDrift(options: DriftOptions = {}): SimComponent {
     state.geosphere.cleanupElapsedYears += dtYears;
     if (state.geosphere.cleanupElapsedYears >= PLATE_CLEANUP_INTERVAL) {
       state.geosphere.cleanupElapsedYears %= PLATE_CLEANUP_INTERVAL;
+      // Rifting can expose tiny pieces, so it must happen before the cleanup
+      // passes rather than creating fragments after the final pass.
+      if (splitOversizedPlate(state, rng)) collisions = composePlates(state, rng);
       // A transfer can expose a previously hidden overlap. A few bounded passes
       // settle those secondary crumbs at the same physical cleanup time.
       for (let pass = 0; pass < 3 && cleanupPlateFragments(state, rng); pass++) {
         collisions = composePlates(state, rng);
+      }
+    }
+    state.geosphere.sliverCleanupElapsedYears += dtYears;
+    if (state.geosphere.sliverCleanupElapsedYears >= SLIVER_CLEANUP_INTERVAL) {
+      state.geosphere.sliverCleanupElapsedYears %= SLIVER_CLEANUP_INTERVAL;
+      // A one-cell tendril is a large (~300 km) artefact on the reference grid;
+      // at finer resolutions it can be a legitimate narrow plate feature.
+      if (
+        resolutionScale(state.grid) >= 0.75 &&
+        cleanupThinSlivers(state, Int32Array.from(state.fields.plateId))
+      ) {
+        collisions = composePlates(state, rng);
+        for (let pass = 0; pass < 3 && cleanupPlateFragments(state, rng); pass++) {
+          collisions = composePlates(state, rng);
+        }
       }
     }
     for (const plate of state.plates) {
@@ -274,9 +304,15 @@ function composePlates(state: PlanetState, rng: Rng): Uint8Array {
   // cells can sample the same reference cell, so crust is only consumed if it is
   // hidden everywhere; otherwise plate edges would erode from resampling alone.
   const buffers = composeBuffers(grid, plateCount);
-  const { refs, visible, winners, thickening, composed, fresh } = buffers;
+  const { refs, visible, winners, thickening, composed, fresh, plateAreas } = buffers;
   visible.fill(0);
   thickening.fill(0);
+  plateAreas.fill(0);
+  for (let cell = 0; cell < n; cell++) {
+    const row = Math.floor(cell / grid.width);
+    plateAreas[plateId[cell]!] = plateAreas[plateId[cell]!]! + grid.rowCellArea[row]!;
+  }
+  const totalArea = 4 * Math.PI * grid.radius * grid.radius;
   const caps = plates.map((plate) => boundingCap(grid, plate));
   const pos = grid.cellPosition;
 
@@ -302,23 +338,26 @@ function composePlates(state: PlanetState, rng: Rng): Uint8Array {
         winner < 0 ||
         (winnerFresh && !isFresh) ||
         (isFresh === winnerFresh &&
-          beats(plates[k]!, r, plates[winner]!, refs[d * plateCount + winner]!))
+          beats(
+            plates[k]!,
+            r,
+            plates[winner]!,
+            refs[d * plateCount + winner]!,
+            plateId[d]!,
+            plateAreas,
+            totalArea,
+          ))
       ) {
         winner = k;
         winnerFresh = isFresh;
       }
     }
-    if (winner < 0) {
-      // Divergence: new ocean floor joins the plate that was here before.
-      winner = plateId[d]!;
-      const crust = plates[winner]!.crust;
-      const r = referenceCell(grid, plates[winner]!, d);
-      refs[d * plateCount + winner] = r;
-      crust.owned[r] = 1;
-      crust.type[r] = 0;
-      crust.elevation[r] = RIDGE_DEPTH + (rng.next() - 0.5) * 300;
-    }
     winners[d] = winner;
+  }
+
+  assignDivergentGaps(state, refs, winners, rng);
+  for (let d = 0; d < n; d++) {
+    const winner = winners[d]!;
     visible[winner * n + refs[d * plateCount + winner]!] = 1;
   }
 
@@ -359,6 +398,86 @@ function composePlates(state: PlanetState, rng: Rng): Uint8Array {
 }
 
 /**
+ * Splits uncovered ridge cells between the plates that actually border each gap.
+ * A multi-source breadth-first fill is sufficient here: gaps are normally only a
+ * few cells wide, and every wave advances one cell at the current resolution.
+ */
+function assignDivergentGaps(
+  state: PlanetState,
+  refs: Int32Array,
+  winners: Int32Array,
+  rng: Rng,
+): void {
+  const { grid, plates } = state;
+  const plateCount = plates.length;
+  const { neighbors, rowDistance } = getTopology(grid);
+  const { gaps, gapQueue } = composeBuffers(grid, plateCount);
+  gaps.fill(0);
+  let gapCount = 0;
+  for (let cell = 0; cell < grid.cellCount; cell++) {
+    if (winners[cell]! < 0) {
+      gaps[cell] = 1;
+      gapCount++;
+    }
+  }
+  if (gapCount === 0) return;
+
+  let head = 0;
+  let tail = 0;
+  // Seed every gap edge from its nearest non-gap neighbour. With all edge cells
+  // queued before propagation, wider ridges are divided at their midline.
+  for (let cell = 0; cell < grid.cellCount; cell++) {
+    if (!gaps[cell]) continue;
+    const row = Math.floor(cell / grid.width);
+    let bestPlate = -1;
+    let bestDistance = Infinity;
+    for (let direction = 0; direction < NEIGHBOR_COUNT; direction++) {
+      const neighbor = neighbors[cell * NEIGHBOR_COUNT + direction]!;
+      if (neighbor < 0 || gaps[neighbor]) continue;
+      const candidate = winners[neighbor]!;
+      const distance = rowDistance[row * NEIGHBOR_COUNT + direction]!;
+      if (
+        distance < bestDistance ||
+        (distance === bestDistance && (bestPlate < 0 || candidate < bestPlate))
+      ) {
+        bestPlate = candidate;
+        bestDistance = distance;
+      }
+    }
+    if (bestPlate >= 0) {
+      winners[cell] = bestPlate;
+      gapQueue[tail++] = cell;
+    }
+  }
+
+  while (head < tail) {
+    const cell = gapQueue[head++]!;
+    for (let direction = 0; direction < NEIGHBOR_COUNT; direction++) {
+      const neighbor = neighbors[cell * NEIGHBOR_COUNT + direction]!;
+      if (neighbor < 0 || !gaps[neighbor] || winners[neighbor]! >= 0) continue;
+      winners[neighbor] = winners[cell]!;
+      gapQueue[tail++] = neighbor;
+    }
+  }
+
+  for (let cell = 0; cell < grid.cellCount; cell++) {
+    if (!gaps[cell]) continue;
+    // A completely uncovered globe has no border seeds. Retaining the previous
+    // owner is the only meaningful deterministic fallback for that degenerate case.
+    const winner = winners[cell]! >= 0 ? winners[cell]! : state.fields.plateId[cell]!;
+    winners[cell] = winner;
+    const crust = plates[winner]!.crust;
+    const reference = referenceCell(grid, plates[winner]!, cell);
+    refs[cell * plateCount + winner] = reference;
+    if (!crust.owned[reference]) {
+      crust.owned[reference] = 1;
+      crust.type[reference] = 0;
+      crust.elevation[reference] = RIDGE_DEPTH + (rng.next() - 0.5) * 300;
+    }
+  }
+}
+
+/**
  * Reassigns detached visible pieces by moving their existing crust samples between
  * plate reference rasters. The planet ownership raster is used only to identify
  * pieces and their enclosing neighbour; plate shapes are never reconstructed from it.
@@ -382,7 +501,8 @@ export function cleanupPlateFragments(state: PlanetState, rng: Rng): boolean {
     pieces.sort((a, b) => componentArea(grid, b) - componentArea(grid, a));
     const totalArea = pieces.reduce((sum, piece) => sum + componentArea(grid, piece), 0);
 
-    if (totalArea < MIN_INDEPENDENT_PLATE_AREA) {
+    const totalCells = pieces.reduce((sum, piece) => sum + piece.length, 0);
+    if (totalCells <= MAX_SPECK_CELLS || totalArea < MIN_INDEPENDENT_PLATE_AREA) {
       const cells = pieces.flat();
       const receiverId = surroundingPlate(grid, snapshot, cells, plate.id);
       const receiver = plates[receiverId];
@@ -395,11 +515,14 @@ export function cleanupPlateFragments(state: PlanetState, rng: Rng): boolean {
       const receiver = plates[receiverId];
       if (!receiver) continue;
       const area = componentArea(grid, piece);
-      if (area >= MIN_INDEPENDENT_PLATE_AREA) {
+      if (piece.length > MAX_SPECK_CELLS && area >= MIN_INDEPENDENT_PLATE_AREA) {
         const target = plateSlotForRift(state, plate, rng, capacity);
         if (target) {
           const selected = cellMask(grid.cellCount, piece);
-          if (transferCrust(state, plate, target, selected)) changed = true;
+          if (transferCrust(state, plate, target, selected)) {
+            orientMotionAcrossPlate(target, grid);
+            changed = true;
+          }
           continue;
         }
       }
@@ -408,6 +531,155 @@ export function cleanupPlateFragments(state: PlanetState, rng: Rng): boolean {
     }
   }
   return changed;
+}
+
+/** Removes one-cell-wide fingers enclosed by a single neighbouring plate. */
+function cleanupThinSlivers(state: PlanetState, snapshot: Int32Array): boolean {
+  const { grid, plates } = state;
+  const { neighbors } = getTopology(grid);
+  const transfers = new Map<string, { source: number; target: number; mask: Uint8Array }>();
+  for (let cell = 0; cell < grid.cellCount; cell++) {
+    const source = snapshot[cell]!;
+    let same = 0;
+    const counts = new Map<number, number>();
+    for (let direction = 0; direction < NEIGHBOR_COUNT; direction++) {
+      const neighbor = neighbors[cell * NEIGHBOR_COUNT + direction]!;
+      if (neighbor < 0) continue;
+      const id = snapshot[neighbor]!;
+      if (id === source) same++;
+      else counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+    if (same > 2) continue;
+    let target = -1;
+    let surrounding = 0;
+    for (const [id, count] of counts) {
+      if (count > surrounding || (count === surrounding && id < target)) {
+        target = id;
+        surrounding = count;
+      }
+    }
+    if (target < 0 || surrounding < 6) continue;
+    const key = `${source}:${target}`;
+    let transfer = transfers.get(key);
+    if (!transfer) {
+      transfer = { source, target, mask: new Uint8Array(grid.cellCount) };
+      transfers.set(key, transfer);
+    }
+    transfer.mask[cell] = 1;
+  }
+
+  let changed = false;
+  for (const transfer of transfers.values()) {
+    const source = plates[transfer.source];
+    const target = plates[transfer.target];
+    if (source && target && transferCrust(state, source, target, transfer.mask)) changed = true;
+  }
+  return changed;
+}
+
+/**
+ * Rifts a superplate along a great circle while keeping both halves in plate
+ * reference rasters. If all daughter slots are occupied, a sub-1% plate is
+ * first folded into its surrounding neighbour so compositor cost stays bounded.
+ */
+function splitOversizedPlate(state: PlanetState, rng: Rng): boolean {
+  const { grid, plates } = state;
+  const initialCount = state.geosphere.initialPlateCount || plates.length;
+  if (initialCount < 4) return false;
+  const ids = state.fields.plateId;
+  const totalArea = 4 * Math.PI * grid.radius * grid.radius;
+  const areas = new Float64Array(plates.length);
+  for (let cell = 0; cell < grid.cellCount; cell++) {
+    const row = Math.floor(cell / grid.width);
+    areas[ids[cell]!] = areas[ids[cell]!]! + grid.rowCellArea[row]!;
+  }
+  let parentId = 0;
+  for (let id = 1; id < areas.length; id++) {
+    if (areas[id]! > areas[parentId]!) parentId = id;
+  }
+  if (areas[parentId]! / totalArea < 0.32) return false;
+
+  const parent = plates[parentId]!;
+  const capacity = Math.max(initialCount, Math.min(initialCount * 2, initialCount + 4));
+  let hasSlot = plates.some((plate) => !plate.crust.owned.some((value) => value === 1));
+  if (!hasSlot && plates.length >= capacity) {
+    let smallestId = -1;
+    for (let id = 0; id < areas.length; id++) {
+      if (id === parentId || areas[id]! <= 0 || areas[id]! / totalArea >= 0.01) continue;
+      if (smallestId < 0 || areas[id]! < areas[smallestId]!) smallestId = id;
+    }
+    if (smallestId < 0) return false;
+    const cells: number[] = [];
+    for (let cell = 0; cell < ids.length; cell++) if (ids[cell] === smallestId) cells.push(cell);
+    const receiverId = surroundingPlate(grid, ids, cells, smallestId);
+    if (receiverId < 0 || !transferCrust(state, plates[smallestId]!, plates[receiverId]!)) return false;
+    hasSlot = true;
+  }
+  if (!hasSlot && plates.length >= capacity) return false;
+
+  // Use the real-area centroid of the visible plate. A random tangent through
+  // that centroid defines a near-bisecting great circle without reconstructing
+  // either half from the planet ownership grid.
+  const positions = grid.cellPosition;
+  let cx = 0;
+  let cy = 0;
+  let cz = 0;
+  for (let cell = 0; cell < ids.length; cell++) {
+    if (ids[cell] !== parentId) continue;
+    const area = grid.rowCellArea[Math.floor(cell / grid.width)]!;
+    cx += positions[cell * 3]! * area;
+    cy += positions[cell * 3 + 1]! * area;
+    cz += positions[cell * 3 + 2]! * area;
+  }
+  const centreLength = Math.hypot(cx, cy, cz);
+  if (centreLength < 1e-9) return false;
+  cx /= centreLength;
+  cy /= centreLength;
+  cz /= centreLength;
+  const [rx, ry, rz] = randomUnitVector(rng);
+  const projection = rx * cx + ry * cy + rz * cz;
+  let nx = rx - projection * cx;
+  let ny = ry - projection * cy;
+  let nz = rz - projection * cz;
+  const normalLength = Math.hypot(nx, ny, nz);
+  if (normalLength < 1e-9) return false;
+  nx /= normalLength;
+  ny /= normalLength;
+  nz /= normalLength;
+
+  const selected = new Uint8Array(grid.cellCount);
+  const m = parent.rotation;
+  let selectedCount = 0;
+  let retainedCount = 0;
+  for (let reference = 0; reference < grid.cellCount; reference++) {
+    if (!parent.crust.owned[reference]) continue;
+    const x = positions[reference * 3]!;
+    const y = positions[reference * 3 + 1]!;
+    const z = positions[reference * 3 + 2]!;
+    const currentX = m[0]! * x + m[1]! * y + m[2]! * z;
+    const currentY = m[3]! * x + m[4]! * y + m[5]! * z;
+    const currentZ = m[6]! * x + m[7]! * y + m[8]! * z;
+    if (currentX * nx + currentY * ny + currentZ * nz >= 0) {
+      selected[reference] = 1;
+      selectedCount++;
+    } else {
+      retainedCount++;
+    }
+  }
+  if (selectedCount === 0 || retainedCount === 0) return false;
+
+  const target = plateSlotForRift(state, parent, rng, capacity);
+  if (!target) return false;
+  for (let reference = 0; reference < selected.length; reference++) {
+    if (!selected[reference]) continue;
+    target.crust.owned[reference] = 1;
+    target.crust.elevation[reference] = parent.crust.elevation[reference]!;
+    target.crust.type[reference] = parent.crust.type[reference]!;
+    parent.crust.owned[reference] = 0;
+  }
+  orientMotionAcrossPlate(parent, grid);
+  orientMotionAcrossPlate(target, grid);
+  return true;
 }
 
 function cellMask(length: number, cells: readonly number[]): Uint8Array {
@@ -428,16 +700,13 @@ function transferCrust(
   const targetCrust = target.crust;
   const moves: [number, number][] = [];
   const movedSource = new Uint8Array(grid.cellCount);
-  const claimed = new Uint8Array(grid.cellCount);
   if (selected) {
     for (let planetCell = 0; planetCell < grid.cellCount; planetCell++) {
       if (!selected[planetCell]) continue;
       const sourceReference = referenceCell(grid, source, planetCell);
       if (!sourceCrust.owned[sourceReference] || movedSource[sourceReference]) continue;
       const targetReference = referenceCell(grid, target, planetCell);
-      if (claimed[targetReference]) continue;
       movedSource[sourceReference] = 1;
-      claimed[targetReference] = 1;
       moves.push([sourceReference, targetReference]);
     }
   } else {
@@ -445,8 +714,6 @@ function transferCrust(
       if (!sourceCrust.owned[sourceReference]) continue;
       const planetCell = currentCell(grid, source, sourceReference);
       const targetReference = referenceCell(grid, target, planetCell);
-      if (claimed[targetReference]) continue;
-      claimed[targetReference] = 1;
       moves.push([sourceReference, targetReference]);
     }
   }
@@ -619,6 +886,12 @@ interface ComposeBuffers {
   /** Per plate and reference cell: summed elevation change and number of samples. */
   deltaSum: Float32Array;
   deltaCount: Uint16Array;
+  /** Cells with no plate before divergent ridge floor is assigned. */
+  gaps: Uint8Array;
+  /** Reused breadth-first queue for splitting gaps between their bordering plates. */
+  gapQueue: Int32Array;
+  /** Real visible area of each plate before the current composition. */
+  plateAreas: Float64Array;
 }
 
 const bufferCache = new WeakMap<Grid, ComposeBuffers>();
@@ -638,6 +911,9 @@ function composeBuffers(grid: Grid, plateCount: number): ComposeBuffers {
       fresh: new Uint8Array(n * plateCount),
       deltaSum: new Float32Array(n * plateCount),
       deltaCount: new Uint16Array(n * plateCount),
+      gaps: new Uint8Array(n),
+      gapQueue: new Int32Array(n),
+      plateAreas: new Float64Array(plateCount),
     };
     bufferCache.set(grid, buffers);
   }
@@ -686,12 +962,36 @@ function boundingCap(grid: Grid, plate: Plate): [number, number, number, number]
 }
 
 /** Whether plate a's crust at reference cell ra stays on top of plate b's crust at rb. */
-function beats(a: Plate, ra: number, b: Plate, rb: number): boolean {
+function beats(
+  a: Plate,
+  ra: number,
+  b: Plate,
+  rb: number,
+  incumbent: number,
+  plateAreas: Float64Array,
+  totalArea: number,
+): boolean {
+  // Large plates are mechanically prone to rifting and have long consuming
+  // margins. Model that negative feedback by preventing a non-incumbent plate
+  // near a third of the globe from annexing more overlap cells.
+  if (
+    a.id !== incumbent &&
+    plateAreas[a.id]! / totalArea >= MAX_STABLE_PLATE_SHARE &&
+    plateAreas[b.id]! < plateAreas[a.id]!
+  ) {
+    return false;
+  }
   const ta = a.crust.type[ra]!;
   const tb = b.crust.type[rb]!;
   if (ta !== tb) return ta === 1;
-  if (ta === 1) return a.crust.elevation[ra]! > b.crust.elevation[rb]!;
-  return a.id > b.id;
+  const ha = a.crust.elevation[ra]!;
+  const hb = b.crust.elevation[rb]!;
+  const margin = a.id === incumbent || b.id === incumbent ? OVERLAP_HYSTERESIS : 0;
+  if (ha > hb + margin) return true;
+  if (hb > ha + margin) return false;
+  if (a.id === incumbent) return true;
+  if (b.id === incumbent) return false;
+  return a.id < b.id;
 }
 
 /** Young ocean floor relaxes towards abyssal depth; trenches and arcs are left alone. */
@@ -714,6 +1014,7 @@ function reorganizePlates(state: PlanetState, rng: Rng): void {
   for (const plate of state.plates) {
     if (plate.crust.owned.some((value) => value === 1)) {
       randomizeMotion(plate, rng, state.grid.radius);
+      orientMotionAcrossPlate(plate, state.grid);
       plate.angularSpeed *= state.geosphere.plateSpeedMantleFactor;
       plate.targetSpeed *= state.geosphere.plateSpeedMantleFactor;
     }

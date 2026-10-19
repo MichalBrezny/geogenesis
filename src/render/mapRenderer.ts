@@ -234,6 +234,9 @@ export function layerPixels(
   return pixels;
 }
 
+/** Palette index per plate id from the last plate map, kept so colours stay stable. */
+const plateColors: number[] = [];
+
 /** Contrasting greedy graph colours plus a one-native-pixel boundary line. */
 function platePixels(
   state: MapSource,
@@ -255,22 +258,29 @@ function platePixels(
       }
     }
   }
+  // Plates keep last frame's colour unless a neighbour already holds it, so a
+  // changed boundary recolours only the plates involved, not the whole map.
   const assigned = new Int16Array(maxId + 1).fill(-1);
-  for (let id = 0; id <= maxId; id++) {
+  const pickColor = (id: number, preferred: number): number => {
     const used = new Uint8Array(PLATE_PALETTE.length);
     for (const neighbor of adjacency[id]!) {
       const color = assigned[neighbor]!;
       if (color >= 0) used[color] = 1;
     }
-    let color = id % PLATE_PALETTE.length;
+    if (preferred >= 0 && !used[preferred]) return preferred;
     for (let k = 0; k < PLATE_PALETTE.length; k++) {
       const candidate = (id + k) % PLATE_PALETTE.length;
-      if (!used[candidate]) {
-        color = candidate;
-        break;
-      }
+      if (!used[candidate]) return candidate;
     }
-    assigned[id] = color;
+    return id % PLATE_PALETTE.length;
+  };
+  for (let id = 0; id <= maxId; id++) {
+    const previous = plateColors[id] ?? -1;
+    if (previous >= 0) assigned[id] = pickColor(id, previous);
+  }
+  for (let id = 0; id <= maxId; id++) {
+    if (assigned[id]! < 0) assigned[id] = pickColor(id, -1);
+    plateColors[id] = assigned[id]!;
   }
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {

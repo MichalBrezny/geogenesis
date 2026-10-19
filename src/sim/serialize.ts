@@ -171,7 +171,9 @@ function hydrateAddedState(planet: PlanetState): void {
     nextLipId: 1,
     lipCount: 0,
     cleanupElapsedYears: 0,
+    sliverCleanupElapsedYears: 0,
     plateSpeedMantleFactor: 1,
+    plateRngState: (planet.seed ^ 0x7f4a7c15) >>> 0,
     impactHeat: 0,
     impactCount: 0,
     abiogenesisSuppressedUntil: 0,
@@ -180,7 +182,9 @@ function hydrateAddedState(planet: PlanetState): void {
     fixedObliquity: false,
   };
   planet.geosphere.cleanupElapsedYears ??= 0;
+  planet.geosphere.sliverCleanupElapsedYears ??= 0;
   planet.geosphere.plateSpeedMantleFactor ??= 1;
+  planet.geosphere.plateRngState ??= (planet.seed ^ 0x7f4a7c15) >>> 0;
   planet.geosphere.impactHeat ??= 0;
   planet.geosphere.impactCount ??= 0;
   planet.geosphere.abiogenesisSuppressedUntil ??= 0;

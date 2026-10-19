@@ -13,7 +13,7 @@ export const ERAS = ['geological', 'evolution', 'civilization', 'technology'] as
 export type Era = (typeof ERAS)[number];
 
 /** Years per step while the planet holds only microbes. */
-export const GEOLOGICAL_ERA_STEP = 10e6;
+export const GEOLOGICAL_ERA_STEP = 2e6;
 /** Years per step once complex (multicellular) life exists. */
 export const EVOLUTION_ERA_STEP = 0.5e6;
 /** The tech age that starts the technology era. */
