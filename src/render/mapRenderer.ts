@@ -4,8 +4,11 @@ import { Biome, BIOMES } from '../sim/data/biomes';
 import { LakeType } from '../sim/models/geosphere/flowRouting';
 import { co2FrostCover } from '../sim/models/atmosphere/co2Frost';
 import {
+  clathratePalette,
   diversityPalette,
   elevationPalette,
+  nutrientPalette,
+  oceanOxygenPalette,
   precipitationPalette,
   pressurePalette,
   seasonalRangePalette,
@@ -35,6 +38,8 @@ export const RENDERED_FIELDS = [
   'seasonalAmplitude',
   'iceCover',
   'co2Ice',
+  'oceanOxygen',
+  'nutrients',
   'precipitation',
   'daisyWhite',
   'daisyBlack',
@@ -48,6 +53,8 @@ export interface MapSource {
   grid: Pick<Grid, 'width' | 'height' | 'cellCount'>;
   fields: Pick<Fields, (typeof RENDERED_FIELDS)[number]>;
   seaLevel: number;
+  /** Methane in clathrates/permafrost, microbar CH4 equivalent (2.8 Gt C each). */
+  clathrateCarbon?: number;
 }
 
 /** Map layers the player can switch between. */
@@ -62,6 +69,9 @@ export const MAP_LAYERS = [
   'clouds',
   'wind',
   'oceanCurrents',
+  'oceanOxygen',
+  'nutrients',
+  'clathrates',
   'biomes',
   'life',
   'diversity',
@@ -207,6 +217,24 @@ const layerColors: Record<MapLayer, CellColor> = {
     if (elevation[i]! >= state.seaLevel) return [58, 60, 64];
     return seaAnomalyPalette(oceanAnomaly[i]!);
   },
+  oceanOxygen(state, i) {
+    const { elevation, oceanOxygen } = state.fields;
+    if (elevation[i]! >= state.seaLevel) return dimmedTerrain(state, i);
+    return oceanOxygenPalette(oceanOxygen[i]! * 100);
+  },
+  nutrients(state, i) {
+    const { elevation, nutrients } = state.fields;
+    if (elevation[i]! >= state.seaLevel) return dimmedTerrain(state, i);
+    return nutrientPalette(nutrients[i]!);
+  },
+  clathrates(state, i) {
+    const suitability = clathrateSuitability(state, i);
+    if (suitability === 0) return dimmedTerrain(state, i);
+    // The model keeps one global reservoir. Show where that store is stable and
+    // fade it as the global reservoir empties (2,500 microbar is its maximum).
+    const reservoir = state.clathrateCarbon ?? 0;
+    return clathratePalette(suitability * Math.min(1, Math.max(0, reservoir) / 2500) * 100);
+  },
   precipitation(state, i) {
     const color = precipitationPalette(state.fields.precipitation[i]!);
     return state.fields.elevation[i]! < state.seaLevel ? mix(color, [10, 20, 40], 0.5) : color;
@@ -350,4 +378,25 @@ function mix(a: Rgb, b: Rgb, t: number): Rgb {
     Math.round(a[1] + (b[1] - a[1]) * t),
     Math.round(a[2] + (b[2] - a[2]) * t),
   ];
+}
+
+function dimmedTerrain(state: MapSource, i: number): Rgb {
+  return mix(elevationPalette(state.fields.elevation[i]! - state.seaLevel), [24, 27, 32], 0.72);
+}
+
+/** Mirrors the model's cold-land and shallow-shelf stability envelope. */
+function clathrateSuitability(state: MapSource, i: number): number {
+  const { elevation, airTemperature, iceCover } = state.fields;
+  const height = elevation[i]!;
+  const temperature = airTemperature[i]!;
+  const ice = iceCover[i]!;
+  if (height < state.seaLevel) {
+    if (state.seaLevel - height > 500) return 0;
+    return Math.max(ice, clamp01((5 - temperature) / 8));
+  }
+  return Math.max(ice, clamp01((2 - temperature) / 12));
+}
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
 }

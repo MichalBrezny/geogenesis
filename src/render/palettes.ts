@@ -114,3 +114,30 @@ export const diversityPalette = gradient([
   { value: 10, color: [140, 205, 110] },
   { value: 15, color: [250, 240, 150] },
 ]);
+
+/** Dissolved oxygen relative to saturation: anoxic red through well-oxygenated blue. */
+export const oceanOxygenPalette = gradient([
+  { value: 0, color: [112, 24, 38] },
+  { value: 10, color: [183, 54, 50] },
+  { value: 30, color: [225, 139, 65] },
+  { value: 60, color: [116, 190, 174] },
+  { value: 100, color: [55, 125, 210] },
+]);
+
+/** Surface-ocean phosphate supply relative to the modern mean. */
+export const nutrientPalette = gradient([
+  { value: 0, color: [18, 37, 68] },
+  { value: 0.5, color: [31, 91, 122] },
+  { value: 1, color: [42, 145, 124] },
+  { value: 2, color: [154, 197, 87] },
+  { value: 3, color: [244, 222, 89] },
+]);
+
+/** Local clathrate/permafrost storage, from empty to the maximum stable store. */
+export const clathratePalette = gradient([
+  { value: 0, color: [34, 30, 45] },
+  { value: 20, color: [67, 61, 104] },
+  { value: 50, color: [69, 119, 151] },
+  { value: 75, color: [91, 175, 168] },
+  { value: 100, color: [194, 226, 180] },
+]);

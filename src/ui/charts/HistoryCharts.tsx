@@ -38,6 +38,19 @@ const CHARTS: readonly ChartSpec[] = [
   { series: 'o2', title: 'chart.o2', scale: 100, format: (v) => `${v.toFixed(1)}%` },
   { series: 'ch4', title: 'chart.ch4', format: (v) => `${v.toFixed(1)} ppm`, log: true },
   { series: 'livingClasses', title: 'chart.livingClasses', format: (v) => v.toFixed(0) },
+  { series: 'dust', title: 'chart.dust', format: (v) => v.toFixed(3) },
+  { series: 'oceanAcidity', title: 'chart.oceanAcidity', format: (v) => v.toFixed(2) },
+  {
+    series: 'meanOceanOxygen',
+    title: 'chart.meanOceanOxygen',
+    scale: 100,
+    format: (v) => `${v.toFixed(1)}% saturation`,
+  },
+  {
+    series: 'clathrateMethane',
+    title: 'chart.clathrateMethane',
+    format: (v) => `${v.toFixed(0)} Gt C`,
+  },
   {
     series: 'forestFraction',
     title: 'chart.forest',

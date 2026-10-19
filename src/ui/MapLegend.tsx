@@ -8,9 +8,12 @@ import {
 } from '../render/mapRenderer';
 import { LIFE_TIERS } from '../sim/data/lifeClasses';
 import {
+  clathratePalette,
   cloudPalette,
   diversityPalette,
   elevationPalette,
+  nutrientPalette,
+  oceanOxygenPalette,
   precipitationPalette,
   pressurePalette,
   seasonalRangePalette,
@@ -102,6 +105,27 @@ const SCALES: Partial<Record<MapLayer, Scale>> = {
     max: 6,
     ticks: [0, 0.2, 1, 3, 6],
     unit: '× Earth mean',
+  },
+  oceanOxygen: {
+    palette: oceanOxygenPalette,
+    min: 0,
+    max: 100,
+    ticks: [0, 10, 30, 60, 100],
+    unit: '% saturation',
+  },
+  nutrients: {
+    palette: nutrientPalette,
+    min: 0,
+    max: 3,
+    ticks: [0, 0.5, 1, 2, 3],
+    unit: '× modern phosphate',
+  },
+  clathrates: {
+    palette: clathratePalette,
+    min: 0,
+    max: 100,
+    ticks: [0, 20, 50, 75, 100],
+    unit: '% local capacity',
   },
 };
 

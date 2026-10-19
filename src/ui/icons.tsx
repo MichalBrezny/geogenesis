@@ -164,6 +164,25 @@ export const LAYER_ICONS: Record<MapLayer, ReactNode> = {
       <path d="M2 9c2.5-2 4.5-2 7 0s4.5 2 7 0 4.5-2 6 0M2 15c2.5-2 4.5-2 7 0s4.5 2 7 0 4.5-2 6 0" />
     </Icon>
   ),
+  oceanOxygen: (
+    <Icon>
+      <path d="M12 3s-6 7-6 11a6 6 0 0 0 12 0c0-4-6-11-6-11Z" />
+      <circle cx="10" cy="14" r="1" />
+      <circle cx="14" cy="11" r="1.5" />
+    </Icon>
+  ),
+  nutrients: (
+    <Icon>
+      <path d="M4 17c4-7 9-10 16-10-1 7-5 11-12 11" />
+      <path d="M4 21c2-6 6-9 12-11" />
+    </Icon>
+  ),
+  clathrates: (
+    <Icon>
+      <path d="m12 2 8 5v10l-8 5-8-5V7Z" />
+      <path d="m4 7 8 5 8-5m-8 5v10" />
+    </Icon>
+  ),
   daisies: (
     <Icon>
       <circle cx="12" cy="12" r="2.5" />

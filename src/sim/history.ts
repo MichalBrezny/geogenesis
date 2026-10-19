@@ -25,6 +25,10 @@ export const HISTORY_SERIES = [
   'livingClasses',
   'biodiversity',
   'impactFlux',
+  'dust',
+  'oceanAcidity',
+  'meanOceanOxygen',
+  'clathrateMethane',
   'era',
 ] as const;
 export type HistorySeries = (typeof HISTORY_SERIES)[number];
@@ -46,6 +50,8 @@ export function createHistory(): History {
  */
 export const recordHistory: SimComponent = {
   name: 'history',
+  // Some compact scenarios do not run ocean chemistry; their initialized
+  // oxygen field remains zero and still records a valid no-ocean diagnostic.
   inputs: ['elevation'],
   outputs: [],
   runOneStep(state) {
@@ -71,6 +77,10 @@ export const recordHistory: SimComponent = {
       livingClasses: state.biota.cover.filter((cover) => cover > 0).length,
       biodiversity: globals.biodiversity,
       impactFlux: globals.impactFlux,
+      dust: globals.dust,
+      oceanAcidity: globals.oceanAcidity,
+      meanOceanOxygen: meanOceanOxygen(state),
+      clathrateMethane: globals.clathrateCarbon * 2.8,
       era: ERAS.indexOf(planetEra(state)),
     };
     const last = history.year[history.year.length - 1];
@@ -87,6 +97,23 @@ export const recordHistory: SimComponent = {
     }
   },
 };
+
+/** Area-weighted dissolved oxygen over ocean cells only, relative to saturation. */
+function meanOceanOxygen(state: PlanetState): number {
+  const { grid, fields, globals } = state;
+  let oxygen = 0;
+  let oceanArea = 0;
+  for (let y = 0; y < grid.height; y++) {
+    const weight = grid.rowAreaWeight[y]!;
+    for (let x = 0; x < grid.width; x++) {
+      const i = y * grid.width + x;
+      if (!isOcean(fields.elevation[i]!, globals.seaLevel)) continue;
+      oxygen += fields.oceanOxygen[i]! * weight;
+      oceanArea += weight;
+    }
+  }
+  return oceanArea > 0 ? oxygen / oceanArea : 0;
+}
 
 const FOREST_BIOMES: readonly Biome[] = [
   Biome.BorealForest,

@@ -153,6 +153,7 @@ export class SimHost {
       grid: { width, height, cellCount },
       fields,
       seaLevel: planet.globals.seaLevel,
+      clathrateCarbon: planet.globals.clathrateCarbon,
       water: planet.globals.water,
       year: planet.globals.year,
       meanTemperature: planet.globals.meanTemperature,
