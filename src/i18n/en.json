@@ -300,6 +300,7 @@
   "layerHelp.precipitation": "Annual rain and snow, carried by the winds from the sea",
   "layerHelp.biomes": "Biomes set by temperature and aridity, shaded by actual plant cover",
   "layerHelp.life": "The most advanced life in each place",
+  "layerHelp.diversity": "How many life classes share each place",
   "layerHelp.civilization": "Where the civilization lives",
   "layerHelp.daisies": "Cover of black and white daisies",
   "viewHelp.map": "The whole planet as a flat map",

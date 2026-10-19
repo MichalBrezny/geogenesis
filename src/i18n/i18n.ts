@@ -10,7 +10,8 @@ const messages: Record<MessageKey, string> = en;
  * as further JSON files next to en.json.
  */
 export function t(key: MessageKey, params: Record<string, string | number> = {}): string {
-  return messages[key].replace(/\{(\w+)\}/g, (match, name: string) =>
+  // A missing string shows its key instead of crashing the whole UI.
+  return (messages[key] ?? key).replace(/\{(\w+)\}/g, (match, name: string) =>
     name in params ? String(params[name]) : match,
   );
 }
