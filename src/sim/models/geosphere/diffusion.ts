@@ -1,5 +1,6 @@
 import type { SimComponent } from '../../core/component';
 import { getTopology, NEIGHBOR_COUNT } from '../../core/grid';
+import { landSurfaceFraction } from './seaLevel';
 
 export interface DiffusionOptions {
   /** Effective hillslope diffusivity in m²/yr. Must be large on coarse grids to have any effect. */
@@ -9,6 +10,21 @@ export interface DiffusionOptions {
 /** East and south neighbour directions (indices into DIRECTIONS); each face is visited once. */
 const E = 2;
 const S = 4;
+
+/**
+ * Hillslope transport left on a planet without surface water (wind, dry mass
+ * wasting), relative to a wet one. The effective diffusivity stands for rain-driven
+ * processes on coarse cells; dry Venus and Mars keep their relief for billions of years.
+ */
+export const DRY_DIFFUSION_FACTOR = 0.01;
+/** Ocean share of the surface from which hillslopes behave as on a wet planet. */
+const WET_OCEAN_FRACTION = 0.05;
+
+/** Diffusivity multiplier for an ocean covering `oceanFraction` of the planet: 1 when wet. */
+export function hillslopeWetness(oceanFraction: number): number {
+  const wet = Math.min(1, oceanFraction / WET_OCEAN_FRACTION);
+  return wet >= 1 ? 1 : DRY_DIFFUSION_FACTOR + (1 - DRY_DIFFUSION_FACTOR) * wet;
+}
 
 /**
  * Linear hillslope diffusion ∂h/∂t = D∇²h in finite-volume form on the
@@ -30,13 +46,14 @@ export function createLinearDiffuser(options: DiffusionOptions = {}): SimCompone
     inputs: ['elevation'],
     outputs: ['elevation'],
     runOneStep(state, dtYears) {
-      const D = baseDiffusivity * state.controls.erosion;
-      if (dtYears <= 0 || D <= 0) return;
       const { grid } = state;
       const seaLevel = state.globals.seaLevel;
+      const elevation = state.fields.elevation;
+      const oceanFraction = 1 - landSurfaceFraction(grid, elevation, seaLevel);
+      const D = baseDiffusivity * state.controls.erosion * hillslopeWetness(oceanFraction);
+      if (dtYears <= 0 || D <= 0) return;
       const { neighbors, rowNorthEdge, rowSouthEdge } = getTopology(grid);
       const { width, height, dy } = grid;
-      const elevation = state.fields.elevation;
 
       // Conductances (m²/yr) per row for each face, and the stable time step.
       const condEW = new Float64Array(height);
