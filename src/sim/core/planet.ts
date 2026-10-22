@@ -274,6 +274,16 @@ export interface EcologyMemory {
   adaptedTemperature: number;
   /** Global mean temperature (C) at the previous life step. */
   previousTemperature: number;
+  /** Integrated origination hazard for each class, retained across simulation steps. */
+  evolutionProgress?: number[];
+  /** Seeded exponential hazard threshold for each class's next origination. */
+  evolutionThresholds?: number[];
+  /** Private deterministic stream used only to renew origination thresholds. */
+  evolutionRngState?: number;
+  /** Integrated abiogenesis hazard while the planet is lifeless. */
+  abiogenesisProgress?: number;
+  /** Seeded exponential threshold for the next origin of life. */
+  abiogenesisThreshold?: number;
 }
 
 /** Life on the planet (see models/biosphere/life.ts). */

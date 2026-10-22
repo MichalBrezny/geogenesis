@@ -1,6 +1,6 @@
 import type { SimComponent } from '../../core/component';
 import type { PlanetState } from '../../core/planet';
-import type { Rng } from '../../core/rng';
+import { createRng, type Rng } from '../../core/rng';
 import type { Biome } from '../../data/biomes';
 import { PEOPLE_PER_KM2, SENTIENCE_POTENTIAL, TECH_AGES } from '../../data/civilization';
 import { LIFE_CLASSES, lifeClassIndex, PLANT_PRODUCTIVITY } from '../../data/lifeClasses';
@@ -8,12 +8,15 @@ import { recordEvent } from '../../events';
 import { addDustPulse, DUST_SOOT } from '../atmosphere/dust';
 import { classSuitability } from '../biosphere/life';
 import { disperse } from '../dispersal';
-import { isOcean, landSurfaceFraction } from '../geosphere/seaLevel';
+import { isOcean } from '../geosphere/seaLevel';
 
 export interface CivilizationOptions {
   /** Mean years for a fully established, most capable class to become sentient. */
   sentienceTime?: number;
 }
+
+/** Mean years for a fully established candidate with potential 1 to become sentient. */
+export const SENTIENCE_TIME = 150e6;
 
 /**
  * A class must fill this share of its habitat (land or ocean) before it can
@@ -32,6 +35,17 @@ const COLLAPSE_POPULATION = 1e-5;
 /** How far (m, along a row or column) a seafaring civilization can settle across water. */
 const SEA_CROSSING = 500_000;
 
+declare module '../../core/planet' {
+  interface CivilizationState {
+    /** Integrated pre-sentience hazard, retained across simulation steps. */
+    sentienceProgress?: number;
+    /** Seeded exponential threshold for the next sentience event. */
+    sentienceThreshold?: number;
+    /** Private deterministic stream for sentience thresholds and species choice. */
+    sentienceRngState?: number;
+  }
+}
+
 /**
  * Sentience and civilization.
  *
@@ -46,16 +60,17 @@ const SEA_CROSSING = 500_000;
  * leaves the planet.
  */
 export function createCivilization(options: CivilizationOptions = {}): SimComponent {
-  const sentienceTime = options.sentienceTime ?? 200e6;
+  const sentienceTime = options.sentienceTime ?? SENTIENCE_TIME;
   return {
     name: 'civilization',
     inputs: ['elevation', 'biome', 'vegetation'],
     outputs: ['civilization', 'vegetation'],
     runOneStep(state, dtYears, rng) {
       const civ = state.civilization;
+      ensureSentienceMemory(state, rng);
       if (civ.species === null) {
         state.fields.civilization.fill(0);
-        if (dtYears > 0) maybeBecomeSentient(state, dtYears, sentienceTime, rng);
+        if (dtYears > 0) maybeBecomeSentient(state, dtYears, sentienceTime);
         return;
       }
       if (state.biota.cover[civ.species] === 0) {
@@ -79,21 +94,24 @@ export function createCivilization(options: CivilizationOptions = {}): SimCompon
   };
 }
 
-function maybeBecomeSentient(state: PlanetState, dtYears: number, sentienceTime: number, rng: Rng) {
-  const cover = state.biota.cover;
-  const land = landFraction(state);
+function maybeBecomeSentient(state: PlanetState, dtYears: number, sentienceTime: number) {
   const candidates = LIFE_CLASSES.map((lifeClass, c) => {
     const potential = SENTIENCE_POTENTIAL[lifeClass.key] ?? 0;
-    // Judge land and sea animals by how much of their own habitat they fill.
-    const habitat = lifeClass.habitat === 'land' ? land : 1 - land;
-    const share = habitat > 0 ? cover[c]! / habitat : 0;
+    // Competition changes density, not the geographic range that establishes a species.
+    const share = occupiedHabitatShare(state, c);
     if (share < MIN_HABITAT_SHARE) return 0;
     return potential * Math.min(1, share / FULL_HABITAT_SHARE);
   });
   const total = candidates.reduce((sum, w) => sum + w, 0);
-  if (total === 0 || rng.next() >= 1 - Math.exp(-(dtYears * total) / sentienceTime)) return;
+  if (total === 0) return;
+  const civ = state.civilization;
+  const progressBefore = civ.sentienceProgress!;
+  const rate = total / sentienceTime;
+  civ.sentienceProgress = progressBefore + rate * dtYears;
+  if (civ.sentienceProgress < civ.sentienceThreshold!) return;
 
-  let pick = rng.next() * total;
+  const sentienceRng = createRng(civ.sentienceRngState!);
+  let pick = sentienceRng.next() * total;
   const species = candidates.findIndex((weight) => (pick -= weight) < 0);
   // The first band appears where the species is most numerous.
   const n = state.grid.cellCount;
@@ -103,20 +121,67 @@ function maybeBecomeSentient(state: PlanetState, dtYears: number, sentienceTime:
       home = i;
     }
   }
-  makeSentient(state, species, home);
+  const eventYear = state.globals.year + (civ.sentienceThreshold! - progressBefore) / rate;
+  makeSentient(state, species, home, eventYear);
+  civ.sentienceProgress = 0;
+  civ.sentienceThreshold = exponentialThreshold(sentienceRng);
+  civ.sentienceRngState = sentienceRng.state;
+}
+
+function ensureSentienceMemory(state: PlanetState, rng: Rng): void {
+  const civ = state.civilization;
+  if (
+    civ.sentienceProgress !== undefined &&
+    civ.sentienceThreshold !== undefined &&
+    civ.sentienceRngState !== undefined
+  ) {
+    return;
+  }
+  const sentienceRng = createRng((rng.state ^ 0x73656e74) >>> 0);
+  civ.sentienceProgress = 0;
+  civ.sentienceThreshold = exponentialThreshold(sentienceRng);
+  civ.sentienceRngState = sentienceRng.state;
+}
+
+function exponentialThreshold(rng: Rng): number {
+  return -Math.log(1 - rng.next());
+}
+
+/** Area share of the class's physical habitat in which it has an extant population. */
+export function occupiedHabitatShare(state: PlanetState, species: number): number {
+  const { grid, fields, biota, globals } = state;
+  const oceanSpecies = LIFE_CLASSES[species]!.habitat === 'ocean';
+  const offset = species * grid.cellCount;
+  let habitat = 0;
+  let occupied = 0;
+  for (let y = 0; y < grid.height; y++) {
+    const weight = grid.rowAreaWeight[y]!;
+    for (let x = 0; x < grid.width; x++) {
+      const i = y * grid.width + x;
+      if (isOcean(fields.elevation[i]!, globals.seaLevel) !== oceanSpecies) continue;
+      habitat += weight;
+      if (biota.populations[offset + i]! > 0) occupied += weight;
+    }
+  }
+  return habitat > 0 ? occupied / habitat : 0;
 }
 
 /** Makes a life class sentient, with its first band in cell `home`. */
-export function makeSentient(state: PlanetState, species: number, home: number): void {
+export function makeSentient(
+  state: PlanetState,
+  species: number,
+  home: number,
+  eventYear = state.globals.year,
+): void {
   const civ = state.civilization;
   civ.species = species;
   civ.age = 0;
   civ.progress = 0;
-  civ.sentientSince = state.globals.year;
+  civ.sentientSince = eventYear;
   state.fields.civilization.fill(0);
   state.fields.civilization[home] = TECH_AGES[0]!.foodUse * 0.5;
   civ.population = worldPopulation(state);
-  recordEvent(state, 'sentience', LIFE_CLASSES[species]!.key);
+  recordEvent(state, 'sentience', LIFE_CLASSES[species]!.key, eventYear);
 }
 
 /** Densest settlement (fraction of PEOPLE_PER_KM2) each cell can feed in the current age. */
@@ -173,10 +238,6 @@ function clearLand(state: PlanetState, capacity: Float32Array): void {
     const settled = capacity[i]! > 0 ? Math.min(1, fields.civilization[i]! / capacity[i]!) : 0;
     fields.vegetation[i] = biota.populations[plants * n + i]! * (1 - landUse * settled);
   }
-}
-
-function landFraction(state: PlanetState): number {
-  return landSurfaceFraction(state.grid, state.fields.elevation, state.globals.seaLevel);
 }
 
 function worldPopulation(state: PlanetState): number {

@@ -1,7 +1,7 @@
 import type { SimComponent } from '../../core/component';
 import { getTopology, NEIGHBOR_COUNT } from '../../core/grid';
 import type { EcologyMemory, PlanetState } from '../../core/planet';
-import type { Rng } from '../../core/rng';
+import { createRng, type Rng } from '../../core/rng';
 import type { Biome } from '../../data/biomes';
 import {
   LIFE_CLASS_COUNT,
@@ -59,7 +59,7 @@ const BASE_EVOLUTION_TIME = 40e6;
  * hazard scales with suitable liquid-ocean area, giving roughly 100–300 Myr on
  * a temperate young planet.
  */
-export const ABIOGENESIS_TIME = 180e6;
+export const ABIOGENESIS_TIME = 75e6;
 const ABIOGENESIS_REFERENCE_OCEAN = 0.7;
 const ABIOGENESIS_MIN_TEMPERATURE = 0;
 const ABIOGENESIS_BOILING_MARGIN = 10;
@@ -198,9 +198,10 @@ export function createLife(options: LifeOptions = {}): SimComponent {
     outputs: ['vegetation', 'lifeTier'],
     runOneStep(state, dtYears, rng) {
       const tally = emptyTally();
+      const evolutionMemory = ensureEvolutionMemory(state, rng);
       if (dtYears > 0) {
         const meanDust = consumeIntervalMeanDust(state, dtYears);
-        attemptAbiogenesis(state, dtYears, rng);
+        attemptAbiogenesis(state, dtYears, evolutionMemory);
         adaptToClimate(state, dtYears);
         // Only classes that exist, or could evolve now, need any work.
         const alive = presentClasses(state);
@@ -215,7 +216,14 @@ export function createLife(options: LifeOptions = {}): SimComponent {
           RECOVERY_GROWTH_BOOST,
         );
         growAndSpread(state, suitability, dtYears, alive, recovery, rng);
-        evolve(state, suitability, dtYears, mutationRate, options.evolutionTimeFactors ?? {}, rng);
+        evolve(
+          state,
+          suitability,
+          dtYears,
+          mutationRate,
+          options.evolutionTimeFactors ?? {},
+          evolutionMemory,
+        );
       }
       summarize(state, dtYears, tally);
     },
@@ -266,6 +274,47 @@ function ecology(state: PlanetState): EcologyMemory {
     memory.previousTemperature = state.globals.meanTemperature;
   }
   return memory;
+}
+
+type EvolutionMemory = Required<
+  Pick<
+    EcologyMemory,
+    | 'evolutionProgress'
+    | 'evolutionThresholds'
+    | 'evolutionRngState'
+    | 'abiogenesisProgress'
+    | 'abiogenesisThreshold'
+  >
+>;
+
+/**
+ * A private origination stream and one exponential threshold per class keep
+ * stochastic evolution independent of unrelated RNG consumers and of how often
+ * the geological era is stepped. The optional fields make old saves migrate on use.
+ */
+function ensureEvolutionMemory(state: PlanetState, rng: Rng): EvolutionMemory {
+  const memory = ecology(state);
+  if (
+    memory.evolutionProgress?.length !== LIFE_CLASS_COUNT ||
+    memory.evolutionThresholds?.length !== LIFE_CLASS_COUNT ||
+    memory.evolutionRngState === undefined ||
+    memory.abiogenesisProgress === undefined ||
+    memory.abiogenesisThreshold === undefined
+  ) {
+    const evolutionRng = createRng((rng.state ^ 0x65766f6c) >>> 0);
+    memory.evolutionProgress = Array<number>(LIFE_CLASS_COUNT).fill(0);
+    memory.evolutionThresholds = Array.from({ length: LIFE_CLASS_COUNT }, () =>
+      exponentialThreshold(evolutionRng),
+    );
+    memory.abiogenesisProgress = 0;
+    memory.abiogenesisThreshold = exponentialThreshold(evolutionRng);
+    memory.evolutionRngState = evolutionRng.state;
+  }
+  return memory as EvolutionMemory;
+}
+
+function exponentialThreshold(rng: Rng): number {
+  return -Math.log(1 - rng.next());
 }
 
 /**
@@ -386,7 +435,7 @@ export function isAbiogenesisHabitat(state: PlanetState, cell: number): boolean 
   );
 }
 
-function attemptAbiogenesis(state: PlanetState, dtYears: number, rng: Rng): void {
+function attemptAbiogenesis(state: PlanetState, dtYears: number, memory: EvolutionMemory): void {
   const prokaryotes = lifeClassIndex('prokaryotes');
   const n = state.grid.cellCount;
   for (let i = 0; i < n; i++) {
@@ -414,8 +463,12 @@ function attemptAbiogenesis(state: PlanetState, dtYears: number, rng: Rng): void
   }
   if (candidates.length === 0) return;
   const rate = suitableArea / (ABIOGENESIS_REFERENCE_OCEAN * ABIOGENESIS_TIME);
-  if (rng.next() >= abiogenesisProbability(rate * state.controls.advanceRate, availableYears))
-    return;
+  const effectiveRate = rate * state.controls.advanceRate;
+  const progressBefore = memory.abiogenesisProgress;
+  memory.abiogenesisProgress += effectiveRate * availableYears;
+  if (memory.abiogenesisProgress < memory.abiogenesisThreshold) return;
+
+  const rng = createRng(memory.evolutionRngState);
 
   // Hydrothermal systems are favoured, but a quiet suitable ocean is not forbidden.
   let totalWeight = 0;
@@ -436,10 +489,15 @@ function attemptAbiogenesis(state: PlanetState, dtYears: number, rng: Rng): void
     }
   }
   seedOriginCluster(state, origin, prokaryotes);
+  const availableStart = Math.max(start, state.geosphere.abiogenesisSuppressedUntil);
+  const eventYear = availableStart + (memory.abiogenesisThreshold - progressBefore) / effectiveRate;
   if (state.biota.appeared[prokaryotes] === null) {
-    state.biota.appeared[prokaryotes] = end;
+    state.biota.appeared[prokaryotes] = eventYear;
   }
-  recordEvent(state, 'lifeOrigin', undefined, end);
+  recordEvent(state, 'lifeOrigin', undefined, eventYear);
+  memory.abiogenesisProgress = 0;
+  memory.abiogenesisThreshold = exponentialThreshold(rng);
+  memory.evolutionRngState = rng.state;
 }
 
 function seedOriginCluster(state: PlanetState, origin: number, lifeClass: number): void {
@@ -689,7 +747,7 @@ function evolve(
   dtYears: number,
   mutationRate: number,
   evolutionTimeFactors: Partial<Record<LifeClassKey, number>>,
-  rng: Rng,
+  memory: EvolutionMemory,
 ): void {
   const { grid, biota, globals } = state;
   const { neighbors } = getTopology(grid);
@@ -733,20 +791,35 @@ function evolve(
     if (bestCell < 0) return;
 
     const share = overlap / potential;
+    const requestedFactor = evolutionTimeFactors[lifeClass.key] ?? 1;
+    const scenarioFactor = Math.min(
+      requestedFactor,
+      lifeClass.maxEvolutionRateFactor ?? requestedFactor,
+    );
     const rate =
       (mutationRate *
         state.controls.mutationRate *
         state.controls.advanceRate *
         share *
-        (evolutionTimeFactors[lifeClass.key] ?? 1) *
+        scenarioFactor *
         evolutionBoost(state, lifeClass, dtYears)) /
       evolutionTimeYears(lifeClass);
-    if (rng.next() < 1 - Math.exp(-rate * dtYears)) {
+    const progressBefore = memory.evolutionProgress[c]!;
+    const progressAfter = progressBefore + rate * dtYears;
+    memory.evolutionProgress[c] = progressAfter;
+    if (progressAfter >= memory.evolutionThresholds[c]!) {
+      const eventYear = globals.year + (memory.evolutionThresholds[c]! - progressBefore) / rate;
       biota.populations[c * n + bestCell] = FOUNDER_POPULATION;
       const first = biota.appeared[c] === null;
-      if (first) biota.appeared[c] = globals.year;
-      recordEvent(state, 'classAppeared', lifeClass.key);
-      if (first && lifeClass.firstAnimals) recordEvent(state, 'cambrianExplosion');
+      if (first) biota.appeared[c] = eventYear;
+      recordEvent(state, 'classAppeared', lifeClass.key, eventYear);
+      if (first && lifeClass.firstAnimals) {
+        recordEvent(state, 'cambrianExplosion', undefined, eventYear);
+      }
+      const evolutionRng = createRng(memory.evolutionRngState);
+      memory.evolutionProgress[c] = 0;
+      memory.evolutionThresholds[c] = exponentialThreshold(evolutionRng);
+      memory.evolutionRngState = evolutionRng.state;
     }
   });
 }
