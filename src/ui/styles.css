@@ -175,6 +175,61 @@ body {
   border: 1px solid var(--grid);
 }
 
+.map.zoomed {
+  cursor: grab;
+}
+
+.map.zoomed:not(.tool-active):active {
+  cursor: grabbing;
+}
+
+/* Zoom and minimap buttons in the planet's top-right corner. */
+.map-controls {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  line-height: normal;
+}
+
+.map-controls button {
+  display: inline-flex;
+  padding: 5px;
+  background: color-mix(in srgb, var(--surface-control) 85%, transparent);
+}
+
+.map-controls button.selected {
+  background: var(--accent-strong);
+  border-color: var(--series-1);
+}
+
+/* The whole planet, small, in the bottom-right corner. */
+.minimap {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 180px;
+  line-height: 0;
+  border: 1px solid var(--grid);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.5);
+}
+
+.planet .minimap canvas {
+  width: 100%;
+  aspect-ratio: 2 / 1;
+  cursor: pointer;
+}
+
+.planet .minimap canvas.minimap-mark {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  pointer-events: none;
+  image-rendering: auto;
+}
+
 .globe {
   align-self: center;
   width: min(100cqw, calc(100cqh - var(--legend-room)));
@@ -457,6 +512,10 @@ kbd {
 
   .globe {
     width: min(100cqw, 80vh);
+  }
+
+  .minimap {
+    width: 120px;
   }
 
   .topbar .menu {

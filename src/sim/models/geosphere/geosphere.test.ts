@@ -250,6 +250,25 @@ describe('linearDiffuser', () => {
     expect(Math.max(...elevation)).toBeLessThan(5000);
     expect(Math.min(...elevation)).toBeGreaterThanOrEqual(1000 - 1e-3);
   });
+
+  it('barely wears down the relief of a planet without surface water', () => {
+    const lowering = (oceanRows: number) => {
+      const planet = createPlanet({ width: 32, height: 16 });
+      const { elevation } = planet.fields;
+      elevation.fill(1000);
+      // Ocean (or a dry basin) along the southern rows.
+      for (let i = (16 - oceanRows) * 32; i < elevation.length; i++) elevation[i] = -4000;
+      const peak = cellIndex(planet.grid, 10, 5);
+      elevation[peak] = 5000;
+      planet.globals.seaLevel = oceanRows > 0 ? 0 : -5000;
+      createLinearDiffuser().runOneStep(planet, 1e8, rng);
+      return 5000 - elevation[peak]!;
+    };
+    const wet = lowering(6);
+    const dry = lowering(0);
+    expect(dry).toBeGreaterThan(0);
+    expect(dry).toBeLessThan(wet * 0.05);
+  });
 });
 
 describe('generateTectonicPlanet', () => {

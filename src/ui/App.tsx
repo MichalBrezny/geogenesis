@@ -173,6 +173,8 @@ const SHORTCUT_HELP = [
   ['G', 'help.keyView'],
   ['W / C / P', 'help.keyOverlay'],
   ['E / A / B / D', 'help.keyWindows'],
+  ['+ / −', 'help.keyZoom'],
+  ['M', 'help.keyMinimap'],
   ['Esc', 'help.keyEscape'],
   ['?', 'help.keyHelp'],
 ] as const;
