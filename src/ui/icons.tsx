@@ -226,3 +226,29 @@ export const WINDOW_ICONS: Record<FloatingWindowId, ReactNode> = {
   biosphere: LAYER_ICONS.life,
   planet: VIEW_ICONS.globe,
 };
+
+export const MAP_ICONS = {
+  zoomIn: (
+    <Icon>
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="m15.5 15.5 5 5M10.5 7.5v6m-3-3h6" />
+    </Icon>
+  ),
+  zoomOut: (
+    <Icon>
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="m15.5 15.5 5 5M7.5 10.5h6" />
+    </Icon>
+  ),
+  zoomReset: (
+    <Icon>
+      <path d="M4 9V4h5m6 0h5v5m0 6v5h-5m-6 0H4v-5" />
+    </Icon>
+  ),
+  minimap: (
+    <Icon>
+      <rect x="2" y="5" width="20" height="14" rx="1" />
+      <rect x="12" y="12" width="7" height="4.5" />
+    </Icon>
+  ),
+} satisfies Record<string, ReactNode>;

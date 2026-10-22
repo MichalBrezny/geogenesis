@@ -10,12 +10,17 @@ import {
 import {
   drawArrows,
   globeProjection,
-  mapProjection,
   type ArrowStyle,
   type Projection,
   type VectorField,
 } from '../render/arrows';
-import { createFlowLayer, stepFlow, type FlowLayer, type FlowStyle } from '../render/particles';
+import {
+  createFlowLayer,
+  setFlowRegion,
+  stepFlow,
+  type FlowLayer,
+  type FlowStyle,
+} from '../render/particles';
 import { drawIsobars } from '../render/isobars';
 import {
   layerPixels,
@@ -23,8 +28,23 @@ import {
   type MapLayer,
   type TemperatureMonth,
 } from '../render/mapRenderer';
+import {
+  clampViewport,
+  drawViewport,
+  FULL_VIEW,
+  MAX_ZOOM,
+  panViewport,
+  viewBounds,
+  viewportPoint,
+  viewportProjection,
+  zoomViewport,
+  type MapViewport,
+} from '../render/viewport';
 import type { Frame } from '../worker/protocol';
 import { CellInspector, type HoveredCell } from './CellInspector';
+import { MAP_ICONS } from './icons';
+import { Minimap } from './Minimap';
+import { useShortcuts } from './shortcuts';
 import type { CellLife } from '../sim/models/biosphere/diversity';
 
 /** Ways to look at the planet. */
@@ -35,6 +55,11 @@ export type View = (typeof VIEWS)[number];
 const GLOBE_SIZE = 512;
 /** Pointer travel, px, below which a press on the globe counts as a click, not a drag. */
 const CLICK_SLOP = 4;
+/** Zoom factor of the zoom buttons and keys. */
+const ZOOM_STEP = Math.SQRT2;
+/** Zoom per pixel of mouse-wheel travel (exponential, so zooming in and out cancel). */
+const WHEEL_ZOOM = 0.002;
+const MINIMAP_KEY = 'geogenesis.minimap';
 
 /** Vector fields that can be drawn over any layer: animated particles, or arrows for reduced motion. */
 export const OVERLAYS = ['wind', 'currents', 'isobars'] as const;
@@ -94,6 +119,23 @@ function isFlowOverlay(overlay: Overlay): overlay is FlowOverlay {
 const prefersReducedMotion = () =>
   typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
+/** Projection of the globe or the zoomed map onto `w` × `h` overlay pixels. */
+function projection(
+  w: number,
+  h: number,
+  view: View,
+  globeView: GlobeView,
+  mapView: MapViewport,
+): Projection {
+  return view === 'globe' ? globeProjection(w, globeView) : viewportProjection(w, h, mapView);
+}
+
+/** Where particles live and how fast they move: in view and at an even screen speed. */
+function flowRegion(view: View, mapView: MapViewport) {
+  if (view === 'globe' || mapView.zoom === 1) return { region: null, speed: 1 };
+  return { region: viewBounds(mapView), speed: 1 / mapView.zoom };
+}
+
 interface Props {
   frame: Frame;
   layer: MapLayer;
@@ -142,7 +184,23 @@ export function PlanetView({
     if (hoveredCell !== undefined) onInspect?.(hoveredCell);
   }, [hoveredCell, frame, onInspect]);
   const [globeView, setGlobeView] = useState<GlobeView>({ longitude: 180, latitude: 20 });
+  const [mapView, setMapView] = useState<MapViewport>(FULL_VIEW);
+  const [minimapOn, setMinimapOn] = useState(() => localStorage.getItem(MINIMAP_KEY) !== 'false');
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  // The map at 1 pixel per cell; the visible canvas shows the part in view.
+  const mapSource = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem(MINIMAP_KEY, String(minimapOn));
+  }, [minimapOn]);
+
+  const zoomBy = (factor: number) => setMapView((current) => zoomViewport(current, factor));
+  useShortcuts({
+    '+': () => zoomBy(ZOOM_STEP),
+    '=': () => zoomBy(ZOOM_STEP),
+    '-': () => zoomBy(1 / ZOOM_STEP),
+    m: () => setMinimapOn((on) => !on),
+  });
 
   const { width, height } = frame.grid;
   const globeLookup = useMemo(
@@ -154,7 +212,8 @@ export function PlanetView({
     const canvas = canvasRef.current;
     if (!canvas) return;
     if (!globeLookup) {
-      renderLayer(canvas, frame, layer, temperatureMonth);
+      const source = (mapSource.current ??= document.createElement('canvas'));
+      renderLayer(source, frame, layer, temperatureMonth);
       return;
     }
     canvas.width = GLOBE_SIZE;
@@ -162,6 +221,31 @@ export function PlanetView({
     const pixels = projectGlobe(layerPixels(frame, layer, temperatureMonth), globeLookup);
     canvas.getContext('2d')?.putImageData(new ImageData(pixels, GLOBE_SIZE, GLOBE_SIZE), 0, 0);
   }, [frame, layer, globeLookup, temperatureMonth]);
+
+  // The flat map is drawn at screen resolution, zoomed and panned.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const source = mapSource.current;
+    if (view !== 'map' || !canvas || !source) return;
+    drawViewport(canvas, source, mapView, overlaySize.width, overlaySize.height);
+  }, [frame, layer, temperatureMonth, view, mapView, overlaySize]);
+
+  // Mouse-wheel zoom around the pointer; a native listener, so it can keep the page from scrolling.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || view !== 'map') return;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const fx = (event.clientX - rect.left) / rect.width;
+      const fy = (event.clientY - rect.top) / rect.height;
+      // Lines (Firefox) to pixels.
+      const delta = event.deltaY * (event.deltaMode === 1 ? 16 : 1);
+      setMapView((current) => zoomViewport(current, Math.exp(-delta * WHEEL_ZOOM), fx, fy));
+    };
+    canvas.addEventListener('wheel', onWheel, { passive: false });
+    return () => canvas.removeEventListener('wheel', onWheel);
+  }, [view]);
 
   // The arrows are drawn at screen resolution, so they track the canvas's size on the page.
   useEffect(() => {
@@ -186,10 +270,10 @@ export function PlanetView({
       canvas.getContext('2d')?.scale(ratio, ratio);
     }
     const { width: w, height: h } = overlaySize;
-    flow.current.project = view === 'globe' ? globeProjection(w, globeView) : mapProjection(w, h);
+    flow.current.project = projection(w, h, view, globeView, mapView);
     flow.current.width = w;
     flow.current.height = h;
-  }, [overlaySize, view, globeView]);
+  }, [overlaySize, view, globeView, mapView]);
 
   // Keep a particle layer per shown overlay, flowing along the newest fields.
   useEffect(() => {
@@ -201,9 +285,22 @@ export function PlanetView({
       const field = overlayField(frame, kind);
       const layer = layers.get(kind);
       if (layer) layer.field = field;
-      else if (area > 0) layers.set(kind, createFlowLayer(field, FLOW_STYLES[kind], area));
+      else if (area > 0) {
+        const created = createFlowLayer(field, FLOW_STYLES[kind], area);
+        const { region, speed } = flowRegion(view, mapView);
+        if (region) setFlowRegion(created, region, speed);
+        layers.set(kind, created);
+      }
     }
-  }, [frame, overlays, overlaySize, view]);
+  }, [frame, overlays, overlaySize, view, mapView]);
+
+  // Zooming or panning moves the particles into the new view and wipes the old trails.
+  useEffect(() => {
+    const { region, speed } = flowRegion(view, mapView);
+    for (const layer of flow.current.layers.values()) setFlowRegion(layer, region, speed);
+    const { width: w, height: h } = flow.current;
+    overlayRef.current?.getContext('2d')?.clearRect(0, 0, w, h);
+  }, [view, mapView]);
 
   // Isobars use their own static canvas, so particle-trail fading cannot erase them.
   useEffect(() => {
@@ -213,7 +310,7 @@ export function PlanetView({
     const { width: w, height: h } = overlaySize;
     ctx.clearRect(0, 0, w, h);
     if (!overlays.includes('isobars') || w === 0 || h === 0) return;
-    const project = view === 'globe' ? globeProjection(w, globeView) : mapProjection(w, h);
+    const project = projection(w, h, view, globeView, mapView);
     drawIsobars(
       ctx,
       {
@@ -227,7 +324,7 @@ export function PlanetView({
       project,
       { width: w, height: h },
     );
-  }, [frame, overlays, view, globeView, overlaySize]);
+  }, [frame, overlays, view, globeView, mapView, overlaySize]);
 
   // Animate the particles; with reduced motion, draw still arrows instead.
   useEffect(() => {
@@ -253,9 +350,9 @@ export function PlanetView({
     ctx.clearRect(0, 0, w, h);
     const shown = overlays.filter(isFlowOverlay);
     if (shown.length === 0 || w === 0) return;
-    const project = view === 'globe' ? globeProjection(w, globeView) : mapProjection(w, h);
-    // Degrees between arrows: the map spans 360° across, the globe's disc 180°.
-    const spacing = ((view === 'globe' ? 180 : 360) * ARROW_SPACING) / w;
+    const project = projection(w, h, view, globeView, mapView);
+    // Degrees between arrows: the map spans 360° across (divided by the zoom), the globe's disc 180°.
+    const spacing = ((view === 'globe' ? 180 : 360 / mapView.zoom) * ARROW_SPACING) / w;
     const scale = Math.max(0.6, view === 'globe' ? w / 640 : w / 1100);
     for (const kind of shown) {
       const style = ARROW_STYLES[kind];
@@ -266,7 +363,7 @@ export function PlanetView({
         maxLength: style.maxLength * scale,
       });
     }
-  }, [frame, overlays, view, globeView, overlaySize, reducedMotion]);
+  }, [frame, overlays, view, globeView, mapView, overlaySize, reducedMotion]);
 
   /** Grid cell under the pointer on the map or the globe, or −1 off the planet. */
   const cellAt = (event: React.MouseEvent<HTMLCanvasElement>): number => {
@@ -274,20 +371,31 @@ export function PlanetView({
     const fx = (event.clientX - rect.left) / rect.width;
     const fy = (event.clientY - rect.top) / rect.height;
     if (view === 'globe') return globeCell(2 * fx - 1, 1 - 2 * fy, globeView, width, height);
-    const x = Math.min(width - 1, Math.floor(fx * width));
-    const y = Math.min(height - 1, Math.floor(fy * height));
+    const { latitude, longitude } = viewportPoint(mapView, fx, fy);
+    const x = Math.min(width - 1, Math.floor((longitude / 360) * width));
+    const y = Math.min(height - 1, Math.max(0, Math.floor(((90 - latitude) / 180) * height)));
     return y * width + x;
   };
 
-  /** Shows the inspector for the cell under the pointer; on the globe, a pressed button turns it. */
+  const zoomed = view === 'map' && mapView.zoom > 1;
+
+  /**
+   * Shows the inspector for the cell under the pointer; a pressed button turns the
+   * globe or moves a zoomed map.
+   */
   const onPointerMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
     const start = drag.current;
-    if (view === 'globe' && start && event.buttons & 1) {
+    if ((view === 'globe' || zoomed) && start && event.buttons & 1) {
       const dx = event.clientX - start.x;
       const dy = event.clientY - start.y;
       if (start.moved || Math.hypot(dx, dy) > CLICK_SLOP) {
-        const radius = event.currentTarget.getBoundingClientRect().width / 2;
-        setGlobeView((current) => dragGlobe(current, dx / radius, dy / radius));
+        const rect = event.currentTarget.getBoundingClientRect();
+        if (view === 'globe') {
+          const radius = rect.width / 2;
+          setGlobeView((current) => dragGlobe(current, dx / radius, dy / radius));
+        } else {
+          setMapView((current) => panViewport(current, dx / rect.width, dy / rect.height));
+        }
         drag.current = { x: event.clientX, y: event.clientY, moved: true };
         setHovered(null);
         return;
@@ -323,7 +431,7 @@ export function PlanetView({
       <div className={`planet-canvas ${view}-wrap`}>
         <canvas
           ref={canvasRef}
-          className={[view, toolActive ? 'tool-active' : ''].join(' ')}
+          className={[view, zoomed ? 'zoomed' : '', toolActive ? 'tool-active' : ''].join(' ')}
           onMouseDown={(event) => {
             drag.current = { x: event.clientX, y: event.clientY, moved: false };
           }}
@@ -337,6 +445,60 @@ export function PlanetView({
         />
         <canvas ref={overlayRef} className="overlay-arrows" aria-hidden="true" />
         <canvas ref={isobarRef} className="overlay-isobars" aria-hidden="true" />
+        <div className="map-controls">
+          {view === 'map' && (
+            <>
+              <button
+                onClick={() => zoomBy(ZOOM_STEP)}
+                disabled={mapView.zoom >= MAX_ZOOM}
+                title={t('map.zoomIn')}
+                aria-label={t('map.zoomIn')}
+              >
+                {MAP_ICONS.zoomIn}
+              </button>
+              <button
+                onClick={() => zoomBy(1 / ZOOM_STEP)}
+                disabled={!zoomed}
+                title={t('map.zoomOut')}
+                aria-label={t('map.zoomOut')}
+              >
+                {MAP_ICONS.zoomOut}
+              </button>
+              <button
+                onClick={() => setMapView(FULL_VIEW)}
+                disabled={!zoomed}
+                title={t('map.zoomReset')}
+                aria-label={t('map.zoomReset')}
+              >
+                {MAP_ICONS.zoomReset}
+              </button>
+            </>
+          )}
+          <button
+            className={minimapOn ? 'selected' : ''}
+            onClick={() => setMinimapOn((on) => !on)}
+            aria-pressed={minimapOn}
+            title={t('map.minimap')}
+            aria-label={t('map.minimap')}
+          >
+            {MAP_ICONS.minimap}
+          </button>
+        </div>
+        {minimapOn && (view === 'globe' || zoomed) && (
+          <Minimap
+            frame={frame}
+            layer={layer}
+            temperatureMonth={temperatureMonth}
+            view={view}
+            mapView={mapView}
+            globeView={globeView}
+            onCentre={(latitude, longitude) =>
+              view === 'globe'
+                ? setGlobeView({ latitude, longitude })
+                : setMapView((current) => clampViewport({ ...current, latitude, longitude }))
+            }
+          />
+        )}
       </div>
       {hovered && <CellInspector frame={frame} cell={hovered} life={cellLife} />}
     </>
