@@ -131,11 +131,15 @@ export const SENTIENCE_POTENTIAL: Partial<Record<LifeClassKey, number>> = {
   avians: 0.3,
   cetaceans: 0.2,
   dinosaurs: 0.1,
-  mollusks: 0.03,
-  reptiles: 0.02,
-  trichordates: 0.01,
+  // Marine intelligence remains possible but rare: sea animals are established
+  // hundreds of Myr before land vertebrates, so their weights must stay small.
+  mollusks: 0.012,
+  // Amniotes are the first broadly established land vertebrates, so they keep the
+  // land route competitive while dinosaurs, birds and mammals are still radiating.
+  reptiles: 0.3,
+  trichordates: 0.003,
   insects: 0.01,
   amphibians: 0.01,
-  fish: 0.005,
-  arthropods: 0.005,
+  fish: 0.003,
+  arthropods: 0.004,
 };

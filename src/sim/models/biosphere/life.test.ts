@@ -121,11 +121,55 @@ describe('life', () => {
     expect(twentySteps).toBeCloseTo(oneStep, 12);
   });
 
+  it('keeps seeded abiogenesis timing stable across geological step lengths', () => {
+    const originAt = (dt: number) => {
+      const planet = waterWorld();
+      const life = createLife({ mutationRate: 0 });
+      const stepRng = createRng(29);
+      for (
+        let elapsed = 0;
+        elapsed < 5e9 && planet.biota.appeared[lifeClassIndex('prokaryotes')] === null;
+        elapsed += dt
+      ) {
+        life.runOneStep(planet, dt, stepRng);
+        planet.globals.year += dt;
+      }
+      return planet.biota.appeared[lifeClassIndex('prokaryotes')]!;
+    };
+
+    expect(originAt(2e6)).toBeCloseTo(originAt(10e6), -5);
+  });
+
   it('gives eukaryotes and the first complex life slow, data-driven transitions', () => {
     const eukaryotes = LIFE_CLASSES[lifeClassIndex('eukaryotes')]!;
     expect(eukaryotes.evolutionTime).toBe(30);
+    expect(eukaryotes.maxEvolutionRateFactor).toBe(3);
     expect(evolutionTimeYears(eukaryotes)).toBe(1.2e9);
-    expect(evolutionTimeYears(LIFE_CLASSES[lifeClassIndex('plants')]!)).toBe(1.44e9);
+    expect(evolutionTimeYears(LIFE_CLASSES[lifeClassIndex('plants')]!)).toBe(0.7e9);
+  });
+
+  it('keeps a seeded origination time stable across geological step lengths', () => {
+    const appearedAt = (dt: number) => {
+      const planet = waterWorld();
+      seedPrimordialLife(planet);
+      planet.globals.atmosphere.o2 = 0.21;
+      const life = createLife({
+        mutationRate: 10,
+        evolutionTimeFactors: { eukaryotes: 30 },
+      });
+      const stepRng = createRng(17);
+      for (
+        let elapsed = 0;
+        elapsed < 500e6 && planet.biota.appeared[lifeClassIndex('eukaryotes')] === null;
+        elapsed += dt
+      ) {
+        life.runOneStep(planet, dt, stepRng);
+        planet.globals.year += dt;
+      }
+      return planet.biota.appeared[lifeClassIndex('eukaryotes')]!;
+    };
+
+    expect(appearedAt(2e6)).toBeCloseTo(appearedAt(10e6), -5);
   });
 });
 

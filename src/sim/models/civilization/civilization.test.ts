@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { createPlanet, type PlanetState } from '../../core/planet';
 import { createRng } from '../../core/rng';
-import { TECH_AGES } from '../../data/civilization';
+import { SENTIENCE_POTENTIAL, TECH_AGES } from '../../data/civilization';
 import { LIFE_CLASS_COUNT, lifeClassIndex } from '../../data/lifeClasses';
 import { Biome } from '../../data/biomes';
 import { eraStepYears } from '../../eras';
-import { createCivilization } from './civilization';
+import { createCivilization, occupiedHabitatShare, SENTIENCE_TIME } from './civilization';
 
 const rng = createRng(7);
 
@@ -29,6 +29,15 @@ function mammalWorld(): PlanetState {
 }
 
 describe('civilization', () => {
+  it('keeps marine sentience possible but secondary to land vertebrates', () => {
+    const potential = (['arthropods', 'mollusks', 'trichordates', 'fish'] as const).reduce(
+      (sum, key) => sum + (SENTIENCE_POTENTIAL[key] ?? 0),
+      0,
+    );
+    expect(potential).toBeCloseTo(0.022);
+    expect(SENTIENCE_TIME).toBe(150e6);
+  });
+
   it('lets an established mammal population become sentient', () => {
     const planet = mammalWorld();
     const civilization = createCivilization({ sentienceTime: 1e6 });
@@ -38,6 +47,33 @@ describe('civilization', () => {
     expect(planet.civilization.species).toBe(lifeClassIndex('mammals'));
     expect(planet.events.at(-1)).toMatchObject({ key: 'sentience', subject: 'mammals' });
     expect(eraStepYears(planet)).toBe(TECH_AGES[0]!.yearsPerStep);
+  });
+
+  it('judges establishment by occupied range rather than guild-reduced density', () => {
+    const planet = mammalWorld();
+    const mammals = lifeClassIndex('mammals');
+    const n = planet.grid.cellCount;
+    planet.biota.populations.fill(0.01, mammals * n, (mammals + 1) * n);
+    planet.biota.cover[mammals] = 0.01;
+
+    expect(occupiedHabitatShare(planet, mammals)).toBe(1);
+    createCivilization({ sentienceTime: 1 }).runOneStep(planet, 1e6, createRng(23));
+    expect(planet.civilization.species).toBe(mammals);
+  });
+
+  it('keeps a seeded sentience time stable across step lengths', () => {
+    const sentientAt = (dt: number) => {
+      const planet = mammalWorld();
+      const civilization = createCivilization();
+      const stepRng = createRng(31);
+      for (let elapsed = 0; elapsed < 2e9 && planet.civilization.species === null; elapsed += dt) {
+        civilization.runOneStep(planet, dt, stepRng);
+        planet.globals.year += dt;
+      }
+      return planet.civilization.sentientSince!;
+    };
+
+    expect(sentientAt(2e6)).toBeCloseTo(sentientAt(10e6), -5);
   });
 
   it('grows, advances through the ages, burns fossil fuels and finally leaves', () => {

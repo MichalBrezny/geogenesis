@@ -70,6 +70,8 @@ export interface LifeClass {
   difficulty: number;
   /** Multiplier on the base waiting time for this evolutionary transition. */
   evolutionTime?: number;
+  /** Largest scenario acceleration of this unusually slow transition. */
+  maxEvolutionRateFactor?: number;
   /** Map tier: how advanced the class counts for the "most advanced life" layer. */
   tier: LifeTier;
 }
@@ -107,6 +109,8 @@ export const LIFE_CLASSES: readonly LifeClass[] = [
     // Endosymbiosis was an exceptional transition: 30 × 40 Myr = 1.2 Gyr
     // at full habitat overlap, before oxygen and geographic limits are applied.
     evolutionTime: 30,
+    // Quick starts shorten, but do not erase, the exceptional wait.
+    maxEvolutionRateFactor: 3,
     tier: 'microbes',
   },
   {
@@ -116,10 +120,11 @@ export const LIFE_CLASSES: readonly LifeClass[] = [
     optimumTemperature: 20,
     temperatureTolerance: 28,
     minOxygen: 0.01,
-    difficulty: 0.6,
-    // Land plants and animals waited for a well-oxygenated, eukaryote-rich ocean: on Earth
-    // complex life came ~1.2 Gyr after the first eukaryotes.
-    evolutionTime: 60,
+    difficulty: 0.35,
+    // Multicellular plants waited for a well-oxygenated, eukaryote-rich ocean (on Earth
+    // ~1 Gyr after the first eukaryotes); 0.7 Gyr leaves Quick starts time for land life.
+    evolutionTime: 50,
+    maxEvolutionRateFactor: 8,
     tier: 'plants',
   },
   {
@@ -130,7 +135,8 @@ export const LIFE_CLASSES: readonly LifeClass[] = [
     temperatureTolerance: 22,
     minOxygen: 0.03,
     difficulty: 1.5,
-    evolutionTime: 40,
+    evolutionTime: 20,
+    maxEvolutionRateFactor: 4,
     minOceanOxygen: 0.15,
     nutrientLimited: true,
     // Corals and other reef builders.
@@ -190,7 +196,9 @@ export const LIFE_CLASSES: readonly LifeClass[] = [
     optimumTemperature: 16,
     temperatureTolerance: 22,
     minOxygen: 0.08,
-    difficulty: 1.2,
+    // Vertebrate fish diversify promptly during the Cambrian radiation; making
+    // this an ordinary step gives the land branch time to establish on Quick starts.
+    difficulty: 0.6,
     minOceanOxygen: 0.3,
     nutrientLimited: true,
     guild: 'seaAnimals',
@@ -213,10 +221,12 @@ export const LIFE_CLASSES: readonly LifeClass[] = [
     habitat: 'land',
     ancestor: 'fish',
     optimumTemperature: 20,
-    temperatureTolerance: 16,
+    temperatureTolerance: 22,
     minOxygen: 0.12,
     needsPlants: true,
-    difficulty: 1.2,
+    // Once oxygenated coasts support fish and plants, the move onto land should
+    // not be another exceptional transition.
+    difficulty: 0.6,
     guild: 'landVertebrates',
     tier: 'landVertebrates',
   },
@@ -225,10 +235,12 @@ export const LIFE_CLASSES: readonly LifeClass[] = [
     habitat: 'land',
     ancestor: 'amphibians',
     optimumTemperature: 24,
-    temperatureTolerance: 18,
+    temperatureTolerance: 25,
     minOxygen: 0.13,
     needsPlants: true,
-    difficulty: 0.9,
+    // The amniotic egg opens dry inland habitat quickly and keeps a temporary
+    // amphibian decline from stalling the whole land-vertebrate branch.
+    difficulty: 0.15,
     guild: 'landVertebrates',
     tier: 'landVertebrates',
   },
@@ -237,10 +249,10 @@ export const LIFE_CLASSES: readonly LifeClass[] = [
     habitat: 'land',
     ancestor: 'reptiles',
     optimumTemperature: 24,
-    temperatureTolerance: 16,
+    temperatureTolerance: 24,
     minOxygen: 0.15,
     needsPlants: true,
-    difficulty: 0.9,
+    difficulty: 0.25,
     guild: 'landVertebrates',
     tier: 'landVertebrates',
   },
@@ -252,7 +264,7 @@ export const LIFE_CLASSES: readonly LifeClass[] = [
     temperatureTolerance: 25,
     minOxygen: 0.15,
     needsPlants: true,
-    difficulty: 1,
+    difficulty: 0.3,
     guild: 'landVertebrates',
     tier: 'landVertebrates',
   },
@@ -264,7 +276,7 @@ export const LIFE_CLASSES: readonly LifeClass[] = [
     temperatureTolerance: 25,
     minOxygen: 0.15,
     needsPlants: true,
-    difficulty: 1.1,
+    difficulty: 0.2,
     guild: 'landVertebrates',
     tier: 'landVertebrates',
   },
