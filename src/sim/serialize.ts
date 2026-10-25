@@ -211,6 +211,7 @@ function hydrateAddedState(planet: PlanetState): void {
   planet.controls.reproduction ??= DEFAULT_CONTROLS.reproduction;
   planet.controls.thermalTolerance ??= DEFAULT_CONTROLS.thermalTolerance;
   planet.goal ??= null;
+  planet.devices ??= [];
   if (missingPlanetParams) planet.planetParams.initialWaterGel = planet.globals.initialWater;
   const samples = planet.history.year?.length ?? 0;
   for (const name of HISTORY_SERIES) planet.history[name] ??= Array(samples).fill(0);

@@ -8,6 +8,7 @@ import { applyTool } from '../sim/tools/tools';
 import type { World } from '../sim/world';
 import type { Frame, WorkerRequest, WorkerResponse } from './protocol';
 import { clampGoalControls, GOALS } from '../sim/goals/goals';
+import { biosignature } from '../sim/models/biosphere/biosignature';
 
 /** How many recent events each frame carries. */
 const EVENTS_IN_FRAME = 30;
@@ -178,6 +179,8 @@ export class SimHost {
       energy: planet.globals.energy,
       unlimitedEnergy: planet.globals.unlimitedEnergy,
       controls: { ...planet.controls },
+      devices: planet.devices.map((device) => ({ ...device })),
+      biosignature: biosignature(planet.globals.atmosphere),
       goal: planet.goal
         ? {
             ...planet.goal,

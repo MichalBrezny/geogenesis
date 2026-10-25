@@ -5,6 +5,7 @@ import { LIFE_CLASSES, lifeClassIndex } from '../data/lifeClasses';
 import { createGoal, type GoalId } from '../goals/goals';
 import { classSuitability, createLife } from '../models/biosphere/life';
 import {
+  createPlanetPreset,
   createRandomWorld,
   randomWorldFromPlanet,
   type RandomWorldSettings,
@@ -14,6 +15,8 @@ import {
 const BRIGHTENING_START_YEAR = 5.6e9;
 const BRIGHTENING_STEP_YEARS = 500e3;
 const SEEDED_POPULATION = 0.6;
+/** Ω a terraforming project starts with: a first handful of devices. */
+const TERRAFORM_ENERGY = 3000;
 
 /**
  * Earth-like world on a brightening Sun. At 5.6 Gyr weathering has already drawn
@@ -63,6 +66,18 @@ export function createCradle(options: PlanetOptions): World {
   const base = createRandomWorld({ ...options, start: 'quick' });
   base.planet.goal = createGoal('cradle', base.planet.globals.year);
   return randomWorldFromPlanet(base.planet, base.settings);
+}
+
+/** Present-day Mars to be made warm, wet and green with devices and ice meteors. */
+export function createTerraformMars(options: PlanetOptions): World {
+  return terraformWorld(createPlanetPreset('mars', options), 'terraformMars');
+}
+
+function terraformWorld(world: World, id: GoalId): World {
+  const { planet } = world;
+  planet.globals.energy = TERRAFORM_ENERGY;
+  planet.goal = createGoal(id, planet.globals.year);
+  return randomWorldFromPlanet(planet, world.settings);
 }
 
 export function restoreGoalScenario(

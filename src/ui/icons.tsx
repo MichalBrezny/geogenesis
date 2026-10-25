@@ -28,6 +28,7 @@ function Icon({ children }: { children: ReactNode }) {
 }
 
 const MOUNTAIN = 'M2 20 8 10l4 6 3-4 7 8Z';
+const FACTORY = 'M3 21V12l5 3v-3l5 3V9h4v12Z';
 const CLOUD = 'M7 18h10a4 4 0 0 0 .6-7.95A5.5 5.5 0 0 0 7.1 9.5 4.25 4.25 0 0 0 7 18Z';
 
 export const TOOL_ICONS: Record<ToolId, ReactNode> = {
@@ -78,6 +79,41 @@ export const TOOL_ICONS: Record<ToolId, ReactNode> = {
     <Icon>
       <path d={CLOUD} />
       <path d="M9.5 13.5h5" />
+    </Icon>
+  ),
+  iceMeteor: (
+    <Icon>
+      <path d="M8 12v8m-3.5-6 7 4m-7 0 7-4" />
+      <path d="M12 9 20 2m-5 9 6-5" />
+    </Icon>
+  ),
+  co2Generator: (
+    <Icon>
+      <path d={FACTORY} />
+      <path d="M18 7c0-2 2-2 2-4" />
+    </Icon>
+  ),
+  n2Generator: (
+    <Icon>
+      <path d={FACTORY} />
+      <path d="M16 6c1-1.5 2 1.5 3 0s2 1.5 3 0" />
+    </Icon>
+  ),
+  o2Generator: (
+    <Icon>
+      <path d={FACTORY} />
+      <circle cx="19" cy="5" r="2" />
+    </Icon>
+  ),
+  co2Scrubber: (
+    <Icon>
+      <path d="M3 4h18l-7 8v6l-4 3v-9Z" />
+    </Icon>
+  ),
+  biomeFactory: (
+    <Icon>
+      <path d="M3 21a9 9 0 0 1 18 0Z" />
+      <path d="M12 21v-6m0 2c-2 0-3-1.5-3-3.5 2 0 3 1.5 3 3.5Zm0-1c2 0 3-1.5 3-3.5-2 0-3 1.5-3 3.5Z" />
     </Icon>
   ),
 };

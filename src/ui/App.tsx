@@ -164,6 +164,11 @@ const SCENARIO_VIEW: Record<
     layers: ['airTemperature', 'pressure', 'clouds', 'wind', 'terrain', 'volcanism'],
     layer: 'clouds',
   },
+  terraformMars: {
+    charts: ['meanTemperature', 'surfacePressure', 'co2', 'o2', 'water', 'iceFraction'],
+    layers: ['terrain', 'airTemperature', 'biomes', 'life', 'clouds', 'precipitation'],
+    layer: 'terrain',
+  },
   brighteningSun: {
     charts: [
       'meanTemperature',

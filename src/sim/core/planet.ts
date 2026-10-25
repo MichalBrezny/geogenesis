@@ -6,6 +6,7 @@ import { createGrid, type Grid } from './grid';
 import type { Era } from '../eras';
 import { EARTH_RADIUS } from './grid';
 import type { GoalState } from '../goals/goals';
+import type { Device } from '../tools/devices';
 
 export const EARTH_SURFACE_GRAVITY = 9.80665;
 export const EARTH_ROTATION_PERIOD_HOURS = 24;
@@ -384,6 +385,8 @@ export interface PlanetState {
   controls: ModelControls;
   /** Scenario objective and evaluator memory; sandbox worlds have no goal. */
   goal: GoalState | null;
+  /** Terraforming devices the player has built (see tools/devices.ts). */
+  devices: Device[];
   /** Year each simulation component last ran, by component name (see simulation.ts). */
   lastRunYear: Record<string, number>;
   seed: number;
@@ -517,6 +520,7 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
     events: [],
     controls: { ...DEFAULT_CONTROLS },
     goal: null,
+    devices: [],
     lastRunYear: {},
     seed,
     rngState: seed,

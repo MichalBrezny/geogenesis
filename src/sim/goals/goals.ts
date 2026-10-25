@@ -4,7 +4,7 @@ import { LIFE_CLASSES } from '../data/lifeClasses';
 import { recordEvent } from '../events';
 import { complexBiomass } from '../models/biosphere/life';
 
-export type GoalId = 'brighteningSun' | 'snowball' | 'cradle';
+export type GoalId = 'brighteningSun' | 'snowball' | 'cradle' | 'terraformMars';
 export type GoalStatus = 'active' | 'won' | 'lost';
 export type ControlKey = keyof ModelControls;
 
@@ -45,12 +45,19 @@ const SNOWBALL_TIME_LIMIT = 1e9;
 const SNOWBALL_HOLD_YEARS = 5e6;
 const CRADLE_TIME_LIMIT = 2e9;
 const COMPLEX_LIFE_EPSILON = 1e-8;
+const TERRAFORM_TIME_LIMIT: Partial<Record<GoalId, number>> = {
+  terraformMars: 500e6,
+};
+const TERRAFORM_HOLD_YEARS = 10e6;
+/** Share of the planet's area that must be open (ice-free) sea. */
+const OPEN_WATER_TARGET = 0.02;
 
 export function createGoal(id: GoalId, startYear: number): GoalState {
   const deadlineYear =
     id === 'brighteningSun'
       ? BRIGHTENING_TARGET_YEAR
-      : startYear + (id === 'snowball' ? SNOWBALL_TIME_LIMIT : CRADLE_TIME_LIMIT);
+      : startYear +
+        (TERRAFORM_TIME_LIMIT[id] ?? (id === 'snowball' ? SNOWBALL_TIME_LIMIT : CRADLE_TIME_LIMIT));
   return {
     id,
     status: 'active',
@@ -308,11 +315,150 @@ const cradle: GoalDefinition = {
   },
 };
 
+/** Area share of the planet covered by sea that is not frozen over. */
+export function openWaterFraction(state: PlanetState): number {
+  const { grid, fields, globals } = state;
+  let open = 0;
+  let total = 0;
+  for (let y = 0; y < grid.height; y++) {
+    const weight = grid.rowAreaWeight[y]!;
+    total += weight * grid.width;
+    for (let x = 0; x < grid.width; x++) {
+      const i = y * grid.width + x;
+      if (fields.elevation[i]! < globals.seaLevel && fields.iceCover[i]! < 0.5) open += weight;
+    }
+  }
+  return total > 0 ? open / total : 0;
+}
+
+function plantsGrowing(state: PlanetState): boolean {
+  return state.biota.cover[LIFE_CLASSES.findIndex((c) => c.key === 'plants')]! > 0;
+}
+
+interface TerraformTargets {
+  minPressure: number;
+  maxPressure: number;
+  minTemperature: number;
+  maxTemperature: number;
+}
+
+/** Conditions shared by the terraforming goals: air, warmth, open sea and plants. */
+function terraformConditions(
+  state: PlanetState,
+  goal: GoalState,
+  targets: TerraformTargets,
+): GoalCondition[] {
+  const { surfacePressure, meanTemperature } = state.globals;
+  const held = goal.heldSince === null ? 0 : Math.max(0, state.globals.year - goal.heldSince);
+  const water = openWaterFraction(state);
+  const pressure =
+    targets.maxPressure < Number.POSITIVE_INFINITY
+      ? {
+          key: 'goal.condition.pressureBelow',
+          value: surfacePressure,
+          target: targets.maxPressure,
+          unit: 'goal.unit.bar',
+          met: surfacePressure <= targets.maxPressure,
+        }
+      : {
+          key: 'goal.condition.pressureAbove',
+          value: surfacePressure,
+          target: targets.minPressure,
+          unit: 'goal.unit.bar',
+          met: surfacePressure >= targets.minPressure,
+        };
+  const temperature =
+    meanTemperature > targets.maxTemperature
+      ? {
+          key: 'goal.condition.temperatureBelow',
+          value: meanTemperature,
+          target: targets.maxTemperature,
+          unit: 'goal.unit.celsius',
+          met: false,
+        }
+      : {
+          key: 'goal.condition.temperatureAbove',
+          value: meanTemperature,
+          target: targets.minTemperature,
+          unit: 'goal.unit.celsius',
+          met: meanTemperature >= targets.minTemperature,
+        };
+  return [
+    pressure,
+    temperature,
+    {
+      key: 'goal.condition.openWater',
+      value: percent(water),
+      target: percent(OPEN_WATER_TARGET),
+      unit: 'goal.unit.percent',
+      met: water >= OPEN_WATER_TARGET,
+    },
+    {
+      key: 'goal.condition.plants',
+      value: plantsGrowing(state) ? 1 : 0,
+      target: 1,
+      unit: '',
+      met: plantsGrowing(state),
+    },
+    {
+      key: 'goal.condition.holdFor',
+      value: held / 1e6,
+      target: TERRAFORM_HOLD_YEARS / 1e6,
+      unit: 'goal.unit.myr',
+      met: held >= TERRAFORM_HOLD_YEARS,
+    },
+  ];
+}
+
+function terraformGoal(
+  id: GoalId,
+  targets: TerraformTargets,
+  controlLimits: GoalDefinition['controlLimits'],
+): GoalDefinition {
+  return {
+    id,
+    controlLimits,
+    evaluate(state, goal, dtYears) {
+      const year = evaluationYear(state, dtYears);
+      const habitable = terraformConditions(state, goal, targets)
+        .slice(0, 4)
+        .every((condition) => condition.met);
+      if (habitable) goal.heldSince ??= year;
+      else goal.heldSince = null;
+      const remainingMyr = Math.max(0, deadline(goal) - year) / 1e6;
+      goal.score = remainingMyr + state.globals.energy / 10;
+      if (goal.heldSince !== null && year - goal.heldSince >= TERRAFORM_HOLD_YEARS) {
+        finish(goal, 'won', year, 'terraformed');
+      } else if (year >= deadline(goal)) {
+        finish(goal, 'lost', year, 'timeExpired');
+      }
+    },
+    conditions: (state, goal) => terraformConditions(state, goal, targets),
+  };
+}
+
+const terraformMars = terraformGoal(
+  'terraformMars',
+  {
+    minPressure: 0.5,
+    maxPressure: Number.POSITIVE_INFINITY,
+    minTemperature: 5,
+    maxTemperature: 40,
+  },
+  {
+    // Orbital mirrors and super-greenhouse gases are the classic Mars levers.
+    solarFactor: [0.9, 1.3],
+    greenhouse: [0.8, 1.5],
+    surfaceAlbedo: [0.7, 1.2],
+  },
+);
+
 /** Stable registry: adding a future goal only needs data plus an evaluator. */
 export const GOALS: Readonly<Record<GoalId, GoalDefinition>> = {
   brighteningSun,
   snowball,
   cradle,
+  terraformMars,
 };
 
 /** Final pipeline component for goal scenarios. */

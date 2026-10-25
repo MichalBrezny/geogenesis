@@ -36,7 +36,9 @@ export type EventKey =
   | 'monolith'
   | 'eraReached'
   | 'goalWon'
-  | 'goalLost';
+  | 'goalLost'
+  | 'deviceDestroyed'
+  | 'iceMeteor';
 
 /** Only the most recent events are kept. */
 export const MAX_EVENTS = 100;

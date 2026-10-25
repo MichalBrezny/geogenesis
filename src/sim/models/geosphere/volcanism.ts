@@ -3,6 +3,7 @@ import { areaWeightedMean, cellAt, getTopology, NEIGHBOR_COUNT } from '../../cor
 import type { LargeIgneousProvince, PlanetState, Plate } from '../../core/planet';
 import type { Rng } from '../../core/rng';
 import { recordEvent } from '../../events';
+import { destroyDevicesNear } from '../../tools/devices';
 import { HOTSPOT_SHARE, mantleHeat, tectonicActivity } from '../atmosphere/carbon';
 import { addDustSource, DUST_SULFATE } from '../atmosphere/dust';
 import { randomUnitVector } from './plates';
@@ -129,9 +130,7 @@ export const volcanicActivityModel: SimComponent = {
       state.geosphere.volcanicBoost[i] = state.geosphere.volcanicBoost[i]! * boostDecay;
       volcanicActivity[i] =
         (plateMean > 0 ? (boundary[i]! * plateTarget) / plateMean : 0) +
-        (hotspotMean > 0
-          ? (hotspot[i]! * hotspotTarget) / hotspotMean
-          : 0) +
+        (hotspotMean > 0 ? (hotspot[i]! * hotspotTarget) / hotspotMean : 0) +
         state.geosphere.volcanicBoost[i]!;
       if (dtYears > 0 && !crustType[i] && hotspot[i]! > 0.01) {
         elevation[i] = Math.min(
@@ -173,6 +172,7 @@ export const eruptionModel: SimComponent = {
         state.globals.volcanicAerosol += count * (1.5 + rng.next() * 1.5);
         const cell = weightedActivityCell(state, rng);
         recordEvent(state, 'largeEruption', formatLocation(state, cell));
+        destroyDevicesNear(state, cell, ERUPTION_DEVICE_RADIUS);
       }
     }
 
@@ -343,6 +343,10 @@ function weightedActivityCell(state: PlanetState, rng: Rng): number {
   return activity.length - 1;
 }
 
+/** Radii (m) within which a large eruption or a flood-basalt province destroys devices. */
+const ERUPTION_DEVICE_RADIUS = 300_000;
+const LIP_DEVICE_RADIUS = 1_000_000;
+
 function createLips(state: PlanetState, dt: number, activity: number, rng: Rng): void {
   // The spatial activity already includes hotter-mantle plate and hotspot scaling;
   // cap it so pathological player boosts cannot spam LIPs.
@@ -363,6 +367,7 @@ function createLips(state: PlanetState, dt: number, activity: number, rng: Rng):
     state.geosphere.activeLips.push(lip);
     state.geosphere.lipCount++;
     recordEvent(state, 'largeIgneousProvince', `LIP-${lip.id} · ${formatLocation(state, cell)}`);
+    destroyDevicesNear(state, cell, LIP_DEVICE_RADIUS);
   }
 }
 

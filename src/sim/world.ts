@@ -45,6 +45,7 @@ import { atmosphericEscape, planetaryEvolution } from './models/planetary';
 import { updateSurfacePressure } from './models/atmosphere/atmosphere';
 import { starProperties } from './models/atmosphere/star';
 import { goalTracker } from './goals/goals';
+import { terraformDevices } from './tools/devices';
 
 export interface WorldOptions extends PlanetOptions {
   /** Preset age and biosphere for a new random planet. Defaults to `young`. */
@@ -212,6 +213,7 @@ export function randomWorldFromPlanet(
         EVOLUTION_INTERVAL,
       ),
       createCivilization(),
+      terraformDevices,
       clathrateModel,
       biogeochemistry,
       createCarbonCycle(),

@@ -12,6 +12,7 @@ import {
   createBrighteningSun,
   createCradle,
   createSnowball,
+  createTerraformMars,
   restoreGoalScenario,
 } from './goalScenarios';
 
@@ -62,6 +63,10 @@ export const SCENARIOS = {
   cradle: {
     create: createCradle,
     restore: (planet, settings) => restoreGoalScenario('cradle', planet, settings),
+  },
+  terraformMars: {
+    create: createTerraformMars,
+    restore: (planet, settings) => restoreGoalScenario('terraformMars', planet, settings),
   },
 } satisfies Record<string, Scenario>;
 

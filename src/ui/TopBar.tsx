@@ -122,6 +122,7 @@ function Vitals({ frame }: { frame: Frame }) {
       'stat.o2Hint',
       `${(frame.o2 * 100).toFixed(1)}% / ${frame.o2Pressure.toFixed(2)} bar`,
     ],
+    ['stat.life', 'stat.lifeHint', t(`biosignature.${frame.biosignature}`)],
     ['stat.ice', 'stat.iceHint', `${(frame.iceFraction * 100).toFixed(0)}%`],
     ['stat.seaLevel', 'stat.seaLevelHint', `${frame.seaLevel.toFixed(0)} m`],
     ['stat.sun', 'stat.sunHint', `${(frame.solarInput * 100).toFixed(1)}%`],

@@ -6,6 +6,8 @@ import { LIFE_CLASSES, lifeClassIndex, type LifeClassKey } from '../data/lifeCla
 import { recordEvent } from '../events';
 import { classSuitability } from '../models/biosphere/life';
 import { makeSentient } from '../models/civilization/civilization';
+import { applyImpactCrater } from '../models/geosphere/impacts';
+import { destroyDevicesNear, placeDevice, type DeviceKind } from './devices';
 
 /** Player interventions and their cost in Ω, after SimEarth's tool palette. */
 export const TOOLS = {
@@ -17,6 +19,12 @@ export const TOOLS = {
   monolith: { cost: 500 },
   addCo2: { cost: 50 },
   removeCo2: { cost: 80 },
+  iceMeteor: { cost: 200 },
+  co2Generator: { cost: 300 },
+  n2Generator: { cost: 300 },
+  o2Generator: { cost: 300 },
+  co2Scrubber: { cost: 400 },
+  biomeFactory: { cost: 500 },
 } as const;
 export type ToolId = keyof typeof TOOLS;
 export const TOOL_IDS = Object.keys(TOOLS) as ToolId[];
@@ -45,6 +53,13 @@ const CRATER_DEPTH = 2000;
 const VOLCANO_HEIGHT = 1500;
 const VOLCANO_CO2 = 30;
 const SEEDED_POPULATION = 0.5;
+/**
+ * Mass of the icy body an ice meteor drops (kg): a ~200 km comet, about 10 m of
+ * global water on Earth and three times as much on Mars.
+ */
+const ICE_METEOR_MASS = 5e18;
+const ICE_METEOR_DIAMETER_KM = 200;
+const WATER_DENSITY = 1000;
 
 /** Applies a tool to the planet, paying its cost unless energy is unlimited. */
 export function applyTool(state: PlanetState, use: ToolUse): ToolResult {
@@ -64,6 +79,7 @@ const TOOL_EFFECTS: Record<ToolId, Effect> = {
   raise: (state, centre) => shapeTerrain(state, centre, TERRAIN_STEP, 1),
   lower: (state, centre) => shapeTerrain(state, centre, -TERRAIN_STEP, 1),
   volcano(state, centre) {
+    destroyDevicesNear(state, centre, BRUSH_RADIUS * 0.5);
     shapeTerrain(state, centre, VOLCANO_HEIGHT, 0.5);
     for (const [i, falloff] of brush(state, centre, 0.5)) {
       const boost = 5 * falloff;
@@ -75,6 +91,7 @@ const TOOL_EFFECTS: Record<ToolId, Effect> = {
   },
   meteor(state, centre) {
     shapeTerrain(state, centre, -CRATER_DEPTH, 1);
+    destroyDevicesNear(state, centre, BRUSH_RADIUS * 3);
     // The blast and its fires wipe out life and settlements over a wide region.
     for (const [i, falloff] of brush(state, centre, 3)) {
       const survival = 1 - 0.95 * falloff;
@@ -148,7 +165,31 @@ const TOOL_EFFECTS: Record<ToolId, Effect> = {
     state.globals.atmosphere.co2 *= 0.5;
     return true;
   },
+  iceMeteor(state, centre) {
+    applyImpactCrater(state, centre, ICE_METEOR_DIAMETER_KM);
+    destroyDevicesNear(state, centre, BRUSH_RADIUS);
+    const area = 4 * Math.PI * state.grid.radius ** 2;
+    const water = ICE_METEOR_MASS / (WATER_DENSITY * area);
+    state.globals.water += water;
+    state.globals.waterDelivered += water;
+    recordEvent(state, 'iceMeteor');
+    return true;
+  },
+  co2Generator: (state, centre) => placeDevice(state, 'co2Generator', centre),
+  n2Generator: (state, centre) => placeDevice(state, 'n2Generator', centre),
+  o2Generator: (state, centre) => placeDevice(state, 'o2Generator', centre),
+  co2Scrubber: (state, centre) => placeDevice(state, 'co2Scrubber', centre),
+  biomeFactory: (state, centre) => placeDevice(state, 'biomeFactory', centre),
 };
+
+/** Tools that build a device rather than acting once. */
+export const DEVICE_TOOLS: readonly (ToolId & DeviceKind)[] = [
+  'co2Generator',
+  'n2Generator',
+  'o2Generator',
+  'co2Scrubber',
+  'biomeFactory',
+];
 
 /** Raises (or lowers) terrain around a cell; new land on ocean crust becomes continental. */
 function shapeTerrain(state: PlanetState, centre: number, amount: number, scale: number): boolean {

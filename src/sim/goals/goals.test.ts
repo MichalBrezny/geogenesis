@@ -92,3 +92,24 @@ describe('goal control limits', () => {
     expect(clampGoalControls(state, { solarFactor: 0.1 })).toEqual({ solarFactor: 0.1 });
   });
 });
+
+describe('terraforming goal', () => {
+  it('needs air, warmth, open sea and plants held for 10 Myr', () => {
+    const state = createPlanet({ width: 8, height: 4 });
+    state.globals.year = 4.5e9;
+    state.globals.surfacePressure = 1;
+    state.globals.meanTemperature = 12;
+    state.fields.elevation.fill(-1000);
+    state.fields.iceCover.fill(0);
+    const goal = createGoal('terraformMars', state.globals.year);
+    GOALS.terraformMars.evaluate(state, goal, 0);
+    expect(goal.heldSince).toBeNull();
+    state.biota.cover[2] = 0.1;
+    for (let i = 0; i < 3 && goal.status === 'active'; i++) {
+      GOALS.terraformMars.evaluate(state, goal, 5e6);
+      state.globals.year += 5e6;
+    }
+    expect(goal.status).toBe('won');
+    expect(goal.outcomeReason).toBe('terraformed');
+  });
+});

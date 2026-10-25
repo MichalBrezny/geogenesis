@@ -46,6 +46,7 @@ import { MAP_ICONS } from './icons';
 import { Minimap } from './Minimap';
 import { useShortcuts } from './shortcuts';
 import type { CellLife } from '../sim/models/biosphere/diversity';
+import type { DeviceKind } from '../sim/tools/devices';
 
 /** Ways to look at the planet. */
 export const VIEWS = ['map', 'globe'] as const;
@@ -118,6 +119,38 @@ function isFlowOverlay(overlay: Overlay): overlay is FlowOverlay {
 
 const prefersReducedMotion = () =>
   typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+/** Marker colour of each terraforming device. */
+const DEVICE_COLORS: Record<DeviceKind, string> = {
+  co2Generator: '#f2a541',
+  n2Generator: '#7fb4ff',
+  o2Generator: '#7be0d6',
+  co2Scrubber: '#c8c8c8',
+  biomeFactory: '#7ed957',
+};
+
+/** Draws each device as a small outlined diamond at its cell centre. */
+function drawDevices(ctx: CanvasRenderingContext2D, frame: Frame, project: Projection): void {
+  const { width, height } = frame.grid;
+  for (const device of frame.devices) {
+    const x = device.cell % width;
+    const y = Math.floor(device.cell / width);
+    const point = project(90 - ((y + 0.5) * 180) / height, ((x + 0.5) * 360) / width);
+    if (!point) continue;
+    const [px, py] = point;
+    ctx.beginPath();
+    ctx.moveTo(px, py - 6);
+    ctx.lineTo(px + 6, py);
+    ctx.lineTo(px, py + 6);
+    ctx.lineTo(px - 6, py);
+    ctx.closePath();
+    ctx.fillStyle = DEVICE_COLORS[device.kind];
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 1.5;
+    ctx.fill();
+    ctx.stroke();
+  }
+}
 
 /** Projection of the globe or the zoomed map onto `w` × `h` overlay pixels. */
 function projection(
@@ -324,6 +357,15 @@ export function PlanetView({
       project,
       { width: w, height: h },
     );
+  }, [frame, overlays, view, globeView, mapView, overlaySize]);
+
+  // Devices share the static canvas: drawn after the isobars, in the same projection.
+  useEffect(() => {
+    const ctx = isobarRef.current?.getContext('2d');
+    if (!ctx || frame.devices.length === 0) return;
+    const { width: w, height: h } = overlaySize;
+    if (w === 0 || h === 0) return;
+    drawDevices(ctx, frame, projection(w, h, view, globeView, mapView));
   }, [frame, overlays, view, globeView, mapView, overlaySize]);
 
   // Animate the particles; with reduced motion, draw still arrows instead.

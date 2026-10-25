@@ -2,6 +2,7 @@ import type { SimComponent } from '../../core/component';
 import type { PlanetState } from '../../core/planet';
 import type { Rng } from '../../core/rng';
 import { recordEvent } from '../../events';
+import { destroyDevicesNear } from '../../tools/devices';
 import { addDustPulse, DUST_FINE, DUST_SOOT, DUST_SULFATE } from '../atmosphere/dust';
 import { samplePoisson } from './volcanism';
 
@@ -116,6 +117,9 @@ export const impactModel: SimComponent = {
   },
 };
 
+/** Smallest radius (m) within which an impact destroys devices. */
+const DEVICE_BLAST_MIN = 100_000;
+
 function sampleImpactDiameter(rng: Rng): number {
   const diameter = MIN_DIAMETER_KM * Math.pow(1 - rng.next(), -1 / SIZE_POWER);
   return Math.min(MAX_DIAMETER_KM, diameter);
@@ -134,6 +138,8 @@ function applyNaturalImpact(
   addDustPulse(state, DUST_SULFATE, sulfate, eventYear);
   addDustPulse(state, DUST_SOOT, soot, eventYear);
   applyImpactCrater(state, centre, diameterKm);
+  // The blast flattens any terraforming device within ten crater radii.
+  destroyDevicesNear(state, centre, Math.max(DEVICE_BLAST_MIN, diameterKm * 5_000));
   if (rng.next() < COMET_FRACTION) deliverWater(state, diameterKm, 1);
   if (diameterKm >= STERILISING_DIAMETER_KM) sterilise(state, centre, diameterKm, eventYear);
   if (diameterKm >= NOTABLE_DIAMETER_KM) {

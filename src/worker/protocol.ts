@@ -13,6 +13,8 @@ import type { Era } from '../sim/eras';
 import type { PlanetStart } from '../sim/world';
 import type { CellLife } from '../sim/models/biosphere/diversity';
 import type { ControlKey, GoalCondition, GoalState } from '../sim/goals/goals';
+import type { Device } from '../sim/tools/devices';
+import type { Biosignature } from '../sim/models/biosphere/biosignature';
 
 export interface FrameGoal extends GoalState {
   conditions: GoalCondition[];
@@ -78,6 +80,10 @@ export interface Frame extends MapSource {
   controls: ModelControls;
   /** Scenario goal state plus its live, presentation-ready checklist. */
   goal: FrameGoal | null;
+  /** Terraforming devices standing on the map. */
+  devices: Device[];
+  /** Whether a distant observer would see signs of life in the air. */
+  biosignature: Biosignature;
   planetParams: PlanetParameters;
   magneticField: number;
   tectonicRegime: TectonicRegime;
