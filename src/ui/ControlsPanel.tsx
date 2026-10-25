@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { t, type MessageKey } from '../i18n/i18n';
 import type { ModelControls } from '../sim/core/planet';
+import type { ControlKey } from '../sim/goals/goals';
 
 interface Slider {
   key: keyof ModelControls;
@@ -48,9 +49,12 @@ function SliderControl(props: {
   slider: Slider;
   value: number;
   defaultValue: number;
+  limit?: [number, number];
   onChange: (value: number) => void;
 }) {
-  const { key, min, max, step, unit, digits = 2 } = props.slider;
+  const { key, step, unit, digits = 2 } = props.slider;
+  const min = props.limit?.[0] ?? props.slider.min;
+  const max = props.limit?.[1] ?? props.slider.max;
   const formattedValue = props.value.toFixed(digits);
   const [draft, setDraft] = useState<string | null>(null);
   const modified = props.value !== props.defaultValue;
@@ -135,6 +139,7 @@ export function ControlsPanel(props: {
   controls: ModelControls;
   group: ControlGroupId;
   defaults: Readonly<ModelControls>;
+  controlLimits?: Partial<Record<ControlKey, [number, number]>>;
   onChange: (controls: Partial<ModelControls>) => void;
 }) {
   const sliders = CONTROL_GROUPS[props.group].map((key) =>
@@ -149,6 +154,7 @@ export function ControlsPanel(props: {
           slider={slider}
           value={props.controls[slider.key]}
           defaultValue={props.defaults[slider.key]}
+          limit={props.controlLimits?.[slider.key]}
           onChange={(value) => props.onChange({ [slider.key]: value })}
         />
       ))}

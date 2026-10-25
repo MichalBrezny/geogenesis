@@ -252,3 +252,13 @@ export const MAP_ICONS = {
     </Icon>
   ),
 } satisfies Record<string, ReactNode>;
+
+/** Scenario objective marker used by the Goal tab and outcome dialog. */
+export const GOAL_ICON = (
+  <Icon>
+    <circle cx="12" cy="12" r="9" />
+    <circle cx="12" cy="12" r="5" />
+    <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+    <path d="m14 10 6-6m-3 0h3v3" />
+  </Icon>
+);

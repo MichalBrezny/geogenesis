@@ -130,6 +130,51 @@ describe('SimHost', () => {
     host.handle({ type: 'step' });
     expect(messages).toHaveLength(count);
   });
+
+  it('clamps controls to the active goal ranges', () => {
+    const { host, messages } = createHost();
+    host.handle({
+      type: 'create',
+      scenario: 'brighteningSun',
+      seed: 1,
+      width: 32,
+      height: 16,
+      start: 'quick',
+    });
+    host.handle({
+      type: 'controls',
+      controls: { solarFactor: 0.2, cloudAlbedo: 9, driftSpeed: 2 },
+    });
+    const frame = lastFrame(messages);
+    expect(frame.controls.solarFactor).toBe(0.92);
+    expect(frame.controls.cloudAlbedo).toBe(1.3);
+    expect(frame.controls.driftSpeed).toBe(2);
+    expect(frame.goal?.conditions.length).toBeGreaterThan(0);
+  });
+
+  it('stops the run loop when a goal reaches an outcome', () => {
+    const { host, messages, queue, runQueued } = createHost();
+    host.handle({
+      type: 'create',
+      scenario: 'snowball',
+      seed: 1,
+      width: 32,
+      height: 16,
+      start: 'quick',
+    });
+    host.handle({ type: 'controls', controls: { surfaceAlbedo: 0.9 } });
+    for (let i = 0; i < 5; i++) {
+      host.handle({ type: 'tool', use: { tool: 'addCo2', x: 0, y: 0 } });
+    }
+    host.handle({ type: 'run', running: true });
+    for (let i = 0; i < 10 && lastFrame(messages).goal?.status === 'active'; i++) runQueued();
+    const outcome = lastFrame(messages);
+    expect(outcome.goal?.status).toBe('won');
+    expect(outcome.events.at(-1)?.key).toBe('goalWon');
+    expect(queue).toHaveLength(0);
+    runQueued();
+    expect(lastFrame(messages).year).toBe(outcome.year);
+  });
 });
 
 describe('SimHost cell inspection', () => {

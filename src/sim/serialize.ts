@@ -1,17 +1,9 @@
-import {
-  DEFAULT_CONTROLS,
-  EARTH_PLANET_PARAMETERS,
-  type PlanetState,
-} from './core/planet';
+import { DEFAULT_CONTROLS, EARTH_PLANET_PARAMETERS, type PlanetState } from './core/planet';
 import { HISTORY_SERIES } from './history';
 import { LIFE_CLASSES } from './data/lifeClasses';
 import type { RandomWorldSettings } from './world';
 import { surfacePressureOf } from './models/atmosphere/atmosphere';
-import {
-  atmosphericWaterGel,
-  basinWaterGel,
-  landIceWaterGel,
-} from './models/geosphere/seaLevel';
+import { atmosphericWaterGel, basinWaterGel, landIceWaterGel } from './models/geosphere/seaLevel';
 
 /**
  * Binary save format:
@@ -218,6 +210,7 @@ function hydrateAddedState(planet: PlanetState): void {
   planet.controls.advanceRate ??= DEFAULT_CONTROLS.advanceRate;
   planet.controls.reproduction ??= DEFAULT_CONTROLS.reproduction;
   planet.controls.thermalTolerance ??= DEFAULT_CONTROLS.thermalTolerance;
+  planet.goal ??= null;
   if (missingPlanetParams) planet.planetParams.initialWaterGel = planet.globals.initialWater;
   const samples = planet.history.year?.length ?? 0;
   for (const name of HISTORY_SERIES) planet.history[name] ??= Array(samples).fill(0);

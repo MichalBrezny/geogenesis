@@ -8,6 +8,12 @@ import {
   type World,
 } from '../world';
 import { createDaisyworld, daisyworldFromPlanet } from './daisyworld';
+import {
+  createBrighteningSun,
+  createCradle,
+  createSnowball,
+  restoreGoalScenario,
+} from './goalScenarios';
 
 interface Scenario {
   /** Generates a new planet. */
@@ -44,6 +50,18 @@ export const SCENARIOS = {
   venus: {
     create: (options) => createPlanetPreset('venus', options),
     restore: (planet, settings) => randomWorldFromPlanet(planet, settings),
+  },
+  brighteningSun: {
+    create: createBrighteningSun,
+    restore: (planet, settings) => restoreGoalScenario('brighteningSun', planet, settings),
+  },
+  snowball: {
+    create: createSnowball,
+    restore: (planet, settings) => restoreGoalScenario('snowball', planet, settings),
+  },
+  cradle: {
+    create: createCradle,
+    restore: (planet, settings) => restoreGoalScenario('cradle', planet, settings),
   },
 } satisfies Record<string, Scenario>;
 

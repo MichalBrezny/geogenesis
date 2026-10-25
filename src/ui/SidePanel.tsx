@@ -21,6 +21,7 @@ export function TabbedPanel({ tabs, label }: { tabs: readonly Tab[]; label: Mess
               role="tab"
               aria-selected={tab === current}
               className={tab === current ? 'selected' : undefined}
+              title={t(tab.label)}
               onClick={() => setSelected(tab.id)}
             >
               {t(tab.label)}

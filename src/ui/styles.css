@@ -435,6 +435,61 @@ button.primary:hover:not(:disabled) {
   gap: 12px;
 }
 
+.goal-panel h2 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.goal-panel > p {
+  margin: 0 0 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.goal-checklist {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.goal-checklist li {
+  display: grid;
+  grid-template-columns: 1.3rem 1fr;
+  gap: 4px;
+}
+
+.goal-checklist li.met .goal-check {
+  color: var(--series-2);
+}
+
+.goal-checklist small {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.goal-stats {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 5px 12px;
+  margin: 0;
+}
+
+.goal-stats dt {
+  color: var(--text-secondary);
+}
+
+.goal-stats dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
 .overlay {
   position: fixed;
   inset: 0;
@@ -452,6 +507,35 @@ button.primary:hover:not(:disabled) {
   border: 1px solid var(--grid);
   border-radius: 8px;
   font-size: 0.9rem;
+}
+
+.goal-outcome {
+  width: min(420px, calc(100vw - 32px));
+  padding: 24px;
+  text-align: center;
+  background: var(--surface-chart);
+  border: 1px solid var(--grid);
+  border-top: 4px solid var(--series-1);
+  border-radius: 8px;
+}
+
+.goal-outcome.lost {
+  border-top-color: var(--danger, #c75b5b);
+}
+
+.goal-outcome-icon .icon {
+  width: 42px;
+  height: 42px;
+}
+
+.goal-outcome h2 {
+  margin: 6px 0 10px;
+}
+
+.goal-outcome-score {
+  font-size: 1.1rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .help h2 {

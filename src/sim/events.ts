@@ -34,7 +34,9 @@ export type EventKey =
   | 'atmosphereLost'
   | 'methaneRelease'
   | 'monolith'
-  | 'eraReached';
+  | 'eraReached'
+  | 'goalWon'
+  | 'goalLost';
 
 /** Only the most recent events are kept. */
 export const MAX_EVENTS = 100;

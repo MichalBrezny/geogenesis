@@ -23,6 +23,7 @@ import type { PlanetStart } from '../sim/world';
 import type { PlanetParameters } from '../sim/core/planet';
 import { DEFAULT_CONTROLS } from '../sim/core/planet';
 import { PlanetPanel } from './PlanetPanel';
+import { GoalOutcome, GoalPanel } from './GoalPanel';
 
 /** How long a tool notice stays on screen, ms. */
 const NOTICE_DURATION = 3000;
@@ -163,6 +164,37 @@ const SCENARIO_VIEW: Record<
     layers: ['airTemperature', 'pressure', 'clouds', 'wind', 'terrain', 'volcanism'],
     layer: 'clouds',
   },
+  brighteningSun: {
+    charts: [
+      'meanTemperature',
+      'co2',
+      'water',
+      'biodiversity',
+      'iceFraction',
+      'seaLevel',
+      'solarInput',
+    ],
+    layers: ['life', 'terrain', 'airTemperature', 'clouds', 'biomes', 'diversity', 'civilization'],
+    layer: 'life',
+  },
+  snowball: {
+    charts: ['meanTemperature', 'co2', 'iceFraction', 'water', 'seaLevel', 'solarInput'],
+    layers: ['airTemperature', 'terrain', 'clouds', 'precipitation', 'biomes', 'life'],
+    layer: 'airTemperature',
+  },
+  cradle: {
+    charts: [
+      'livingClasses',
+      'biodiversity',
+      'o2',
+      'meanTemperature',
+      'co2',
+      'iceFraction',
+      'solarInput',
+    ],
+    layers: ['life', 'diversity', 'biomes', 'terrain', 'airTemperature', 'civilization'],
+    layer: 'life',
+  },
 };
 
 /** Keys listed in the shortcut help, with their descriptions. */
@@ -236,6 +268,9 @@ export function App() {
   const [obliquityDefault, setObliquityDefault] = useState(DEFAULT_CONTROLS.obliquity);
   const [narrowWindows, setNarrowWindows] = useState(() => window.innerWidth < 700);
   const noticeTimer = useRef<number | undefined>(undefined);
+  const lastGoalStatus = useRef<string | null>(null);
+  const [dismissedOutcome, setDismissedOutcome] = useState<string | null>(null);
+  const [newPlanetRequest, setNewPlanetRequest] = useState(0);
 
   const send = useCallback((request: WorkerRequest) => workerRef.current?.postMessage(request), []);
 
@@ -250,6 +285,7 @@ export function App() {
     ) => {
       const [width, height] = RESOLUTIONS[resolutionIndex]!;
       captureObliquityDefault.current = true;
+      lastGoalStatus.current = null;
       send({ type: 'create', scenario, seed: randomSeed(), width, height, start, planetParams });
     },
     [send],
@@ -260,6 +296,9 @@ export function App() {
     start: PlanetStart,
     planetParams?: Partial<PlanetParameters>,
   ) => {
+    send({ type: 'run', running: false });
+    setRunning(false);
+    setDismissedOutcome(null);
     createPlanet(scenario, resolutionIndex, start, planetParams);
     setLayer(SCENARIO_VIEW[scenario].layer);
     setError(null);
@@ -273,6 +312,15 @@ export function App() {
       const message = event.data;
       if (message.type === 'frame') {
         setFrame(message.frame);
+        const status = message.frame.goal?.status ?? null;
+        if (
+          status !== null &&
+          status !== 'active' &&
+          (lastGoalStatus.current === 'active' || lastGoalStatus.current === null)
+        ) {
+          setRunning(false);
+        }
+        lastGoalStatus.current = status;
         if (captureObliquityDefault.current) {
           setObliquityDefault(message.frame.controls.obliquity);
           captureObliquityDefault.current = false;
@@ -379,15 +427,21 @@ export function App() {
   });
   useShortcuts(shortcuts);
 
-  const tabs: Tab[] = frame
-    ? [
-        {
-          id: 'charts',
-          label: 'panel.charts',
-          content: <HistoryCharts history={frame.history} series={scenarioView.charts} />,
-        },
-      ]
-    : [];
+  const tabs: Tab[] = [];
+  if (frame?.goal) {
+    tabs.push({
+      id: 'goal',
+      label: 'panel.goal',
+      content: <GoalPanel goal={frame.goal} year={frame.year} />,
+    });
+  }
+  if (frame) {
+    tabs.push({
+      id: 'charts',
+      label: 'panel.charts',
+      content: <HistoryCharts history={frame.history} series={scenarioView.charts} />,
+    });
+  }
   if (frame && frame.scenario !== 'daisyworld') {
     tabs.push(
       { id: 'life', label: 'panel.life', content: <LifePanel life={frame.life} /> },
@@ -417,6 +471,7 @@ export function App() {
         onSave={() => send({ type: 'save' })}
         onLoad={(file) => void load(file)}
         onShowHelp={() => setHelpOpen(true)}
+        newPlanetRequest={newPlanetRequest}
       />
       {frame && (
         <aside className="sidebar left">
@@ -505,7 +560,11 @@ export function App() {
       </main>
       {frame && (
         <aside className="sidebar right">
-          <TabbedPanel tabs={tabs} label="panel.label" />
+          <TabbedPanel
+            key={`${frame.scenario}:${frame.goal?.startYear ?? 'sandbox'}`}
+            tabs={tabs}
+            label="panel.label"
+          />
         </aside>
       )}
       {frame &&
@@ -553,6 +612,7 @@ export function App() {
                   controls={frame.controls}
                   group={id as ControlGroupId}
                   defaults={{ ...DEFAULT_CONTROLS, obliquity: obliquityDefault }}
+                  controlLimits={frame.goal?.controlLimits}
                   onChange={(controls) => send({ type: 'controls', controls })}
                 />
               )}
@@ -560,8 +620,28 @@ export function App() {
           );
         })}
       {helpOpen && <ShortcutHelp onClose={() => setHelpOpen(false)} />}
+      {frame?.goal &&
+        frame.goal.status !== 'active' &&
+        dismissedOutcome !== outcomeKey(frame.goal) && (
+          <GoalOutcome
+            goal={frame.goal}
+            onKeepPlaying={() => {
+              setDismissedOutcome(outcomeKey(frame.goal!));
+              send({ type: 'run', running: true });
+              setRunning(true);
+            }}
+            onNewPlanet={() => {
+              setDismissedOutcome(outcomeKey(frame.goal!));
+              setNewPlanetRequest((value) => value + 1);
+            }}
+          />
+        )}
     </div>
   );
+}
+
+function outcomeKey(goal: NonNullable<Frame['goal']>): string {
+  return `${goal.id}:${goal.status}:${goal.outcomeYear ?? ''}`;
 }
 
 function ShortcutHelp({ onClose }: { onClose: () => void }) {

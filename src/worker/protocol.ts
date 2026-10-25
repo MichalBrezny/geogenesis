@@ -12,6 +12,12 @@ import type { ScenarioId } from '../sim/scenarios';
 import type { Era } from '../sim/eras';
 import type { PlanetStart } from '../sim/world';
 import type { CellLife } from '../sim/models/biosphere/diversity';
+import type { ControlKey, GoalCondition, GoalState } from '../sim/goals/goals';
+
+export interface FrameGoal extends GoalState {
+  conditions: GoalCondition[];
+  controlLimits?: Partial<Record<ControlKey, [number, number]>>;
+}
 
 /** Messages from the UI to the simulation worker. */
 export type WorkerRequest =
@@ -70,6 +76,8 @@ export interface Frame extends MapSource {
   energy: number;
   unlimitedEnergy: boolean;
   controls: ModelControls;
+  /** Scenario goal state plus its live, presentation-ready checklist. */
+  goal: FrameGoal | null;
   planetParams: PlanetParameters;
   magneticField: number;
   tectonicRegime: TectonicRegime;

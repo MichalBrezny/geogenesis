@@ -44,6 +44,7 @@ import { eraStepYears, eraTracker, planetEra, type Era } from './eras';
 import { atmosphericEscape, planetaryEvolution } from './models/planetary';
 import { updateSurfacePressure } from './models/atmosphere/atmosphere';
 import { starProperties } from './models/atmosphere/star';
+import { goalTracker } from './goals/goals';
 
 export interface WorldOptions extends PlanetOptions {
   /** Preset age and biosphere for a new random planet. Defaults to `young`. */
@@ -219,6 +220,7 @@ export function randomWorldFromPlanet(
       // One sample per million years keeps the long history readable in the charts.
       withMinInterval(recordHistory, HISTORY_INTERVAL),
       eraTracker,
+      ...(planet.goal ? [goalTracker] : []),
     ],
     [
       // Geology runs first and uses the last step's climate; the climate the last

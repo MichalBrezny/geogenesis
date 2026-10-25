@@ -7,6 +7,7 @@ import { compress, decompress, deserializeGame, serializeGame } from '../sim/ser
 import { applyTool } from '../sim/tools/tools';
 import type { World } from '../sim/world';
 import type { Frame, WorkerRequest, WorkerResponse } from './protocol';
+import { clampGoalControls, GOALS } from '../sim/goals/goals';
 
 /** How many recent events each frame carries. */
 const EVENTS_IN_FRAME = 30;
@@ -58,7 +59,10 @@ export class SimHost {
         }
         case 'controls':
           if (!this.world) break;
-          Object.assign(this.world.planet.controls, request.controls);
+          Object.assign(
+            this.world.planet.controls,
+            clampGoalControls(this.world.planet, request.controls),
+          );
           this.sendFrame();
           break;
         case 'inspect':
@@ -127,7 +131,9 @@ export class SimHost {
 
   private advance(): void {
     if (!this.world) return;
+    const wasActive = this.world.planet.goal?.status === 'active';
     this.world.simulation.step(this.world.planet, this.world.stepYears(this.world.planet));
+    if (wasActive && this.world.planet.goal?.status !== 'active') this.running = false;
     this.sendFrame();
   }
 
@@ -172,6 +178,14 @@ export class SimHost {
       energy: planet.globals.energy,
       unlimitedEnergy: planet.globals.unlimitedEnergy,
       controls: { ...planet.controls },
+      goal: planet.goal
+        ? {
+            ...planet.goal,
+            memory: { ...planet.goal.memory },
+            conditions: GOALS[planet.goal.id].conditions(planet, planet.goal),
+            controlLimits: GOALS[planet.goal.id].controlLimits,
+          }
+        : null,
       planetParams: { ...planet.planetParams },
       magneticField: planet.globals.magneticField,
       tectonicRegime: planet.globals.tectonicRegime,
