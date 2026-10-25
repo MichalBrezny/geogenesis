@@ -181,7 +181,7 @@ export function makeSentient(
   state.fields.civilization.fill(0);
   state.fields.civilization[home] = TECH_AGES[0]!.foodUse * 0.5;
   civ.population = worldPopulation(state);
-  recordEvent(state, 'sentience', LIFE_CLASSES[species]!.key, eventYear);
+  recordEvent(state, 'sentience', LIFE_CLASSES[species]!.key, eventYear, home);
 }
 
 /** Densest settlement (fraction of PEOPLE_PER_KM2) each cell can feed in the current age. */

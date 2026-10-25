@@ -180,7 +180,7 @@ export const eruptionModel: SimComponent = {
         globals.volcanicAerosol += (meanAerosol(pulse, remaining) * remaining) / dt;
         globals.volcanicAerosolEnd += decayAerosol(pulse, remaining);
         const cell = weightedActivityCell(state, rng);
-        recordEvent(state, 'largeEruption', formatLocation(state, cell));
+        recordEvent(state, 'largeEruption', formatLocation(state, cell), state.globals.year, cell);
         destroyDevicesNear(state, cell, ERUPTION_DEVICE_RADIUS);
       }
     }
@@ -383,7 +383,13 @@ function createLips(state: PlanetState, dt: number, activity: number, rng: Rng):
     };
     state.geosphere.activeLips.push(lip);
     state.geosphere.lipCount++;
-    recordEvent(state, 'largeIgneousProvince', `LIP-${lip.id} · ${formatLocation(state, cell)}`);
+    recordEvent(
+      state,
+      'largeIgneousProvince',
+      `LIP-${lip.id} · ${formatLocation(state, cell)}`,
+      startYear,
+      cell,
+    );
     destroyDevicesNear(state, cell, LIP_DEVICE_RADIUS);
   }
 }

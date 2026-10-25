@@ -37,6 +37,16 @@ describe('save files', () => {
     expect(restored.simulation.components.at(-1)?.name).toBe('goals');
   });
 
+  it('hydrates old event entries that have no location', () => {
+    const world = createRandomWorld({ seed: 13, width: 32, height: 16 });
+    world.planet.events.push({ year: 10, key: 'lifeOrigin' });
+    const loaded = deserializeGame(
+      serializeGame({ scenario: 'random', settings: world.settings, planet: world.planet }),
+    );
+    expect(loaded.planet.events).toEqual([{ year: 10, key: 'lifeOrigin' }]);
+    expect(loaded.planet.events[0]!.cell).toBeUndefined();
+  });
+
   it('resumes the simulation after loading', () => {
     const world = createRandomWorld({ start: 'microbial', seed: 4, width: 32, height: 16 });
     world.simulation.step(world.planet, 1e6);
@@ -73,6 +83,7 @@ describe('save files', () => {
     delete (planet.fields as Partial<typeof planet.fields>).iceThickness;
     delete (planet.fields as Partial<typeof planet.fields>).co2Ice;
     delete (planet.fields as Partial<typeof planet.fields>).seasonalAmplitude;
+    delete (planet.fields as Partial<typeof planet.fields>).dominantClass;
     delete (planet.fields as Partial<typeof planet.fields>).lakeDepth;
     delete (planet.fields as Partial<typeof planet.fields>).lakeType;
     delete (planet.history as Partial<typeof planet.history>).seaLevel;
@@ -112,6 +123,9 @@ describe('save files', () => {
     expect(loaded.planet.fields.iceThickness).toEqual(new Float32Array(planet.grid.cellCount));
     expect(loaded.planet.fields.co2Ice).toEqual(new Float32Array(planet.grid.cellCount));
     expect(loaded.planet.fields.seasonalAmplitude).toEqual(new Float32Array(planet.grid.cellCount));
+    expect(loaded.planet.fields.dominantClass).toEqual(
+      new Int32Array(planet.grid.cellCount).fill(-1),
+    );
     expect(loaded.planet.fields.lakeDepth).toEqual(new Float32Array(planet.grid.cellCount));
     expect(loaded.planet.fields.lakeType).toEqual(new Int32Array(planet.grid.cellCount));
     expect(loaded.planet.history.seaLevel).toEqual(loaded.planet.history.year.map(() => 0));

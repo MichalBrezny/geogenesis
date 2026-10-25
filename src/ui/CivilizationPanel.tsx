@@ -3,6 +3,7 @@ import { TECH_AGES } from '../sim/data/civilization';
 import { LIFE_CLASSES } from '../sim/data/lifeClasses';
 import type { Frame } from '../worker/protocol';
 import { formatGyr, formatYear } from './format';
+import { EventIcon } from './icons';
 
 /** Status of the sentient species: tech age, progress towards the next, population. */
 export function CivilizationPanel({ civilization }: { civilization: Frame['civilization'] }) {
@@ -44,7 +45,13 @@ function formatPopulation(billions: number): string {
 }
 
 /** The most recent notable events, newest first. */
-export function EventLog({ events }: { events: Frame['events'] }) {
+export function EventLog({
+  events,
+  onCentre,
+}: {
+  events: Frame['events'];
+  onCentre?: (cell: number) => void;
+}) {
   if (events.length === 0) return null;
   return (
     <section aria-label={t('events.title')}>
@@ -52,7 +59,26 @@ export function EventLog({ events }: { events: Frame['events'] }) {
       <ol className="event-log">
         {[...events].reverse().map((event, k) => (
           <li key={`${event.year}-${k}`}>
-            <span className="muted">{formatYear(event.year)}</span> {describe(event)}
+            {event.cell === undefined ? (
+              <span className="event-entry">
+                <EventIcon eventKey={event.key} />
+                <span>
+                  <span className="muted">{formatYear(event.year)}</span> {describe(event)}
+                </span>
+              </span>
+            ) : (
+              <button
+                type="button"
+                className="event-entry located"
+                onClick={() => onCentre?.(event.cell!)}
+                title={t('events.centreHint')}
+              >
+                <EventIcon eventKey={event.key} />
+                <span>
+                  <span className="muted">{formatYear(event.year)}</span> {describe(event)}
+                </span>
+              </button>
+            )}
           </li>
         ))}
       </ol>

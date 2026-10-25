@@ -23,6 +23,13 @@ import {
 } from '../render/particles';
 import { drawIsobars } from '../render/isobars';
 import {
+  drawDeviceIcons,
+  drawEventMarkers,
+  drawLifeAndCityIcons,
+  sampleIconCells,
+  type VisibleMapIcons,
+} from '../render/mapIcons';
+import {
   layerPixels,
   renderLayer,
   type MapLayer,
@@ -46,7 +53,6 @@ import { MAP_ICONS } from './icons';
 import { Minimap } from './Minimap';
 import { useShortcuts } from './shortcuts';
 import type { CellLife } from '../sim/models/biosphere/diversity';
-import type { DeviceKind } from '../sim/tools/devices';
 
 /** Ways to look at the planet. */
 export const VIEWS = ['map', 'globe'] as const;
@@ -63,7 +69,7 @@ const WHEEL_ZOOM = 0.002;
 const MINIMAP_KEY = 'geogenesis.minimap';
 
 /** Vector fields that can be drawn over any layer: animated particles, or arrows for reduced motion. */
-export const OVERLAYS = ['wind', 'currents', 'isobars'] as const;
+export const OVERLAYS = ['wind', 'currents', 'isobars', 'icons'] as const;
 export type Overlay = (typeof OVERLAYS)[number];
 type FlowOverlay = 'wind' | 'currents';
 
@@ -120,38 +126,6 @@ function isFlowOverlay(overlay: Overlay): overlay is FlowOverlay {
 const prefersReducedMotion = () =>
   typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-/** Marker colour of each terraforming device. */
-const DEVICE_COLORS: Record<DeviceKind, string> = {
-  co2Generator: '#f2a541',
-  n2Generator: '#7fb4ff',
-  o2Generator: '#7be0d6',
-  co2Scrubber: '#c8c8c8',
-  biomeFactory: '#7ed957',
-};
-
-/** Draws each device as a small outlined diamond at its cell centre. */
-function drawDevices(ctx: CanvasRenderingContext2D, frame: Frame, project: Projection): void {
-  const { width, height } = frame.grid;
-  for (const device of frame.devices) {
-    const x = device.cell % width;
-    const y = Math.floor(device.cell / width);
-    const point = project(90 - ((y + 0.5) * 180) / height, ((x + 0.5) * 360) / width);
-    if (!point) continue;
-    const [px, py] = point;
-    ctx.beginPath();
-    ctx.moveTo(px, py - 6);
-    ctx.lineTo(px + 6, py);
-    ctx.lineTo(px, py + 6);
-    ctx.lineTo(px - 6, py);
-    ctx.closePath();
-    ctx.fillStyle = DEVICE_COLORS[device.kind];
-    ctx.strokeStyle = '#111';
-    ctx.lineWidth = 1.5;
-    ctx.fill();
-    ctx.stroke();
-  }
-}
-
 /** Projection of the globe or the zoomed map onto `w` × `h` overlay pixels. */
 function projection(
   w: number,
@@ -184,6 +158,10 @@ interface Props {
   onInspect?: (cell: number) => void;
   /** The worker's answer for the inspected cell. */
   cellLife?: CellLife | null;
+  /** A log entry can request that both projections face this cell. */
+  centreRequest?: { cell: number; serial: number } | null;
+  /** Reports the life/city symbols actually represented by the current lattice. */
+  onVisibleIconsChange?: (icons: VisibleMapIcons) => void;
 }
 
 /** The planet as a flat map or a globe, with the cell inspector under the pointer. */
@@ -197,6 +175,8 @@ export function PlanetView({
   temperatureMonth,
   onInspect,
   cellLife,
+  centreRequest,
+  onVisibleIconsChange,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
@@ -226,6 +206,20 @@ export function PlanetView({
   useEffect(() => {
     localStorage.setItem(MINIMAP_KEY, String(minimapOn));
   }, [minimapOn]);
+
+  useEffect(() => {
+    if (!centreRequest || centreRequest.cell < 0 || centreRequest.cell >= frame.grid.cellCount)
+      return;
+    const x = centreRequest.cell % frame.grid.width;
+    const y = Math.floor(centreRequest.cell / frame.grid.width);
+    const longitude = ((x + 0.5) * 360) / frame.grid.width;
+    const latitude = 90 - ((y + 0.5) * 180) / frame.grid.height;
+    const handle = requestAnimationFrame(() => {
+      setGlobeView({ longitude, latitude });
+      setMapView((current) => clampViewport({ ...current, longitude, latitude }));
+    });
+    return () => cancelAnimationFrame(handle);
+  }, [centreRequest, frame.grid.cellCount, frame.grid.height, frame.grid.width]);
 
   const zoomBy = (factor: number) => setMapView((current) => zoomViewport(current, factor));
   useShortcuts({
@@ -335,38 +329,50 @@ export function PlanetView({
     overlayRef.current?.getContext('2d')?.clearRect(0, 0, w, h);
   }, [view, mapView]);
 
-  // Isobars use their own static canvas, so particle-trail fading cannot erase them.
+  // Isobars and symbols share one static canvas, outside the particle animation loop.
   useEffect(() => {
     const canvas = isobarRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
     const { width: w, height: h } = overlaySize;
     ctx.clearRect(0, 0, w, h);
-    if (!overlays.includes('isobars') || w === 0 || h === 0) return;
-    const project = projection(w, h, view, globeView, mapView);
-    drawIsobars(
-      ctx,
-      {
-        width: frame.grid.width,
-        height: frame.grid.height,
-        values: frame.fields.pressure,
-        elevation: frame.fields.elevation,
-        seaLevel: frame.seaLevel,
-        radiusKm: frame.planetParams.radius / 1000,
-      },
-      project,
-      { width: w, height: h },
-    );
-  }, [frame, overlays, view, globeView, mapView, overlaySize]);
-
-  // Devices share the static canvas: drawn after the isobars, in the same projection.
-  useEffect(() => {
-    const ctx = isobarRef.current?.getContext('2d');
-    if (!ctx || frame.devices.length === 0) return;
-    const { width: w, height: h } = overlaySize;
     if (w === 0 || h === 0) return;
-    drawDevices(ctx, frame, projection(w, h, view, globeView, mapView));
-  }, [frame, overlays, view, globeView, mapView, overlaySize]);
+    const project = projection(w, h, view, globeView, mapView);
+    if (overlays.includes('isobars')) {
+      drawIsobars(
+        ctx,
+        {
+          width: frame.grid.width,
+          height: frame.grid.height,
+          values: frame.fields.pressure,
+          elevation: frame.fields.elevation,
+          seaLevel: frame.seaLevel,
+          radiusKm: frame.planetParams.radius / 1000,
+        },
+        project,
+        { width: w, height: h },
+      );
+    }
+    let visible: VisibleMapIcons = { lifeClasses: [], cityAge: null };
+    if (overlays.includes('icons')) {
+      const bounds =
+        view === 'map' ? viewBounds(mapView) : { west: 0, north: 90, lonSpan: 360, latSpan: 180 };
+      const samples = sampleIconCells({
+        gridWidth: frame.grid.width,
+        gridHeight: frame.grid.height,
+        screenWidth: w,
+        screenHeight: h,
+        spacing: 32,
+        bounds,
+        project,
+        projectedLonSpan: view === 'globe' ? 180 : bounds.lonSpan,
+      });
+      visible = drawLifeAndCityIcons(ctx, frame, frame.civilization.age, samples);
+    }
+    onVisibleIconsChange?.(visible);
+    drawDeviceIcons(ctx, frame.devices, frame.grid.width, frame.grid.height, project);
+    drawEventMarkers(ctx, frame.events, frame.grid.width, frame.grid.height, project);
+  }, [frame, overlays, view, globeView, mapView, overlaySize, onVisibleIconsChange]);
 
   // Animate the particles; with reduced motion, draw still arrows instead.
   useEffect(() => {

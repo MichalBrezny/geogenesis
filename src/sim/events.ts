@@ -9,6 +9,8 @@ export interface PlanetEvent {
   year: number;
   key: EventKey;
   subject?: string;
+  /** Grid cell where the event happened; absent for global events and old saves. */
+  cell?: number;
 }
 
 export type EventKey =
@@ -48,7 +50,8 @@ export function recordEvent(
   key: EventKey,
   subject?: string,
   year = state.globals.year,
+  cell?: number,
 ): void {
-  state.events.push({ year, key, subject });
+  state.events.push({ year, key, subject, ...(cell === undefined ? {} : { cell }) });
   if (state.events.length > MAX_EVENTS) state.events.splice(0, state.events.length - MAX_EVENTS);
 }

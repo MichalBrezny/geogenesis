@@ -101,7 +101,7 @@ const TOOL_EFFECTS: Record<ToolId, Effect> = {
       }
       state.fields.civilization[i] = state.fields.civilization[i]! * survival;
     }
-    recordEvent(state, 'meteor');
+    recordEvent(state, 'meteor', undefined, state.globals.year, centre);
     return true;
   },
   seedLife(state, centre, use) {
@@ -124,7 +124,7 @@ const TOOL_EFFECTS: Record<ToolId, Effect> = {
     }
     if (placed && firstLife) {
       state.biota.appeared[c] = state.globals.year;
-      recordEvent(state, 'lifeOrigin');
+      recordEvent(state, 'lifeOrigin', undefined, state.globals.year, centre);
     }
     return placed;
   },
@@ -133,7 +133,7 @@ const TOOL_EFFECTS: Record<ToolId, Effect> = {
     if (civ.species !== null) {
       // An existing civilization gets a leap in knowledge.
       civ.progress = Math.min(0.99, civ.progress + 0.5);
-      recordEvent(state, 'monolith');
+      recordEvent(state, 'monolith', undefined, state.globals.year, centre);
       return true;
     }
     // Otherwise the most promising animal near the monolith wakes up.
@@ -153,7 +153,7 @@ const TOOL_EFFECTS: Record<ToolId, Effect> = {
       });
     }
     if (best < 0) return false;
-    recordEvent(state, 'monolith');
+    recordEvent(state, 'monolith', undefined, state.globals.year, centre);
     makeSentient(state, best, home);
     return true;
   },
@@ -172,7 +172,7 @@ const TOOL_EFFECTS: Record<ToolId, Effect> = {
     const water = ICE_METEOR_MASS / (WATER_DENSITY * area);
     state.globals.water += water;
     state.globals.waterDelivered += water;
-    recordEvent(state, 'iceMeteor');
+    recordEvent(state, 'iceMeteor', undefined, state.globals.year, centre);
     return true;
   },
   co2Generator: (state, centre) => placeDevice(state, 'co2Generator', centre),

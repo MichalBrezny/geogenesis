@@ -196,7 +196,7 @@ export function createLife(options: LifeOptions = {}): SimComponent {
   return {
     name: 'life',
     inputs: ['elevation', 'airTemperature', 'iceCover', 'biome', 'oceanOxygen', 'nutrients'],
-    outputs: ['vegetation', 'lifeTier'],
+    outputs: ['vegetation', 'lifeTier', 'dominantClass'],
     runOneStep(state, dtYears, rng) {
       const tally = emptyTally();
       const evolutionMemory = ensureEvolutionMemory(state, rng);
@@ -495,7 +495,7 @@ function attemptAbiogenesis(state: PlanetState, dtYears: number, memory: Evoluti
   if (state.biota.appeared[prokaryotes] === null) {
     state.biota.appeared[prokaryotes] = eventYear;
   }
-  recordEvent(state, 'lifeOrigin', undefined, eventYear);
+  recordEvent(state, 'lifeOrigin', undefined, eventYear, origin);
   memory.abiogenesisProgress = 0;
   memory.abiogenesisThreshold = exponentialThreshold(rng);
   memory.evolutionRngState = rng.state;
@@ -813,7 +813,7 @@ function evolve(
       biota.populations[c * n + bestCell] = FOUNDER_POPULATION;
       const first = biota.appeared[c] === null;
       if (first) biota.appeared[c] = eventYear;
-      recordEvent(state, 'classAppeared', lifeClass.key, eventYear);
+      recordEvent(state, 'classAppeared', lifeClass.key, eventYear, bestCell);
       if (first && lifeClass.firstAnimals) {
         recordEvent(state, 'cambrianExplosion', undefined, eventYear);
       }
@@ -910,16 +910,65 @@ function summarize(state: PlanetState, dtYears: number, tally: StressTally): voi
   detectMassExtinction(state, dtYears, tally, complexBiomass(before));
   const plants = lifeClassIndex('plants');
   fields.vegetation.set(biota.populations.subarray(plants * n, (plants + 1) * n));
+  updateLifeMapFields(state);
+}
+
+/** Population at which a class is legible enough to count as present on the map. */
+const MAP_PRESENCE_POPULATION = 0.05;
+/**
+ * A later class with at least a quarter of the largest population wins the silhouette:
+ * plants and algae are naturally denser than the animals that live on them.
+ */
+const ADVANCED_DOMINANCE_RATIO = 0.25;
+
+/**
+ * Chooses the dominant class in one cell. LIFE_CLASSES is ordered from simpler
+ * to more advanced, so a later class wins when it is close to the true maximum.
+ */
+export function dominantClassForCell(
+  populations: ArrayLike<number>,
+  cellCount: number,
+  cell: number,
+): number {
+  let dominant = -1;
+  let largest = MAP_PRESENCE_POPULATION;
+  for (let c = 0; c < LIFE_CLASS_COUNT; c++) {
+    const population = populations[c * cellCount + cell]!;
+    if (population < MAP_PRESENCE_POPULATION) continue;
+    if (population > largest) {
+      largest = population;
+      dominant = c;
+    } else if (population >= largest * ADVANCED_DOMINANCE_RATIO) {
+      dominant = c;
+    }
+  }
+  return dominant;
+}
+
+/** Updates both compact life fields in one allocation-free pass over the grid. */
+export function updateLifeMapFields(state: PlanetState): void {
+  const { grid, biota, fields } = state;
+  const n = grid.cellCount;
   fields.lifeTier.fill(0);
-  LIFE_CLASSES.forEach((lifeClass, c) => {
-    if (biota.cover[c] === 0) return;
-    const tier = LIFE_TIERS.indexOf(lifeClass.tier) + 1;
-    for (let i = 0; i < n; i++) {
-      if (biota.populations[c * n + i]! >= 0.05 && tier > fields.lifeTier[i]!) {
-        fields.lifeTier[i] = tier;
+  fields.dominantClass.fill(-1);
+  for (let i = 0; i < n; i++) {
+    let dominant = -1;
+    let largest = MAP_PRESENCE_POPULATION;
+    for (let c = 0; c < LIFE_CLASS_COUNT; c++) {
+      if (biota.cover[c] === 0) continue;
+      const population = biota.populations[c * n + i]!;
+      if (population < MAP_PRESENCE_POPULATION) continue;
+      const tier = LIFE_TIERS.indexOf(LIFE_CLASSES[c]!.tier) + 1;
+      if (tier > fields.lifeTier[i]!) fields.lifeTier[i] = tier;
+      if (population > largest) {
+        largest = population;
+        dominant = c;
+      } else if (population >= largest * ADVANCED_DOMINANCE_RATIO) {
+        dominant = c;
       }
     }
-  });
+    fields.dominantClass[i] = dominant;
+  }
 }
 
 /**

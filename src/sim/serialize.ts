@@ -4,6 +4,7 @@ import { LIFE_CLASSES } from './data/lifeClasses';
 import type { RandomWorldSettings } from './world';
 import { surfacePressureOf } from './models/atmosphere/atmosphere';
 import { atmosphericWaterGel, basinWaterGel, landIceWaterGel } from './models/geosphere/seaLevel';
+import { updateLifeMapFields } from './models/biosphere/life';
 
 /**
  * Binary save format:
@@ -122,6 +123,10 @@ function hydrateAddedState(planet: PlanetState): void {
   planet.fields.oceanOxygen ??= new Float32Array(planet.grid.cellCount);
   planet.fields.nutrients ??= new Float32Array(planet.grid.cellCount);
   planet.fields.seasonalAmplitude ??= new Float32Array(planet.grid.cellCount);
+  if (planet.fields.dominantClass === undefined) {
+    planet.fields.dominantClass = new Int32Array(planet.grid.cellCount).fill(-1);
+    updateLifeMapFields(planet);
+  }
   planet.fields.lakeDepth ??= new Float32Array(planet.grid.cellCount);
   planet.fields.lakeType ??= new Int32Array(planet.grid.cellCount);
   planet.fields.volcanicActivity ??= new Float32Array(planet.grid.cellCount);
