@@ -79,7 +79,7 @@ describe('goal evaluators', () => {
 describe('goal control limits', () => {
   it('clamps restricted controls while retaining unrestricted values', () => {
     const state = createPlanet({ width: 8, height: 4 });
-    state.goal = createGoal('brighteningSun', 6.6e9);
+    state.goal = createGoal('brighteningSun', 5.6e9);
     expect(clampGoalControls(state, { solarFactor: 0.1, cloudAlbedo: 5, driftSpeed: 2 })).toEqual({
       solarFactor: 0.92,
       cloudAlbedo: 1.3,

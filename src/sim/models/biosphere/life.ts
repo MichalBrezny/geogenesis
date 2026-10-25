@@ -90,13 +90,14 @@ const FIRE_OXYGEN_FULL = 0.35;
 /** Largest share of plant cover wildfires remove at FIRE_OXYGEN_FULL. */
 const FIRE_MAX_LOSS = 0.8;
 /**
- * CO₂ (microbar) at which C3 land plants starve (compensation point ≈ 50–60 ppm)
- * and above which they grow fully (~150 ppm; Pagani et al. 2009, Gerhart & Ward
- * 2010): the CO₂ starvation that ends land plant life on a brightening Sun
- * (Caldeira & Kasting 1992).
+ * CO₂ (microbar) at which land plants starve and above which they grow fully. C3
+ * plants starve near 50–60 ppm (Pagani et al. 2009, Gerhart & Ward 2010), but C4
+ * plants keep the land green down to ~10 ppm (Lenton & von Bloh 2001), so CO₂
+ * starvation ends land plant life on a brightening Sun only shortly before the
+ * runaway greenhouse (Caldeira & Kasting 1992).
  */
-const PLANT_CO2_STARVATION = 60;
-const PLANT_CO2_FULL = 150;
+const PLANT_CO2_STARVATION = 10;
+const PLANT_CO2_FULL = 100;
 /**
  * E-folding time (years) of the temperature life is adapted to; warming or
  * cooling faster than adaptation and migration can follow builds a lag.

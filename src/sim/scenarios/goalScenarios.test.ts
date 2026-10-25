@@ -10,7 +10,7 @@ describe('goal scenarios', () => {
       height: 16,
       start: 'quick',
     });
-    expect(world.planet.globals.year).toBe(6.6e9);
+    expect(world.planet.globals.year).toBe(5.6e9);
     expect(world.planet.goal?.id).toBe('brighteningSun');
     expect(complexBiomass(world.planet.biota.cover)).toBeGreaterThan(0);
     expect(world.planet.civilization.species).toBeNull();

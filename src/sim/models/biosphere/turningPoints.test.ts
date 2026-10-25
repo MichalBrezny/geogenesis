@@ -124,16 +124,16 @@ describe('stressors', () => {
     expect(fit(planet, 'fish', sea)).toBe(before.fish);
   });
 
-  it('burns plants above ~25 % oxygen and starves them below ~150 µbar CO₂', () => {
+  it('burns plants above ~25 % oxygen and starves them below ~10 µbar CO₂ (C4)', () => {
     const planet = earthlike();
     const land = LAND(planet);
     const normal = fit(planet, 'plants', land);
     planet.globals.atmosphere.o2 = 0.32;
     expect(fit(planet, 'plants', land)).toBeLessThan(0.6 * normal);
     planet.globals.atmosphere.o2 = 0.21;
-    planet.globals.atmosphere.co2 = 100;
+    planet.globals.atmosphere.co2 = 40;
     expect(fit(planet, 'plants', land)).toBeLessThan(0.5 * normal);
-    planet.globals.atmosphere.co2 = 50;
+    planet.globals.atmosphere.co2 = 8;
     expect(fit(planet, 'plants', land)).toBe(0);
     // Animals in thin oxygen are stressed by their physiological thresholds.
     planet.globals.atmosphere.co2 = 280;

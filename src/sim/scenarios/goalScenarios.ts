@@ -11,26 +11,23 @@ import {
   type World,
 } from '../world';
 
-const BRIGHTENING_START_YEAR = 6.6e9;
-const BRIGHTENING_SPINUP_YEAR = 6.2e9;
+const BRIGHTENING_START_YEAR = 5.6e9;
 const BRIGHTENING_STEP_YEARS = 500e3;
 const SEEDED_POPULATION = 0.6;
 
-/** Earth-like world just before the Sun's natural late brightening becomes dangerous. */
+/**
+ * Earth-like world on a brightening Sun. At 5.6 Gyr weathering has already drawn
+ * CO₂ down to ~130 ppm; over the next billion years land life thins out as CO₂
+ * approaches the C4 starvation floor, and the unassisted world tips into a runaway
+ * greenhouse near 7 Gyr.
+ */
 export function createBrighteningSun(options: PlanetOptions): World {
-  // At 6.6 Gyr a from-scratch fixed-point solve is already on the hot branch. Start
-  // from the last stable spun-up atmosphere, then age it without an artificial
-  // 400 Myr component interval; the unassisted world naturally tips near 7 Gyr.
   const base = createRandomWorld({
     ...options,
     start: 'quick',
-    startYear: BRIGHTENING_SPINUP_YEAR,
+    startYear: BRIGHTENING_START_YEAR,
   });
   const { planet } = base;
-  planet.globals.year = BRIGHTENING_START_YEAR;
-  for (const component of Object.keys(planet.lastRunYear)) {
-    planet.lastRunYear[component] = BRIGHTENING_START_YEAR;
-  }
   seedEstablishedComplexLife(planet);
   planet.goal = createGoal('brighteningSun', planet.globals.year);
   return brighteningWorld(randomWorldFromPlanet(planet, base.settings));

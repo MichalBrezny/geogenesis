@@ -423,7 +423,7 @@
   "goal.name.brighteningSun": "Outlive the brightening Sun",
   "goal.name.snowball": "Thaw the snowball",
   "goal.name.cradle": "Awaken intelligence",
-  "goal.briefing.brighteningSun": "The Sun is nearing the natural runaway-greenhouse threshold. Preserve liquid oceans and complex life until the planet is 8.1 billion years old. Sunshades can dim sunlight by at most 8%; cloud and surface controls have modest ranges.",
+  "goal.briefing.brighteningSun": "The Sun keeps brightening: weathering is starving the air of CO₂, land life is thinning, and a runaway greenhouse will boil the oceans near 7 billion years. Preserve liquid oceans and complex life until the planet is 8.1 billion years old. Sunshades can dim sunlight by at most 8%; cloud and surface controls have modest ranges.",
   "goal.briefing.snowball": "This world is locked beneath global ice. Use CO₂, volcanism and albedo to bring ice below 15% and temperature above 5 °C, then hold both for 5 million years. You have 1 billion years.",
   "goal.briefing.cradle": "Nurture this microbial world through complex evolution until a species becomes sentient. Complex-life extinction or a two-billion-year delay ends the attempt.",
   "goal.condition.liquidOceans": "Liquid oceans remain",
