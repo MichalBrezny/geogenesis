@@ -23,6 +23,29 @@ function earthLikeOcean(): PlanetState {
   return planet;
 }
 
+function patternedOcean(width: number, height: number): PlanetState {
+  const planet = createPlanet({ width, height });
+  const { grid, fields } = planet;
+  const firstOcean = Math.floor(width / 4);
+  for (let y = 0; y < height; y++) {
+    const latitude = grid.rowLatitude[y]!;
+    for (let x = 0; x < width; x++) {
+      const i = cellIndex(grid, x, y);
+      const ocean = x >= firstOcean;
+      const cellsFromCoast = Math.min(x - firstOcean, width - x);
+      fields.elevation[i] = ocean && cellsFromCoast < width / 32 ? -300 : ocean ? -4_000 : 300;
+      fields.airTemperature[i] = 20;
+      if (!ocean) continue;
+      if (Math.abs(latitude) < 5 || (x === width - 1 && Math.abs(latitude) < 55)) {
+        fields.upwelling[i] = 0.003;
+      }
+      if (x === firstOcean) fields.discharge[i] = 8e11;
+    }
+  }
+  oceanChemistry.runOneStep(planet, 0, createRng(1));
+  return planet;
+}
+
 function oceanValues(planet: PlanetState, values: ArrayLike<number>): number[] {
   const result: number[] = [];
   for (let i = 0; i < planet.grid.cellCount; i++) {
@@ -51,6 +74,47 @@ function oceanWeightedMean(planet: PlanetState, values: ArrayLike<number>): numb
   return sum / weightSum;
 }
 
+function oceanBandMean(planet: PlanetState, minLatitude: number, maxLatitude: number): number {
+  let sum = 0;
+  let weightSum = 0;
+  const { grid, fields, globals } = planet;
+  for (let y = 0; y < grid.height; y++) {
+    const latitude = Math.abs(grid.rowLatitude[y]!);
+    if (latitude < minLatitude || latitude >= maxLatitude) continue;
+    const weight = grid.rowAreaWeight[y]!;
+    for (let x = 0; x < grid.width; x++) {
+      const i = cellIndex(grid, x, y);
+      if (fields.elevation[i]! >= globals.seaLevel) continue;
+      sum += fields.nutrients[i]! * weight;
+      weightSum += weight;
+    }
+  }
+  return sum / weightSum;
+}
+
+function coastAndOpenMeans(planet: PlanetState): { coast: number; open: number } {
+  const coast: number[] = [];
+  const open: number[] = [];
+  const { grid, fields, globals } = planet;
+  for (let y = 0; y < grid.height; y++) {
+    for (let x = 0; x < grid.width; x++) {
+      const i = cellIndex(grid, x, y);
+      if (fields.elevation[i]! >= globals.seaLevel) continue;
+      const neighbours = [
+        cellIndex(grid, x - 1, y),
+        cellIndex(grid, x + 1, y),
+        y > 0 ? cellIndex(grid, x, y - 1) : i,
+        y < grid.height - 1 ? cellIndex(grid, x, y + 1) : i,
+      ];
+      const values = neighbours.some((j) => fields.elevation[j]! >= globals.seaLevel)
+        ? coast
+        : open;
+      values.push(fields.nutrients[i]!);
+    }
+  }
+  return { coast: mean(coast), open: mean(open) };
+}
+
 describe('ocean chemistry', () => {
   it('keeps a modern ocean near one nutrient unit and mostly well oxygenated', () => {
     const planet = earthLikeOcean();
@@ -68,6 +132,32 @@ describe('ocean chemistry', () => {
       );
     }
     expect(mean(upwellingNutrients)).toBeGreaterThan(mean(openOceanNutrients));
+  });
+
+  it('keeps the nutrient budget and broad pattern stable across grid resolutions', () => {
+    const coarse = patternedOcean(128, 64);
+    const fine = patternedOcean(256, 128);
+
+    expect(oceanWeightedMean(coarse, coarse.fields.nutrients)).toBeCloseTo(1, 5);
+    expect(oceanWeightedMean(fine, fine.fields.nutrients)).toBeCloseTo(1, 5);
+    for (const [from, to] of [
+      [0, 10],
+      [10, 25],
+      [25, 40],
+      [40, 60],
+      [60, 90],
+    ] as const) {
+      expect(
+        Math.abs(oceanBandMean(fine, from, to) - oceanBandMean(coarse, from, to)),
+      ).toBeLessThan(0.1);
+    }
+
+    const coarseRegions = coastAndOpenMeans(coarse);
+    const fineRegions = coastAndOpenMeans(fine);
+    expect(coarseRegions.coast).toBeGreaterThan(coarseRegions.open * 1.2);
+    expect(fineRegions.coast).toBeGreaterThan(fineRegions.open * 1.2);
+    expect(oceanBandMean(coarse, 0, 10)).toBeGreaterThan(oceanBandMean(coarse, 10, 25));
+    expect(oceanBandMean(fine, 0, 10)).toBeGreaterThan(oceanBandMean(fine, 10, 25));
   });
 
   it('makes the entire ocean anoxic before atmospheric oxygenation', () => {

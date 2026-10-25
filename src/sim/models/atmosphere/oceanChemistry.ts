@@ -12,6 +12,8 @@ export const CARBONATE_BUFFER_TIME = 10_000;
 const SHELF_DEPTH = 1_500;
 const REFERENCE_RIVER_DISCHARGE = 1e11;
 const REFERENCE_UPWELLING = 0.003;
+/** Lateral surface-ocean mixing length for nutrient-bearing water. */
+const NUTRIENT_MIXING_LENGTH = 450_000;
 const MAX_NUTRIENTS = 3;
 // A well-ventilated ocean reaches the top of the normalized field by about
 // 0.18 bar pO2; higher Phanerozoic oxygen cannot supersaturate it above one.
@@ -129,18 +131,21 @@ function nutrientPattern(
 ): { pattern: Float64Array; coast: Float64Array } {
   const n = grid.cellCount;
   const coast = new Float64Array(n);
+  const eastBoundary = new Uint8Array(n);
   const raw = new Float64Array(n);
+  const riverSource = new Float64Array(n);
+  const upwellingSource = new Float64Array(n);
   let rawSum = 0;
   let rawMaximum = 0;
   const { width, height, rowAreaWeight } = grid;
   for (let y = 0; y < height; y++) {
     const row = y * width;
-    const weight = rowAreaWeight[y]!;
     for (let x = 0; x < width; x++) {
       const i = row + x;
       if (!sea[i]) continue;
       const east = row + ((x + 1) % width);
       const west = row + ((x - 1 + width) % width);
+      eastBoundary[i] = !sea[east] ? 1 : 0;
       coast[i] =
         !sea[east] ||
         !sea[west] ||
@@ -148,12 +153,33 @@ function nutrientPattern(
         (y < height - 1 && !sea[i + width])
           ? 1
           : 0;
+      riverSource[i] = Math.min(
+        2,
+        Math.log1p(Math.max(0, discharge[i]!) / REFERENCE_RIVER_DISCHARGE),
+      );
+      upwellingSource[i] = Math.max(0, Math.min(1, upwelling[i]! / REFERENCE_UPWELLING));
+    }
+  }
+
+  // A physical mixing length avoids one-cell bands changing width with grid
+  // resolution. Area weighting matters in the north-south pass because an
+  // equirectangular cell represents progressively less sea towards the poles.
+  const river = smoothOceanField(grid, sea, riverSource, NUTRIENT_MIXING_LENGTH);
+  const up = smoothOceanField(grid, sea, upwellingSource, NUTRIENT_MIXING_LENGTH);
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    const weight = rowAreaWeight[y]!;
+    for (let x = 0; x < width; x++) {
+      const i = row + x;
+      if (!sea[i]) continue;
       const shelf = Math.max(0, Math.min(1, 1 - (seaLevel - elevation[i]!) / SHELF_DEPTH));
-      const river = Math.min(2, Math.log1p(Math.max(0, discharge[i]!) / REFERENCE_RIVER_DISCHARGE));
-      const up = Math.max(0, Math.min(1, upwelling[i]! / REFERENCE_UPWELLING));
-      // The shelf term spreads weathering supply beyond the individual river-mouth
-      // cells without an expensive, resolution-dependent diffusion stencil.
-      raw[i] = 0.7 + 0.3 * shelf + 0.4 * river + 0.8 * up;
+      // Keep subtropical interiors oligotrophic, while river plumes, shelves and
+      // especially eastern-boundary upwelling dominate the visible structure.
+      raw[i] =
+        0.4 +
+        0.65 * shelf +
+        0.75 * river[i]! +
+        up[i]! * (0.55 + 0.45 * coast[i]! + 0.45 * eastBoundary[i]!);
       rawSum += raw[i]! * weight;
       rawMaximum = Math.max(rawMaximum, raw[i]!);
     }
@@ -162,6 +188,62 @@ function nutrientPattern(
     pattern: normalizeOceanPattern(grid, sea, raw, oceanWeight, rawSum, rawMaximum),
     coast,
   };
+}
+
+/** Gaussian lateral mixing over sea cells, separable for a linear-time local stencil. */
+function smoothOceanField(
+  grid: Grid,
+  sea: Uint8Array,
+  source: Float64Array,
+  length: number,
+): Float64Array {
+  const { width, height, dy, rowDx, rowCellArea } = grid;
+  const cutoff = 3 * length;
+  const horizontal = new Float64Array(source.length);
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    const dx = rowDx[y]!;
+    const radius = Math.min(Math.floor(width / 2), Math.ceil(cutoff / dx));
+    for (let x = 0; x < width; x++) {
+      const i = row + x;
+      if (!sea[i]) continue;
+      let sum = 0;
+      let weightSum = 0;
+      for (let offset = -radius; offset <= radius; offset++) {
+        const j = row + ((x + offset + width) % width);
+        if (!sea[j]) continue;
+        const distance = offset * dx;
+        const weight = Math.exp((-0.5 * distance * distance) / (length * length));
+        sum += source[j]! * weight;
+        weightSum += weight;
+      }
+      horizontal[i] = weightSum > 0 ? sum / weightSum : source[i]!;
+    }
+  }
+
+  const mixed = new Float64Array(source.length);
+  const rowRadius = Math.min(height - 1, Math.ceil(cutoff / dy));
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = y * width + x;
+      if (!sea[i]) continue;
+      let sum = 0;
+      let weightSum = 0;
+      for (let offset = -rowRadius; offset <= rowRadius; offset++) {
+        const sourceY = y + offset;
+        if (sourceY < 0 || sourceY >= height) continue;
+        const j = sourceY * width + x;
+        if (!sea[j]) continue;
+        const distance = offset * dy;
+        const weight =
+          Math.exp((-0.5 * distance * distance) / (length * length)) * rowCellArea[sourceY]!;
+        sum += horizontal[j]! * weight;
+        weightSum += weight;
+      }
+      mixed[i] = weightSum > 0 ? sum / weightSum : horizontal[i]!;
+    }
+  }
+  return mixed;
 }
 
 /** Normalize to ocean mean one while retaining the documented 0..3 field bound. */

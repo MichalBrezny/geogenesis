@@ -39,7 +39,14 @@ const CHARTS: readonly ChartSpec[] = [
   { series: 'ch4', title: 'chart.ch4', format: (v) => `${v.toFixed(1)} ppm`, log: true },
   { series: 'livingClasses', title: 'chart.livingClasses', format: (v) => v.toFixed(0) },
   { series: 'dust', title: 'chart.dust', format: (v) => v.toFixed(3) },
-  { series: 'oceanAcidity', title: 'chart.oceanAcidity', format: (v) => v.toFixed(2) },
+  {
+    series: 'oceanAcidity',
+    title: 'chart.oceanAcidity',
+    // The chemistry model records a pH drop. Milli-pH keeps small transient
+    // excursions visible and gives uPlot useful labelled ticks near zero.
+    scale: 1000,
+    format: (v) => `${v.toFixed(1)} milli-pH`,
+  },
   {
     series: 'meanOceanOxygen',
     title: 'chart.meanOceanOxygen',

@@ -177,7 +177,7 @@
   "extinctionCause.impact": "an asteroid impact",
   "chart.biodiversity": "Biodiversity index",
   "chart.dust": "Dust optical depth",
-  "chart.oceanAcidity": "Ocean acidity",
+  "chart.oceanAcidity": "Ocean acidification (pH drop)",
   "chart.meanOceanOxygen": "Mean ocean oxygen",
   "chart.clathrateMethane": "Clathrate methane",
   "event.sentience": "{name} became sentient",
