@@ -486,5 +486,15 @@
   "biosignature.possible": "possible",
   "biosignature.detected": "detected",
   "goal.condition.temperatureBelow": "Mean temperature at most",
-  "goal.condition.pressureBelow": "Surface pressure at most"
+  "goal.condition.pressureBelow": "Surface pressure at most",
+  "scenario.stoneAge": "Stone age on an island",
+  "scenario.cambrian": "Earth from the Cambrian",
+  "scenarioHelp.stoneAge": "Goal: lead a young stone-age people from one island through every age to Exodus.",
+  "scenarioHelp.cambrian": "An Earth-like planet as the Cambrian begins: animals in the seas, bare land. No goal.",
+  "goal.name.exodus": "Reach the stars",
+  "goal.briefing.exodus": "A people of mammals has just become sentient on one island. Help them spread, survive plagues and wars, and advance through all seven ages until they leave the planet. A collapse of the civilization or 300,000 years without Exodus ends the attempt.",
+  "goal.condition.techAges": "Ages reached",
+  "goal.condition.exodus": "Exodus",
+  "goal.reason.exodus": "The civilization left the planet in an Exodus.",
+  "goal.reason.civilizationCollapsed": "The civilization collapsed."
 }

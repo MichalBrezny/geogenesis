@@ -113,3 +113,23 @@ describe('terraforming goal', () => {
     expect(goal.outcomeReason).toBe('terraformed');
   });
 });
+
+describe('exodus goal', () => {
+  it('is won by an Exodus and lost by a collapse', () => {
+    const won = createPlanet({ width: 8, height: 4 });
+    won.civilization.species = 13;
+    const goal = createGoal('exodus', won.globals.year);
+    GOALS.exodus.evaluate(won, goal, 100);
+    expect(goal.status).toBe('active');
+    won.events.push({ year: won.globals.year + 50, key: 'exodus' });
+    won.civilization.species = null;
+    GOALS.exodus.evaluate(won, goal, 100);
+    expect(goal.status).toBe('won');
+
+    const lost = createPlanet({ width: 8, height: 4 });
+    const failed = createGoal('exodus', lost.globals.year);
+    lost.events.push({ year: lost.globals.year + 10, key: 'civilizationCollapsed' });
+    GOALS.exodus.evaluate(lost, failed, 100);
+    expect(failed.outcomeReason).toBe('civilizationCollapsed');
+  });
+});

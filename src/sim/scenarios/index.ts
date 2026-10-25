@@ -13,6 +13,8 @@ import {
   createCradle,
   createSnowball,
   createTerraformMars,
+  createStoneAge,
+  createCambrian,
   restoreGoalScenario,
 } from './goalScenarios';
 
@@ -67,6 +69,14 @@ export const SCENARIOS = {
   terraformMars: {
     create: createTerraformMars,
     restore: (planet, settings) => restoreGoalScenario('terraformMars', planet, settings),
+  },
+  stoneAge: {
+    create: createStoneAge,
+    restore: (planet, settings) => restoreGoalScenario('exodus', planet, settings),
+  },
+  cambrian: {
+    create: createCambrian,
+    restore: (planet, settings) => randomWorldFromPlanet(planet, settings),
   },
 } satisfies Record<string, Scenario>;
 

@@ -158,8 +158,13 @@ export interface GlobalState {
   circulation?: { hadleyWidth: number; meanItcz: number };
   /** Carbon fluxes relative to present-day Earth (written by the carbon cycle). */
   carbon: { outgassing: number; weathering: number; burial: number };
-  /** Cooling radiative forcing from volcanic aerosols, W/m² (positive means cooling). */
+  /**
+   * Cooling radiative forcing from volcanic aerosols, W/m² (positive means cooling),
+   * averaged over the last step: the forcing the step's climate sees.
+   */
   volcanicAerosol: number;
+  /** The same forcing at the end of the last step, carried into the next one. */
+  volcanicAerosolEnd: number;
   /** Outgassing of active large igneous provinces over the last step, relative to modern. */
   lipOutgassing: number;
   /** Expected natural impact flux at the current age, impacts per year. */
@@ -469,6 +474,7 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
       sedimentExport: 0,
       carbon: { outgassing: 1, weathering: 1, burial: 0 },
       volcanicAerosol: 0,
+      volcanicAerosolEnd: 0,
       lipOutgassing: 0,
       impactFlux: 0,
       impactsThisStep: 0,

@@ -1,10 +1,11 @@
 import type { SimComponent } from '../core/component';
 import type { ModelControls, PlanetState } from '../core/planet';
+import { TECH_AGES } from '../data/civilization';
 import { LIFE_CLASSES } from '../data/lifeClasses';
 import { recordEvent } from '../events';
 import { complexBiomass } from '../models/biosphere/life';
 
-export type GoalId = 'brighteningSun' | 'snowball' | 'cradle' | 'terraformMars';
+export type GoalId = 'brighteningSun' | 'snowball' | 'cradle' | 'terraformMars' | 'exodus';
 export type GoalStatus = 'active' | 'won' | 'lost';
 export type ControlKey = keyof ModelControls;
 
@@ -47,6 +48,8 @@ const CRADLE_TIME_LIMIT = 2e9;
 const COMPLEX_LIFE_EPSILON = 1e-8;
 const TERRAFORM_TIME_LIMIT: Partial<Record<GoalId, number>> = {
   terraformMars: 500e6,
+  // The tech ages take ~55 kyr at their expected pace; plagues and wars set them back.
+  exodus: 300e3,
 };
 const TERRAFORM_HOLD_YEARS = 10e6;
 /** Share of the planet's area that must be open (ice-free) sea. */
@@ -453,12 +456,58 @@ const terraformMars = terraformGoal(
   },
 );
 
+/** Ages the civilization has completed or entered, counting from the Stone Age as 1. */
+function agesReached(state: PlanetState): number {
+  return state.civilization.species === null ? 0 : state.civilization.age + 1;
+}
+
+const exodus: GoalDefinition = {
+  id: 'exodus',
+  evaluate(state, goal, dtYears) {
+    const year = evaluationYear(state, dtYears);
+    goal.memory.bestAge = Math.max(Number(goal.memory.bestAge) || 0, agesReached(state));
+    const remainingKyr = Math.max(0, deadline(goal) - year) / 1e3;
+    goal.score = remainingKyr + 100 * Number(goal.memory.bestAge);
+    if (hasEvent(state, 'exodus', goal.startYear)) {
+      finish(goal, 'won', year, 'exodus');
+    } else if (
+      hasEvent(state, 'civilizationCollapsed', goal.startYear) ||
+      state.civilization.species === null
+    ) {
+      finish(goal, 'lost', year, 'civilizationCollapsed');
+    } else if (year >= deadline(goal)) {
+      finish(goal, 'lost', year, 'timeExpired');
+    }
+  },
+  conditions(state, goal) {
+    const reached = Math.max(Number(goal.memory.bestAge) || 0, agesReached(state));
+    const left = hasEvent(state, 'exodus', goal.startYear);
+    return [
+      {
+        key: 'goal.condition.techAges',
+        value: left ? TECH_AGES.length : reached,
+        target: TECH_AGES.length,
+        unit: '',
+        met: left || reached >= TECH_AGES.length,
+      },
+      {
+        key: 'goal.condition.exodus',
+        value: left ? 1 : 0,
+        target: 1,
+        unit: '',
+        met: left,
+      },
+    ];
+  },
+};
+
 /** Stable registry: adding a future goal only needs data plus an evaluator. */
 export const GOALS: Readonly<Record<GoalId, GoalDefinition>> = {
   brighteningSun,
   snowball,
   cradle,
   terraformMars,
+  exodus,
 };
 
 /** Final pipeline component for goal scenarios. */

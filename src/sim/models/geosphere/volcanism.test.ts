@@ -7,7 +7,13 @@ import { createCarbonCycle, tectonicActivity } from '../atmosphere/carbon';
 import { createPlateDrift } from './drift';
 import { anchorPlates } from './plates';
 import { generateTectonicPlanet } from './tectonics';
-import { decayAerosol, HOTSPOT_SHARE, samplePoisson, volcanicActivityModel } from './volcanism';
+import {
+  decayAerosol,
+  HOTSPOT_SHARE,
+  meanAerosol,
+  samplePoisson,
+  volcanicActivityModel,
+} from './volcanism';
 
 describe('spatial volcanism', () => {
   it('preserves the old Earth-reference outgassing normalization', () => {
@@ -62,6 +68,19 @@ describe('spatial volcanism', () => {
     let split = 4;
     for (let year = 0; year < 5; year++) split = decayAerosol(split, 1);
     expect(split).toBeCloseTo(one, 12);
+  });
+
+  it('averages aerosol forcing over a step, consistently with shorter steps', () => {
+    // The mean over 6 years equals the mean of three 2-year means along the decay.
+    let forcing = 4;
+    let sum = 0;
+    for (let k = 0; k < 3; k++) {
+      sum += meanAerosol(forcing, 2) * 2;
+      forcing = decayAerosol(forcing, 2);
+    }
+    expect(sum / 6).toBeCloseTo(meanAerosol(4, 6), 12);
+    // A one-year-scale pulse is negligible over a 2000-year step.
+    expect(meanAerosol(30, 2000)).toBeLessThan(0.03);
   });
 
   it('retains aerosol forcing across two post-eruption summers', () => {

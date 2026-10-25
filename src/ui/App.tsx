@@ -169,6 +169,16 @@ const SCENARIO_VIEW: Record<
     layers: ['terrain', 'airTemperature', 'biomes', 'life', 'clouds', 'precipitation'],
     layer: 'terrain',
   },
+  stoneAge: {
+    charts: ['meanTemperature', 'co2', 'o2', 'biodiversity', 'iceFraction', 'seaLevel'],
+    layers: ['civilization', 'terrain', 'life', 'biomes', 'airTemperature', 'diversity'],
+    layer: 'civilization',
+  },
+  cambrian: {
+    charts: ['livingClasses', 'biodiversity', 'o2', 'meanTemperature', 'co2', 'iceFraction'],
+    layers: ['life', 'diversity', 'terrain', 'biomes', 'airTemperature', 'nutrients'],
+    layer: 'life',
+  },
   brighteningSun: {
     charts: [
       'meanTemperature',

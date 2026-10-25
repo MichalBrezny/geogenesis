@@ -155,6 +155,7 @@ function hydrateAddedState(planet: PlanetState): void {
   planet.globals.lastMassExtinctionYear ??= -1;
   planet.globals.escapedAtmosphere ??= { n2: 0, co2: 0, inert: 0, waterVapor: 0 };
   planet.globals.volcanicAerosol ??= 0;
+  planet.globals.volcanicAerosolEnd ??= planet.globals.volcanicAerosol;
   planet.globals.lipOutgassing ??= 0;
   planet.globals.impactFlux ??= 0;
   planet.globals.impactsThisStep ??= 0;

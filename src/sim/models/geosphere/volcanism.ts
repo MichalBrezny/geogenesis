@@ -149,7 +149,12 @@ export const eruptionModel: SimComponent = {
   outputs: ['elevation'],
   runOneStep(state, dtYears, rng) {
     const dt = Math.max(0, dtYears);
-    state.globals.volcanicAerosol = decayAerosol(state.globals.volcanicAerosol, dt);
+    const { globals } = state;
+    // The climate sees the step-mean forcing; the end value carries into the next step.
+    // A 1.5-year pulse barely dents a 2000-year step's mean, however strong at its peak.
+    const carried = globals.volcanicAerosolEnd;
+    globals.volcanicAerosol = meanAerosol(carried, dt);
+    globals.volcanicAerosolEnd = decayAerosol(carried, dt);
     if (dt === 0) return;
 
     const meanActivity = areaWeightedMean(state.grid, state.fields.volcanicActivity);
@@ -169,7 +174,11 @@ export const eruptionModel: SimComponent = {
     if (dt <= MAX_AEROSOL_STEP) {
       const count = samplePoisson((dt / LARGE_ERUPTION_INTERVAL) * meanActivity, rng);
       if (count > 0) {
-        state.globals.volcanicAerosol += count * (1.5 + rng.next() * 1.5);
+        const pulse = count * (1.5 + rng.next() * 1.5);
+        // The eruptions of one step are lumped into one pulse at a random time in it.
+        const remaining = dt * (1 - rng.next());
+        globals.volcanicAerosol += (meanAerosol(pulse, remaining) * remaining) / dt;
+        globals.volcanicAerosolEnd += decayAerosol(pulse, remaining);
         const cell = weightedActivityCell(state, rng);
         recordEvent(state, 'largeEruption', formatLocation(state, cell));
         destroyDevicesNear(state, cell, ERUPTION_DEVICE_RADIUS);
@@ -184,6 +193,14 @@ export const eruptionModel: SimComponent = {
 /** Exact exponential aerosol decay, independent of step partitioning. */
 export function decayAerosol(forcing: number, dtYears: number): number {
   return forcing * Math.exp(-Math.max(0, dtYears) / AEROSOL_EFOLDING_TIME);
+}
+
+/** Mean of a decaying aerosol forcing over the next `dtYears` (its value when dt = 0). */
+export function meanAerosol(forcing: number, dtYears: number): number {
+  if (dtYears <= 0) return forcing;
+  return (
+    (forcing * AEROSOL_EFOLDING_TIME * -Math.expm1(-dtYears / AEROSOL_EFOLDING_TIME)) / dtYears
+  );
 }
 
 /** Poisson count with a bounded-cost normal approximation for very large means. */

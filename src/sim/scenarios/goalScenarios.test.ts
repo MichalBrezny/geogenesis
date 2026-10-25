@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { complexBiomass } from '../models/biosphere/life';
+import { lifeClassIndex } from '../data/lifeClasses';
 import { createScenario } from './index';
 
 describe('goal scenarios', () => {
@@ -45,14 +46,33 @@ describe('goal scenarios', () => {
 });
 
 describe('terraforming scenarios', () => {
-  it.each(['terraformMars'] as const)(
-    'opens %s with a budget and the tracker',
-    (id) => {
-      const world = createScenario(id, { seed: 2, width: 32, height: 16, start: 'quick' });
-      expect(world.planet.goal?.id).toBe(id);
-      expect(world.planet.globals.energy).toBe(3000);
-      expect(world.planet.devices).toEqual([]);
-      expect(world.simulation.components.at(-1)?.name).toBe('goals');
-    },
-  );
+  it.each(['terraformMars'] as const)('opens %s with a budget and the tracker', (id) => {
+    const world = createScenario(id, { seed: 2, width: 32, height: 16, start: 'quick' });
+    expect(world.planet.goal?.id).toBe(id);
+    expect(world.planet.globals.energy).toBe(3000);
+    expect(world.planet.devices).toEqual([]);
+    expect(world.simulation.components.at(-1)?.name).toBe('goals');
+  });
+});
+
+describe('civilization scenarios', () => {
+  it('starts a sentient stone-age people with the Exodus goal', () => {
+    const world = createScenario('stoneAge', { seed: 2, width: 64, height: 32, start: 'quick' });
+    const { civilization, goal, fields } = world.planet;
+    expect(goal?.id).toBe('exodus');
+    expect(civilization.species).not.toBeNull();
+    expect(civilization.age).toBe(0);
+    expect(fields.civilization.some((density) => density > 0)).toBe(true);
+    expect(world.simulation.components.at(-1)?.name).toBe('goals');
+  });
+
+  it('opens the Cambrian with sea animals and bare land', () => {
+    const world = createScenario('cambrian', { seed: 2, width: 64, height: 32, start: 'quick' });
+    const { biota, goal, globals } = world.planet;
+    expect(goal).toBeNull();
+    expect(globals.year).toBe(4.002e9);
+    expect(biota.cover[lifeClassIndex('radiates')]).toBeGreaterThan(0);
+    expect(biota.cover[lifeClassIndex('plants')]).toBe(0);
+    expect(biota.appeared[lifeClassIndex('fish')]).toBeNull();
+  });
 });
