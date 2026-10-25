@@ -4,6 +4,7 @@ import { compress, decompress, deserializeGame, SaveFormatError, serializeGame }
 import { createRandomWorld } from './world';
 import { surfacePressureOf } from './models/atmosphere/atmosphere';
 import { ERAS } from './eras';
+import { createGoal } from './goals/goals';
 
 describe('save files', () => {
   it('round-trip a planet exactly', async () => {
@@ -20,6 +21,20 @@ describe('save files', () => {
     expect(loaded.planet.fields.elevation).toBeInstanceOf(Float32Array);
     expect(loaded.planet.plates[0]!.crust.owned).toBeInstanceOf(Uint8Array);
     expect(loaded.planet.history.era).toEqual(world.planet.history.era);
+  });
+
+  it('round-trips goal state and rebuilds the goal tracker', () => {
+    const world = createRandomWorld({ seed: 31, width: 32, height: 16, start: 'quick' });
+    world.planet.goal = createGoal('cradle', world.planet.globals.year);
+    world.planet.goal.score = 123.5;
+    world.planet.goal.heldSince = world.planet.globals.year - 10;
+    world.planet.goal.memory.complexLifeSeen = true;
+    const loaded = deserializeGame(
+      serializeGame({ scenario: 'cradle', settings: world.settings, planet: world.planet }),
+    );
+    expect(loaded.planet.goal).toEqual(world.planet.goal);
+    const restored = restoreScenario('cradle', loaded.planet, loaded.settings);
+    expect(restored.simulation.components.at(-1)?.name).toBe('goals');
   });
 
   it('resumes the simulation after loading', () => {
@@ -79,6 +94,7 @@ describe('save files', () => {
     delete (planet.globals as Partial<typeof planet.globals>).escapedAtmosphere;
     delete (planet.geosphere as Partial<typeof planet.geosphere>).plateRngState;
     delete (planet.geosphere as Partial<typeof planet.geosphere>).sliverCleanupElapsedYears;
+    delete (planet as Partial<typeof planet>).goal;
     const loaded = deserializeGame(serializeGame({ scenario: 'random', planet }));
     expect(loaded.planet.globals.seaLevel).toBe(0);
     expect(loaded.planet.globals.sedimentExport).toBe(0);
@@ -117,6 +133,7 @@ describe('save files', () => {
     );
     expect(loaded.planet.geosphere.plateRngState).toBe((planet.seed ^ 0x7f4a7c15) >>> 0);
     expect(loaded.planet.geosphere.sliverCleanupElapsedYears).toBe(0);
+    expect(loaded.planet.goal).toBeNull();
     const restored = restoreScenario('random', loaded.planet, loaded.settings);
     expect(() => restored.simulation.step(restored.planet, 5)).not.toThrow();
   });

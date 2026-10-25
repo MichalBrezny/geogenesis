@@ -33,6 +33,8 @@ interface Props {
   onSave: () => void;
   onLoad: (file: File) => void;
   onShowHelp: () => void;
+  /** Incremented when another part of the UI asks to open the new-planet menu. */
+  newPlanetRequest: number;
 }
 
 /** Time controls, the planet's vital signs and the planet menu. */
@@ -73,7 +75,11 @@ export function TopBar(props: Props) {
       </div>
       {frame && <Vitals frame={frame} />}
       <div className="group menu" role="group" aria-label={t('controls.planet')}>
-        <NewPlanetMenu onCreate={props.onNewPlanet} />
+        <NewPlanetMenu
+          key={props.newPlanetRequest}
+          onCreate={props.onNewPlanet}
+          initiallyOpen={props.newPlanetRequest > 0}
+        />
         <button onClick={props.onSave} disabled={!frame} title={t('controls.saveHint')}>
           {t('controls.save')}
         </button>
@@ -142,8 +148,14 @@ function Vitals({ frame }: { frame: Frame }) {
 }
 
 /** "New planet" button with a small form for the scenario and the grid resolution. */
-function NewPlanetMenu({ onCreate }: { onCreate: Props['onNewPlanet'] }) {
-  const [open, setOpen] = useState(false);
+function NewPlanetMenu({
+  onCreate,
+  initiallyOpen,
+}: {
+  onCreate: Props['onNewPlanet'];
+  initiallyOpen: boolean;
+}) {
+  const [open, setOpen] = useState(initiallyOpen);
   const [scenario, setScenario] = useState<ScenarioId>('random');
   const [resolution, setResolution] = useState(1);
   const [start, setStart] = useState<PlanetStart>('young');
