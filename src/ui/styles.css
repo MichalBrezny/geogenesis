@@ -144,6 +144,10 @@ body {
   margin: 0;
 }
 
+.planet figure:has(.icon-legend) {
+  --legend-room: 112px;
+}
+
 .planet canvas {
   image-rendering: pixelated;
 }
@@ -666,6 +670,22 @@ kbd {
   color: var(--text-secondary);
 }
 
+.map-legends {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.icon-legend {
+  line-height: 1.1;
+}
+
+.map-glyph {
+  flex: none;
+  filter: drop-shadow(0 0 1px rgb(0 0 0 / 0.85));
+}
+
 .legend li {
   display: flex;
   align-items: center;
@@ -764,6 +784,31 @@ kbd {
 
 .event-log li {
   padding: 2px 0;
+}
+
+.event-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  color: inherit;
+  line-height: 1.25;
+  text-align: left;
+}
+
+button.event-entry {
+  padding: 2px 3px;
+  border: 0;
+  background: transparent;
+}
+
+button.event-entry:hover:not(:disabled) {
+  background: var(--surface-control-hover);
+}
+
+.event-icon {
+  margin-top: 1px;
+  color: var(--series-2);
 }
 
 .life-panel {

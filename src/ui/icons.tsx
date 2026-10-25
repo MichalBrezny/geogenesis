@@ -3,6 +3,8 @@ import type { MapLayer } from '../render/mapRenderer';
 import type { ToolId } from '../sim/tools/tools';
 import type { Overlay, View } from './PlanetView';
 import type { ControlGroupId } from './ControlsPanel';
+import { EVENT_ICON_PATHS } from '../render/mapIcons';
+import type { EventKey } from '../sim/events';
 
 /**
  * Line icons drawn on a 24-unit grid in the current text colour, so they follow
@@ -25,6 +27,29 @@ function Icon({ children }: { children: ReactNode }) {
       {children}
     </svg>
   );
+}
+
+/** Shared filled map/event art, suitable for legends and compact log entries. */
+export function GlyphIcon({ path, className = '' }: { path: string; className?: string }) {
+  return (
+    <svg
+      className={`map-glyph ${className}`.trim()}
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      fill="currentColor"
+      stroke="currentColor"
+      strokeWidth="0.8"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d={path} />
+    </svg>
+  );
+}
+
+export function EventIcon({ eventKey }: { eventKey: EventKey }) {
+  return <GlyphIcon path={EVENT_ICON_PATHS[eventKey]} className="event-icon" />;
 }
 
 const MOUNTAIN = 'M2 20 8 10l4 6 3-4 7 8Z';
@@ -231,6 +256,13 @@ export const OVERLAY_ICONS: Record<Overlay, ReactNode> = {
   wind: LAYER_ICONS.wind,
   currents: LAYER_ICONS.oceanCurrents,
   isobars: LAYER_ICONS.pressure,
+  icons: (
+    <Icon>
+      <path d="M3 20V9l5-4 4 4 4-6 5 5v12Z" />
+      <circle cx="8" cy="13" r="1.5" fill="currentColor" />
+      <path d="M14 20v-6h4v6" />
+    </Icon>
+  ),
 };
 
 export const VIEW_ICONS: Record<View, ReactNode> = {

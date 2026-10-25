@@ -24,6 +24,10 @@ import {
   type Rgb,
 } from '../render/palettes';
 import { BIOME_IDS, BIOMES } from '../sim/data/biomes';
+import { CITY_ICON_PATHS, LIFE_ICON_PATHS, type VisibleMapIcons } from '../render/mapIcons';
+import { LIFE_CLASSES } from '../sim/data/lifeClasses';
+import { TECH_AGES } from '../sim/data/civilization';
+import { GlyphIcon } from './icons';
 
 const css = ([r, g, b]: Rgb) => `rgb(${r}, ${g}, ${b})`;
 
@@ -136,7 +140,7 @@ const DAISY_SWATCHES: readonly { color: Rgb; label: MessageKey }[] = [
 ];
 
 /** Legend for the current map layer: swatches for categories, a colour bar for quantities. */
-export function MapLegend({ layer }: { layer: MapLayer }) {
+function LayerLegend({ layer }: { layer: MapLayer }) {
   if (layer === 'biomes') {
     return (
       <ul className="legend" aria-label={t('legend.label')}>
@@ -227,6 +231,43 @@ export function MapLegend({ layer }: { layer: MapLayer }) {
           {t('legend.saltFlat')}
         </li>
       </ul>
+    </div>
+  );
+}
+
+/** Layer colours plus the life and city silhouettes represented in the current view. */
+export function MapLegend({
+  layer,
+  iconsOn,
+  visibleIcons,
+}: {
+  layer: MapLayer;
+  iconsOn: boolean;
+  visibleIcons: VisibleMapIcons;
+}) {
+  const city = visibleIcons.cityAge === null ? null : TECH_AGES[visibleIcons.cityAge];
+  return (
+    <div className="map-legends">
+      <LayerLegend layer={layer} />
+      {iconsOn && (visibleIcons.lifeClasses.length > 0 || city) && (
+        <ul className="legend icon-legend" aria-label={t('legend.mapIcons')}>
+          {visibleIcons.lifeClasses.map((index) => {
+            const lifeClass = LIFE_CLASSES[index]!;
+            return (
+              <li key={lifeClass.key}>
+                <GlyphIcon path={LIFE_ICON_PATHS[lifeClass.key]} />
+                {t(`lifeClass.${lifeClass.key}`)}
+              </li>
+            );
+          })}
+          {city && (
+            <li>
+              <GlyphIcon path={CITY_ICON_PATHS[city.key as keyof typeof CITY_ICON_PATHS]} />
+              {t(`age.${city.key}` as MessageKey)}
+            </li>
+          )}
+        </ul>
+      )}
     </div>
   );
 }

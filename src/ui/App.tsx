@@ -24,6 +24,7 @@ import type { PlanetParameters } from '../sim/core/planet';
 import { DEFAULT_CONTROLS } from '../sim/core/planet';
 import { PlanetPanel } from './PlanetPanel';
 import { GoalOutcome, GoalPanel } from './GoalPanel';
+import type { VisibleMapIcons } from '../render/mapIcons';
 
 /** How long a tool notice stays on screen, ms. */
 const NOTICE_DURATION = 3000;
@@ -52,9 +53,10 @@ function loadWindowOpenState(): WindowOpenState {
 /** Charts, map layers and the initial layer that suit each scenario. */
 const SCENARIO_VIEW: Record<
   ScenarioId,
-  { charts: ChartSeries[]; layers: MapLayer[]; layer: MapLayer }
+  { charts: ChartSeries[]; layers: MapLayer[]; layer: MapLayer; overlays?: Overlay[] }
 > = {
   random: {
+    overlays: ['icons'],
     charts: [
       'meanTemperature',
       'co2',
@@ -101,6 +103,7 @@ const SCENARIO_VIEW: Record<
     layer: 'daisies',
   },
   aquarium: {
+    overlays: ['icons'],
     charts: [
       'meanTemperature',
       'co2',
@@ -170,16 +173,19 @@ const SCENARIO_VIEW: Record<
     layer: 'terrain',
   },
   stoneAge: {
+    overlays: ['icons'],
     charts: ['meanTemperature', 'co2', 'o2', 'biodiversity', 'iceFraction', 'seaLevel'],
     layers: ['civilization', 'terrain', 'life', 'biomes', 'airTemperature', 'diversity'],
     layer: 'civilization',
   },
   cambrian: {
+    overlays: ['icons'],
     charts: ['livingClasses', 'biodiversity', 'o2', 'meanTemperature', 'co2', 'iceFraction'],
     layers: ['life', 'diversity', 'terrain', 'biomes', 'airTemperature', 'nutrients'],
     layer: 'life',
   },
   brighteningSun: {
+    overlays: ['icons'],
     charts: [
       'meanTemperature',
       'co2',
@@ -193,11 +199,13 @@ const SCENARIO_VIEW: Record<
     layer: 'life',
   },
   snowball: {
+    overlays: ['icons'],
     charts: ['meanTemperature', 'co2', 'iceFraction', 'water', 'seaLevel', 'solarInput'],
     layers: ['airTemperature', 'terrain', 'clouds', 'precipitation', 'biomes', 'life'],
     layer: 'airTemperature',
   },
   cradle: {
+    overlays: ['icons'],
     charts: [
       'livingClasses',
       'biodiversity',
@@ -218,7 +226,7 @@ const SHORTCUT_HELP = [
   ['S', 'help.keyStep'],
   ['1–9 / 0', 'help.keyLayer'],
   ['G', 'help.keyView'],
-  ['W / C / P', 'help.keyOverlay'],
+  ['W / C / P / I', 'help.keyOverlay'],
   ['E / A / B / D', 'help.keyWindows'],
   ['+ / −', 'help.keyZoom'],
   ['M', 'help.keyMinimap'],
@@ -249,7 +257,7 @@ export function App() {
   const [layer, setLayer] = useState<MapLayer>('terrain');
   const [view, setView] = useState<View>('map');
   const [temperatureMonth, setTemperatureMonth] = useState<TemperatureMonth>('annual');
-  const [overlays, setOverlays] = useState<Overlay[]>([]);
+  const [overlays, setOverlays] = useState<Overlay[]>(['icons']);
   const toggleOverlay = (overlay: Overlay) =>
     setOverlays((current) =>
       current.includes(overlay) ? current.filter((o) => o !== overlay) : [...current, overlay],
@@ -284,8 +292,23 @@ export function App() {
   const [narrowWindows, setNarrowWindows] = useState(() => window.innerWidth < 700);
   const noticeTimer = useRef<number | undefined>(undefined);
   const lastGoalStatus = useRef<string | null>(null);
+  const lastScenario = useRef<ScenarioId | null>(null);
   const [dismissedOutcome, setDismissedOutcome] = useState<string | null>(null);
   const [newPlanetRequest, setNewPlanetRequest] = useState(0);
+  const [centreRequest, setCentreRequest] = useState<{ cell: number; serial: number } | null>(null);
+  const [visibleMapIcons, setVisibleMapIcons] = useState<VisibleMapIcons>({
+    lifeClasses: [],
+    cityAge: null,
+  });
+  const visibleIconsChanged = useCallback((next: VisibleMapIcons) => {
+    setVisibleMapIcons((current) =>
+      current.cityAge === next.cityAge &&
+      current.lifeClasses.length === next.lifeClasses.length &&
+      current.lifeClasses.every((value, index) => value === next.lifeClasses[index])
+        ? current
+        : next,
+    );
+  }, []);
 
   const send = useCallback((request: WorkerRequest) => workerRef.current?.postMessage(request), []);
 
@@ -316,6 +339,7 @@ export function App() {
     setDismissedOutcome(null);
     createPlanet(scenario, resolutionIndex, start, planetParams);
     setLayer(SCENARIO_VIEW[scenario].layer);
+    setOverlays(SCENARIO_VIEW[scenario].overlays ?? []);
     setError(null);
   };
 
@@ -327,6 +351,10 @@ export function App() {
       const message = event.data;
       if (message.type === 'frame') {
         setFrame(message.frame);
+        if (lastScenario.current !== message.frame.scenario) {
+          lastScenario.current = message.frame.scenario;
+          setOverlays(SCENARIO_VIEW[message.frame.scenario].overlays ?? []);
+        }
         const status = message.frame.goal?.status ?? null;
         if (
           status !== null &&
@@ -419,6 +447,7 @@ export function App() {
     w: () => toggleOverlay('wind'),
     c: () => toggleOverlay('currents'),
     p: () => toggleOverlay('isobars'),
+    i: () => toggleOverlay('icons'),
     e: () => toggleWindow('geosphere'),
     a: () => toggleWindow('atmosphere'),
     b: () => toggleWindow('biosphere'),
@@ -466,7 +495,12 @@ export function App() {
         content: (
           <>
             <CivilizationPanel civilization={frame.civilization} />
-            <EventLog events={frame.events} />
+            <EventLog
+              events={frame.events}
+              onCentre={(cell) =>
+                setCentreRequest((current) => ({ cell, serial: (current?.serial ?? 0) + 1 }))
+              }
+            />
           </>
         ),
       },
@@ -558,11 +592,17 @@ export function App() {
                   temperatureMonth={temperatureMonth}
                   cellLife={cellLife}
                   onInspect={inspectCell}
+                  centreRequest={centreRequest}
+                  onVisibleIconsChange={visibleIconsChanged}
                   onCellClick={(x, y) => {
                     if (tool) send({ type: 'tool', use: { tool, x, y, lifeClass } });
                   }}
                 />
-                <MapLegend layer={shownLayer} />
+                <MapLegend
+                  layer={shownLayer}
+                  iconsOn={overlays.includes('icons')}
+                  visibleIcons={visibleMapIcons}
+                />
               </figure>
               {notice && (
                 <p className="notice" role="status">

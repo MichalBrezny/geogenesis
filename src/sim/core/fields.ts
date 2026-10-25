@@ -41,6 +41,8 @@ export const FIELD_SPECS = {
   vegetation: { type: 'f32', unit: '' },
   /** Most advanced tier of life present (index into LIFE_TIERS + 1; 0 = lifeless). */
   lifeTier: { type: 'i32', unit: '' },
+  /** Dominant life class by population (index into LIFE_CLASSES; -1 = lifeless). */
+  dominantClass: { type: 'i32', unit: '' },
   /** Number of life classes present in the cell (derived for the Diversity layer). */
   diversity: { type: 'i32', unit: '' },
   /** Density of the sentient civilization, as a fraction of PEOPLE_PER_KM2. */
@@ -105,5 +107,7 @@ export function createFields(cellCount: number): Fields {
     fields[name] =
       FIELD_SPECS[name].type === 'i32' ? new Int32Array(cellCount) : new Float32Array(cellCount);
   }
-  return fields as Fields;
+  const created = fields as Fields;
+  created.dominantClass.fill(-1);
+  return created;
 }

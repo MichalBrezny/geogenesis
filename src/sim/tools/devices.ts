@@ -70,7 +70,7 @@ export function destroyDevicesNear(state: PlanetState, cell: number, radius: num
   const kept: Device[] = [];
   for (const device of state.devices) {
     if (cellDistance(state, device.cell, cell) <= radius) {
-      recordEvent(state, 'deviceDestroyed', device.kind);
+      recordEvent(state, 'deviceDestroyed', device.kind, state.globals.year, device.cell);
     } else {
       kept.push(device);
     }

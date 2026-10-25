@@ -8,6 +8,7 @@ import {
   ABIOGENESIS_TIME,
   abiogenesisProbability,
   createLife,
+  dominantClassForCell,
   evolutionTimeYears,
   seedPrimordialLife,
 } from './life';
@@ -36,6 +37,20 @@ const population = (planet: PlanetState, key: Parameters<typeof lifeClassIndex>[
   planet.biota.populations[lifeClassIndex(key) * planet.grid.cellCount + i]!;
 
 describe('life', () => {
+  it('selects the dominant class, preferring a more advanced class with a quarter of its population', () => {
+    const populations = new Float32Array(LIFE_CLASSES.length);
+    populations[lifeClassIndex('prokaryotes')] = 0.8;
+    populations[lifeClassIndex('fish')] = 0.21;
+    expect(dominantClassForCell(populations, 1, 0)).toBe(lifeClassIndex('fish'));
+
+    populations[lifeClassIndex('fish')] = 0.19;
+    expect(dominantClassForCell(populations, 1, 0)).toBe(lifeClassIndex('prokaryotes'));
+  });
+
+  it('uses -1 for a lifeless cell', () => {
+    expect(dominantClassForCell(new Float32Array(LIFE_CLASSES.length), 1, 0)).toBe(-1);
+  });
+
   it('starts with prokaryotes in the ocean only', () => {
     const planet = waterWorld();
     seedPrimordialLife(planet);

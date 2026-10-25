@@ -46,6 +46,7 @@ export const RENDERED_FIELDS = [
   'biome',
   'vegetation',
   'lifeTier',
+  'dominantClass',
   'diversity',
   'civilization',
 ] as const;

@@ -148,6 +148,7 @@ function applyNaturalImpact(
       'impact',
       `${diameterKm.toFixed(0)} km · ${formatLocation(state, centre)}`,
       eventYear,
+      centre,
     );
   }
 }
