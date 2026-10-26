@@ -91,6 +91,11 @@ export const EVENT_ICON_PATHS: Record<EventKey, string> = {
     'M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm-4 5 4 4 4-4 2 2-4 4 4 4-2 2-4-4-4 4-2-2 4-4-4-4Z',
   deviceDestroyed: 'M4 3 21 20l-2 2L2 5Zm8 5 2-5 3 2-1 5 5 1v4l-3 1-3-3-3 3-4-2 2-4Z',
   iceMeteor: 'M3 20a4 4 0 0 1 5-6L20 2l2 2-10 13a5 5 0 0 1-9 3Zm4-7v10m-4-7 8 5m-8 0 8-5Z',
+  earthquake: 'M2 18 7 13l3 3 3-9 3 6 6-5v13H2Zm4-11 4-4 2 5 3-6 3 5',
+  tsunami:
+    'M1 15c3-5 7-7 12-7 4 0 7 2 10 5-5-1-8 1-8 5-5-5-9-4-14 0Zm1 5c3-3 6-3 9 0s7 3 11 0v3H2Z',
+  cyclone: 'M12 10c-5-1-7-5-5-8-3 5-1 10 5 12 5 1 7 5 5 8 3-5 1-10-5-12-5-1-7-5-5-8-3 5-1 10 5 12Z',
+  drought: 'M2 21 7 12l4 4 3-3 8 8Zm15-19a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm0-2v2m0 8v2m-6-6h2m8 0h2',
 };
 
 export interface IconSample {
@@ -303,6 +308,10 @@ const EVENT_COLORS: Partial<Record<EventKey, string>> = {
   sentience: '#fff09a',
   monolith: '#d7c0ff',
   deviceDestroyed: '#ff7777',
+  earthquake: '#ffb066',
+  tsunami: '#70c9ea',
+  cyclone: '#a9d4e8',
+  drought: '#d9b35f',
 };
 
 /** Recent located events, oldest and faintest first, with a contrasting ring. */

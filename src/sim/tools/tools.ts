@@ -8,6 +8,8 @@ import { classSuitability } from '../models/biosphere/life';
 import { makeSentient } from '../models/civilization/civilization';
 import { applyImpactCrater } from '../models/geosphere/impacts';
 import { destroyDevicesNear, placeDevice, type DeviceKind } from './devices';
+import { addDustPulse, DUST_SOOT } from '../models/atmosphere/dust';
+import { damageCivilizationNear, strikeCyclone, strikeTsunami } from '../models/disasters';
 
 /** Player interventions and their cost in Ω, after SimEarth's tool palette. */
 export const TOOLS = {
@@ -25,6 +27,10 @@ export const TOOLS = {
   o2Generator: { cost: 300 },
   co2Scrubber: { cost: 400 },
   biomeFactory: { cost: 500 },
+  earthquake: { cost: 180 },
+  hurricane: { cost: 120 },
+  tidalWave: { cost: 140 },
+  fire: { cost: 80 },
 } as const;
 export type ToolId = keyof typeof TOOLS;
 export const TOOL_IDS = Object.keys(TOOLS) as ToolId[];
@@ -36,6 +42,8 @@ export interface ToolUse {
   y: number;
   /** Class to place, for seedLife. */
   lifeClass?: LifeClassKey;
+  /** Push azimuth clockwise from north, radians (directed earthquake tool). */
+  direction?: number;
 }
 
 export type ToolResult = { ok: true } | { ok: false; reason: 'energy' | 'notAllowed' };
@@ -180,6 +188,28 @@ const TOOL_EFFECTS: Record<ToolId, Effect> = {
   o2Generator: (state, centre) => placeDevice(state, 'o2Generator', centre),
   co2Scrubber: (state, centre) => placeDevice(state, 'co2Scrubber', centre),
   biomeFactory: (state, centre) => placeDevice(state, 'biomeFactory', centre),
+  earthquake(state, centre, use) {
+    shapeEarthquakeBand(state, centre, use.direction ?? 0);
+    damageCivilizationNear(state, centre, 700_000, 0.45);
+    recordEvent(state, 'earthquake', 'M 8.5', state.globals.year, centre);
+    return true;
+  },
+  hurricane: (state, centre) => strikeCyclone(state, centre),
+  tidalWave: (state, centre) => strikeTsunami(state, centre, 1.25),
+  fire(state, centre) {
+    const n = state.grid.cellCount;
+    for (const [i, falloff] of brush(state, centre, 1.3)) {
+      if (state.fields.elevation[i]! < state.globals.seaLevel) continue;
+      const survival = 1 - 0.85 * falloff;
+      state.fields.vegetation[i] = state.fields.vegetation[i]! * survival;
+      for (let c = 0; c < LIFE_CLASSES.length; c++) {
+        if (LIFE_CLASSES[c]!.habitat !== 'land') continue;
+        state.biota.populations[c * n + i] = state.biota.populations[c * n + i]! * survival;
+      }
+    }
+    addDustPulse(state, DUST_SOOT, 0.03, state.globals.year);
+    return true;
+  },
 };
 
 /** Tools that build a device rather than acting once. */
@@ -199,6 +229,51 @@ function shapeTerrain(state: PlanetState, centre: number, amount: number, scale:
     if (elevation[i]! >= state.globals.seaLevel) crustType[i] = 1;
   }
   return true;
+}
+
+/**
+ * Uplifts an elongated 1,400 km range perpendicular to the player's push. The
+ * local tangent basis makes the orientation consistent on the flat map and globe.
+ */
+function shapeEarthquakeBand(state: PlanetState, centre: number, direction: number): void {
+  const { grid } = state;
+  const positions = grid.cellPosition;
+  const c = centre * 3;
+  const cx = positions[c]!;
+  const cy = positions[c + 1]!;
+  const cz = positions[c + 2]!;
+  const longitude = Math.atan2(cy, cx);
+  const latitude = Math.asin(cz);
+  const east: readonly [number, number, number] = [-Math.sin(longitude), Math.cos(longitude), 0];
+  const north: readonly [number, number, number] = [
+    -Math.sin(latitude) * Math.cos(longitude),
+    -Math.sin(latitude) * Math.sin(longitude),
+    Math.cos(latitude),
+  ];
+  const halfLength = 700_000;
+  const halfWidth = Math.max(180_000, grid.dy * 0.65);
+  for (let i = 0; i < grid.cellCount; i++) {
+    const p = i * 3;
+    const dot = Math.max(
+      -1,
+      Math.min(1, cx * positions[p]! + cy * positions[p + 1]! + cz * positions[p + 2]!),
+    );
+    const angle = Math.acos(dot);
+    if (angle * grid.radius > Math.hypot(halfLength, halfWidth)) continue;
+    const tangentLength = Math.sin(angle);
+    const tx = tangentLength > 1e-9 ? (positions[p]! - dot * cx) / tangentLength : 0;
+    const ty = tangentLength > 1e-9 ? (positions[p + 1]! - dot * cy) / tangentLength : 0;
+    const tz = tangentLength > 1e-9 ? (positions[p + 2]! - dot * cz) / tangentLength : 0;
+    const distance = angle * grid.radius;
+    const eastDistance = distance * (tx * east[0] + ty * east[1] + tz * east[2]);
+    const northDistance = distance * (tx * north[0] + ty * north[1] + tz * north[2]);
+    const along = eastDistance * Math.cos(direction) - northDistance * Math.sin(direction);
+    const across = eastDistance * Math.sin(direction) + northDistance * Math.cos(direction);
+    if (Math.abs(along) >= halfLength || Math.abs(across) >= halfWidth) continue;
+    const taper = (1 - Math.abs(along) / halfLength) * (1 - Math.abs(across) / halfWidth);
+    state.fields.elevation[i] = state.fields.elevation[i]! + 1_250 * taper;
+    if (state.fields.elevation[i]! >= state.globals.seaLevel) state.fields.crustType[i] = 1;
+  }
 }
 
 /**

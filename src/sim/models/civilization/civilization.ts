@@ -9,6 +9,7 @@ import { addDustPulse, DUST_SOOT } from '../atmosphere/dust';
 import { classSuitability } from '../biosphere/life';
 import { disperse } from '../dispersal';
 import { isOcean } from '../geosphere/seaLevel';
+import { droughtFoodMultiplier } from '../disasters';
 
 export interface CivilizationOptions {
   /** Mean years for a fully established, most capable class to become sentient. */
@@ -199,7 +200,7 @@ function carryingCapacity(state: PlanetState, species: number): Float32Array {
     const food = ocean
       ? biota.populations[algae * n + i]!
       : PLANT_PRODUCTIVITY[fields.biome[i] as Biome] * biota.populations[plants * n + i]!;
-    capacity[i] = capacity[i]! * food * foodUse;
+    capacity[i] = capacity[i]! * food * foodUse * droughtFoodMultiplier(state, i);
   }
   return capacity;
 }

@@ -25,6 +25,7 @@ import { DEFAULT_CONTROLS } from '../sim/core/planet';
 import { PlanetPanel } from './PlanetPanel';
 import { GoalOutcome, GoalPanel } from './GoalPanel';
 import type { VisibleMapIcons } from '../render/mapIcons';
+import { DisasterPanel } from './DisasterPanel';
 
 /** How long a tool notice stays on screen, ms. */
 const NOTICE_DURATION = 3000;
@@ -94,6 +95,7 @@ const SCENARIO_VIEW: Record<
       'life',
       'diversity',
       'civilization',
+      'hazard',
     ],
     layer: 'terrain',
   },
@@ -138,6 +140,7 @@ const SCENARIO_VIEW: Record<
       'biomes',
       'diversity',
       'civilization',
+      'hazard',
     ],
     layer: 'life',
   },
@@ -175,13 +178,13 @@ const SCENARIO_VIEW: Record<
   stoneAge: {
     overlays: ['icons'],
     charts: ['meanTemperature', 'co2', 'o2', 'biodiversity', 'iceFraction', 'seaLevel'],
-    layers: ['civilization', 'terrain', 'life', 'biomes', 'airTemperature', 'diversity'],
+    layers: ['civilization', 'hazard', 'terrain', 'life', 'biomes', 'airTemperature', 'diversity'],
     layer: 'civilization',
   },
   cambrian: {
     overlays: ['icons'],
     charts: ['livingClasses', 'biodiversity', 'o2', 'meanTemperature', 'co2', 'iceFraction'],
-    layers: ['life', 'diversity', 'terrain', 'biomes', 'airTemperature', 'nutrients'],
+    layers: ['life', 'diversity', 'hazard', 'terrain', 'biomes', 'airTemperature', 'nutrients'],
     layer: 'life',
   },
   brighteningSun: {
@@ -195,13 +198,22 @@ const SCENARIO_VIEW: Record<
       'seaLevel',
       'solarInput',
     ],
-    layers: ['life', 'terrain', 'airTemperature', 'clouds', 'biomes', 'diversity', 'civilization'],
+    layers: [
+      'life',
+      'terrain',
+      'airTemperature',
+      'clouds',
+      'biomes',
+      'diversity',
+      'civilization',
+      'hazard',
+    ],
     layer: 'life',
   },
   snowball: {
     overlays: ['icons'],
     charts: ['meanTemperature', 'co2', 'iceFraction', 'water', 'seaLevel', 'solarInput'],
-    layers: ['airTemperature', 'terrain', 'clouds', 'precipitation', 'biomes', 'life'],
+    layers: ['airTemperature', 'terrain', 'clouds', 'precipitation', 'biomes', 'life', 'hazard'],
     layer: 'airTemperature',
   },
   cradle: {
@@ -215,7 +227,7 @@ const SCENARIO_VIEW: Record<
       'iceFraction',
       'solarInput',
     ],
-    layers: ['life', 'diversity', 'biomes', 'terrain', 'airTemperature', 'civilization'],
+    layers: ['life', 'diversity', 'biomes', 'terrain', 'airTemperature', 'civilization', 'hazard'],
     layer: 'life',
   },
 };
@@ -545,6 +557,12 @@ export function App() {
               onUnlimitedEnergyChange={(enabled) => send({ type: 'unlimitedEnergy', enabled })}
             />
           </Collapsible>
+          <Collapsible title={t('disasters.title')}>
+            <DisasterPanel
+              disasters={frame.disasters}
+              onChange={(disasters) => send({ type: 'disasters', disasters })}
+            />
+          </Collapsible>
           <nav className="window-launchers" aria-label={t('window.launchers')}>
             {FLOATING_WINDOWS.map((id) => {
               const pressed = windowOpen[id] && (!narrowWindows || activeWindow === id);
@@ -587,15 +605,25 @@ export function App() {
                   frame={frame}
                   layer={shownLayer}
                   view={view}
-                  toolActive={tool !== null}
+                  tool={tool}
                   overlays={frame.scenario === 'daisyworld' ? [] : overlays}
                   temperatureMonth={temperatureMonth}
                   cellLife={cellLife}
                   onInspect={inspectCell}
                   centreRequest={centreRequest}
                   onVisibleIconsChange={visibleIconsChanged}
-                  onCellClick={(x, y) => {
-                    if (tool) send({ type: 'tool', use: { tool, x, y, lifeClass } });
+                  onCellClick={(x, y, direction) => {
+                    if (tool)
+                      send({
+                        type: 'tool',
+                        use: {
+                          tool,
+                          x,
+                          y,
+                          lifeClass,
+                          ...(direction === undefined ? {} : { direction }),
+                        },
+                      });
                   }}
                 />
                 <MapLegend

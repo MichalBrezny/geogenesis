@@ -7,6 +7,7 @@ import {
   clathratePalette,
   diversityPalette,
   elevationPalette,
+  hazardPalette,
   nutrientPalette,
   oceanOxygenPalette,
   precipitationPalette,
@@ -49,6 +50,7 @@ export const RENDERED_FIELDS = [
   'dominantClass',
   'diversity',
   'civilization',
+  'hazard',
 ] as const;
 export interface MapSource {
   grid: Pick<Grid, 'width' | 'height' | 'cellCount'>;
@@ -77,6 +79,7 @@ export const MAP_LAYERS = [
   'life',
   'diversity',
   'civilization',
+  'hazard',
   'daisies',
 ] as const;
 export type MapLayer = (typeof MAP_LAYERS)[number];
@@ -179,6 +182,11 @@ const layerColors: Record<MapLayer, CellColor> = {
     // Log scale: stone-age bands and industrial cities differ by orders of magnitude.
     const t = Math.min(1, Math.max(0.15, (Math.log10(density) + 5) / 5));
     return mix(base, CIVILIZATION_COLOR, t);
+  },
+  hazard(state, i) {
+    const risk = state.fields.hazard[i]!;
+    const color = hazardPalette(risk);
+    return state.fields.elevation[i]! < state.seaLevel ? mix(color, [18, 31, 52], 0.55) : color;
   },
   life(state, i) {
     return LIFE_TIER_COLORS[state.fields.lifeTier[i]!]!;

@@ -47,6 +47,8 @@ export const FIELD_SPECS = {
   diversity: { type: 'i32', unit: '' },
   /** Density of the sentient civilization, as a fraction of PEOPLE_PER_KM2. */
   civilization: { type: 'f32', unit: '' },
+  /** Combined annual natural-disaster risk to people, displayed as a 0..1 index. */
+  hazard: { type: 'f32', unit: '' },
   /** Fraction of the cell covered by white daisies (Daisyworld), 0..1. */
   daisyWhite: { type: 'f32', unit: '' },
   /** Fraction of the cell covered by black daisies (Daisyworld), 0..1. */
