@@ -373,6 +373,29 @@ export const DEFAULT_CONTROLS: Readonly<ModelControls> = {
   thermalTolerance: 1,
 };
 
+/** Natural hazards the player may independently enable or suppress. */
+export interface DisasterSettings {
+  earthquakes: boolean;
+  tsunamis: boolean;
+  cyclones: boolean;
+  droughts: boolean;
+  dustStorms: boolean;
+  /** Natural Poisson impacts; player meteor tools are never gated by this. */
+  impacts: boolean;
+  /** Large eruptions and LIPs; ordinary volcanic activity and outgassing continue. */
+  supervolcanoes: boolean;
+}
+
+export const DEFAULT_DISASTERS: Readonly<DisasterSettings> = {
+  earthquakes: true,
+  tsunamis: true,
+  cyclones: true,
+  droughts: true,
+  dustStorms: true,
+  impacts: true,
+  supervolcanoes: true,
+};
+
 /** Complete simulation state. Must stay plain data so it can be serialized and sent to a worker. */
 export interface PlanetState {
   grid: Grid;
@@ -388,6 +411,7 @@ export interface PlanetState {
   /** Notable moments, most recent last (see events.ts). */
   events: PlanetEvent[];
   controls: ModelControls;
+  disasters: DisasterSettings;
   /** Scenario objective and evaluator memory; sandbox worlds have no goal. */
   goal: GoalState | null;
   /** Terraforming devices the player has built (see tools/devices.ts). */
@@ -396,6 +420,8 @@ export interface PlanetState {
   lastRunYear: Record<string, number>;
   seed: number;
   rngState: number;
+  /** Independent stream for notable disaster events, so hazards never perturb the main stream. */
+  disasterRngState: number;
 }
 
 export interface PlanetOptions {
@@ -525,10 +551,12 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
     },
     events: [],
     controls: { ...DEFAULT_CONTROLS },
+    disasters: { ...DEFAULT_DISASTERS },
     goal: null,
     devices: [],
     lastRunYear: {},
     seed,
     rngState: seed,
+    disasterRngState: (seed ^ 0x64697361) >>> 0,
   };
 }

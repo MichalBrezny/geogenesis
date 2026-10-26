@@ -66,6 +66,11 @@ export class SimHost {
           );
           this.sendFrame();
           break;
+        case 'disasters':
+          if (!this.world) break;
+          Object.assign(this.world.planet.disasters, request.disasters);
+          this.sendFrame();
+          break;
         case 'inspect':
           if (!this.world) break;
           this.post(
@@ -179,6 +184,7 @@ export class SimHost {
       energy: planet.globals.energy,
       unlimitedEnergy: planet.globals.unlimitedEnergy,
       controls: { ...planet.controls },
+      disasters: { ...planet.disasters },
       devices: planet.devices.map((device) => ({ ...device })),
       biosignature: biosignature(planet.globals.atmosphere),
       goal: planet.goal

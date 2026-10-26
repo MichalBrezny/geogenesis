@@ -1,6 +1,7 @@
 import type { MapSource } from '../render/mapRenderer';
 import type {
   CivilizationState,
+  DisasterSettings,
   ModelControls,
   PlanetParameters,
   TectonicRegime,
@@ -36,6 +37,7 @@ export type WorkerRequest =
   | { type: 'step' }
   | { type: 'tool'; use: ToolUse }
   | { type: 'controls'; controls: Partial<ModelControls> }
+  | { type: 'disasters'; disasters: Partial<DisasterSettings> }
   | { type: 'unlimitedEnergy'; enabled: boolean }
   | { type: 'save' }
   /** Ask for the life in one cell (the inspected one); answered with a `cellLife` response. */
@@ -78,6 +80,7 @@ export interface Frame extends MapSource {
   energy: number;
   unlimitedEnergy: boolean;
   controls: ModelControls;
+  disasters: DisasterSettings;
   /** Scenario goal state plus its live, presentation-ready checklist. */
   goal: FrameGoal | null;
   /** Terraforming devices standing on the map. */

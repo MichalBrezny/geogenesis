@@ -141,3 +141,12 @@ export const clathratePalette = gradient([
   { value: 75, color: [91, 175, 168] },
   { value: 100, color: [194, 226, 180] },
 ]);
+
+/** Combined disaster-risk index: quiet blue through warning amber to severe red. */
+export const hazardPalette = gradient([
+  { value: 0, color: [25, 43, 67] },
+  { value: 0.1, color: [54, 112, 133] },
+  { value: 0.3, color: [222, 190, 82] },
+  { value: 0.6, color: [224, 105, 55] },
+  { value: 1, color: [151, 32, 45] },
+]);

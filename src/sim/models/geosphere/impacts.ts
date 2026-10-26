@@ -5,6 +5,7 @@ import { recordEvent } from '../../events';
 import { destroyDevicesNear } from '../../tools/devices';
 import { addDustPulse, DUST_FINE, DUST_SOOT, DUST_SULFATE } from '../atmosphere/dust';
 import { samplePoisson } from './volcanism';
+import { strikeTsunami } from '../disasters';
 
 /** E-folding time of the remnant planetesimal population after formation. */
 export const IMPACT_FLUX_DECAY_TIME = 150e6;
@@ -88,6 +89,13 @@ export const impactModel: SimComponent = {
     let integratedHeat = state.geosphere.impactHeat * IMPACT_HEAT_TIME * (1 - decay);
     let endHeat = state.geosphere.impactHeat * decay;
 
+    if (!state.disasters.impacts) {
+      state.globals.impactFlux = 0;
+      state.geosphere.impactHeat = endHeat;
+      state.globals.impactHeating = integratedHeat / dt;
+      return;
+    }
+
     const count = samplePoisson(expectedImpactCount(start, dt), rng);
     state.globals.impactsThisStep = count;
     state.geosphere.impactCount += count;
@@ -138,6 +146,9 @@ function applyNaturalImpact(
   addDustPulse(state, DUST_SULFATE, sulfate, eventYear);
   addDustPulse(state, DUST_SOOT, soot, eventYear);
   applyImpactCrater(state, centre, diameterKm);
+  if (ocean && state.disasters.tsunamis && state.civilization.species !== null) {
+    strikeTsunami(state, centre, Math.min(2, diameterKm / 180));
+  }
   // The blast flattens any terraforming device within ten crater radii.
   destroyDevicesNear(state, centre, Math.max(DEVICE_BLAST_MIN, diameterKm * 5_000));
   if (rng.next() < COMET_FRACTION) deliverWater(state, diameterKm, 1);

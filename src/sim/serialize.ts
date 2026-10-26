@@ -1,4 +1,9 @@
-import { DEFAULT_CONTROLS, EARTH_PLANET_PARAMETERS, type PlanetState } from './core/planet';
+import {
+  DEFAULT_CONTROLS,
+  DEFAULT_DISASTERS,
+  EARTH_PLANET_PARAMETERS,
+  type PlanetState,
+} from './core/planet';
 import { HISTORY_SERIES } from './history';
 import { LIFE_CLASSES } from './data/lifeClasses';
 import type { RandomWorldSettings } from './world';
@@ -130,6 +135,7 @@ function hydrateAddedState(planet: PlanetState): void {
   planet.fields.lakeDepth ??= new Float32Array(planet.grid.cellCount);
   planet.fields.lakeType ??= new Int32Array(planet.grid.cellCount);
   planet.fields.volcanicActivity ??= new Float32Array(planet.grid.cellCount);
+  planet.fields.hazard ??= new Float32Array(planet.grid.cellCount);
   planet.globals.atmosphere.n2 ??= 0.78084;
   planet.globals.atmosphere.inert ??= 0.00934;
   planet.globals.atmosphere.waterVapor ??= 0.0025;
@@ -216,6 +222,11 @@ function hydrateAddedState(planet: PlanetState): void {
   planet.controls.advanceRate ??= DEFAULT_CONTROLS.advanceRate;
   planet.controls.reproduction ??= DEFAULT_CONTROLS.reproduction;
   planet.controls.thermalTolerance ??= DEFAULT_CONTROLS.thermalTolerance;
+  planet.disasters ??= { ...DEFAULT_DISASTERS };
+  for (const key of Object.keys(DEFAULT_DISASTERS) as (keyof typeof DEFAULT_DISASTERS)[]) {
+    planet.disasters[key] ??= DEFAULT_DISASTERS[key];
+  }
+  planet.disasterRngState ??= (planet.seed ^ 0x64697361) >>> 0;
   planet.goal ??= null;
   planet.devices ??= [];
   if (missingPlanetParams) planet.planetParams.initialWaterGel = planet.globals.initialWater;

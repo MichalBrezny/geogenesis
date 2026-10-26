@@ -12,6 +12,7 @@ import {
   cloudPalette,
   diversityPalette,
   elevationPalette,
+  hazardPalette,
   nutrientPalette,
   oceanOxygenPalette,
   precipitationPalette,
@@ -130,6 +131,13 @@ const SCALES: Partial<Record<MapLayer, Scale>> = {
     max: 100,
     ticks: [0, 20, 50, 75, 100],
     unit: '% local capacity',
+  },
+  hazard: {
+    palette: hazardPalette,
+    min: 0,
+    max: 1,
+    ticks: [0, 0.1, 0.3, 0.6, 1],
+    unit: 'risk index',
   },
 };
 

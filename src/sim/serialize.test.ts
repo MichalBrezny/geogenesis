@@ -106,6 +106,9 @@ describe('save files', () => {
     delete (planet.geosphere as Partial<typeof planet.geosphere>).plateRngState;
     delete (planet.geosphere as Partial<typeof planet.geosphere>).sliverCleanupElapsedYears;
     delete (planet as Partial<typeof planet>).goal;
+    delete (planet as Partial<typeof planet>).disasters;
+    delete (planet as Partial<typeof planet>).disasterRngState;
+    delete (planet.fields as Partial<typeof planet.fields>).hazard;
     const loaded = deserializeGame(serializeGame({ scenario: 'random', planet }));
     expect(loaded.planet.globals.seaLevel).toBe(0);
     expect(loaded.planet.globals.sedimentExport).toBe(0);
@@ -148,6 +151,9 @@ describe('save files', () => {
     expect(loaded.planet.geosphere.plateRngState).toBe((planet.seed ^ 0x7f4a7c15) >>> 0);
     expect(loaded.planet.geosphere.sliverCleanupElapsedYears).toBe(0);
     expect(loaded.planet.goal).toBeNull();
+    expect(Object.values(loaded.planet.disasters).every(Boolean)).toBe(true);
+    expect(loaded.planet.disasterRngState).toBe((planet.seed ^ 0x64697361) >>> 0);
+    expect(loaded.planet.fields.hazard).toEqual(new Float32Array(planet.grid.cellCount));
     const restored = restoreScenario('random', loaded.planet, loaded.settings);
     expect(() => restored.simulation.step(restored.planet, 5)).not.toThrow();
   });

@@ -105,4 +105,58 @@ describe('tools', () => {
 
     expect(split.globals.energy).toBeCloseTo(oneStep.globals.energy, 10);
   });
+
+  it('orients the earthquake uplift band perpendicular to the drag direction', () => {
+    const state = planet();
+    state.fields.elevation.fill(0);
+    const x = 32;
+    const y = 16;
+    expect(applyTool(state, { tool: 'earthquake', x, y, direction: Math.PI / 2 }).ok).toBe(true);
+    const north = state.fields.elevation[cellIndex(state.grid, x, y - 1)]!;
+    const east = state.fields.elevation[cellIndex(state.grid, x + 1, y)]!;
+    expect(north).toBeGreaterThan(east);
+    expect(north).toBeGreaterThan(0);
+  });
+
+  it('drives a hurricane along the wind from a sea or coast', () => {
+    const state = planet();
+    state.fields.elevation.fill(100);
+    state.fields.windU.fill(8);
+    for (let y = 0; y < state.grid.height; y++) {
+      for (let x = 0; x < 32; x++) state.fields.elevation[cellIndex(state.grid, x, y)] = -100;
+    }
+    const coast = cellIndex(state.grid, 32, 16);
+    state.fields.civilization[coast] = 0.8;
+    expect(applyTool(state, { tool: 'hurricane', x: 31, y: 16 }).ok).toBe(true);
+    expect(state.fields.civilization[coast]).toBeLessThan(0.8);
+  });
+
+  it('sends a tidal wave from ocean onto low settled coasts', () => {
+    const state = planet();
+    state.fields.elevation.fill(20);
+    for (let y = 0; y < state.grid.height; y++) {
+      for (let x = 0; x < 32; x++) state.fields.elevation[cellIndex(state.grid, x, y)] = -100;
+    }
+    const coast = cellIndex(state.grid, 32, 16);
+    state.fields.civilization[coast] = 0.8;
+    expect(applyTool(state, { tool: 'tidalWave', x: 30, y: 16 }).ok).toBe(true);
+    expect(state.fields.civilization[coast]).toBeLessThan(0.8);
+  });
+
+  it('burns land vegetation and land life, leaves sea life alone, and adds soot', () => {
+    const state = planet();
+    state.fields.elevation.fill(100);
+    state.fields.vegetation.fill(0.8);
+    const centre = cellIndex(state.grid, 20, 16);
+    const mammals = lifeClassIndex('mammals');
+    const fish = lifeClassIndex('fish');
+    const n = state.grid.cellCount;
+    state.biota.populations[mammals * n + centre] = 0.8;
+    state.biota.populations[fish * n + centre] = 0.8;
+    expect(applyTool(state, { tool: 'fire', x: 20, y: 16 }).ok).toBe(true);
+    expect(state.fields.vegetation[centre]).toBeLessThan(0.8);
+    expect(state.biota.populations[mammals * n + centre]).toBeLessThan(0.8);
+    expect(state.biota.populations[fish * n + centre]).toBeCloseTo(0.8, 6);
+    expect(state.globals.dustSources.length).toBeGreaterThan(0);
+  });
 });

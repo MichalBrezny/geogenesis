@@ -171,7 +171,7 @@ export const eruptionModel: SimComponent = {
     }
 
     // Aerosols only matter when the time step resolves their roughly annual lifetime.
-    if (dt <= MAX_AEROSOL_STEP) {
+    if (state.disasters.supervolcanoes && dt <= MAX_AEROSOL_STEP) {
       const count = samplePoisson((dt / LARGE_ERUPTION_INTERVAL) * meanActivity, rng);
       if (count > 0) {
         const pulse = count * (1.5 + rng.next() * 1.5);
@@ -185,8 +185,15 @@ export const eruptionModel: SimComponent = {
       }
     }
 
-    createLips(state, dt, meanActivity, rng);
-    releaseLipCarbon(state, dt);
+    if (state.disasters.supervolcanoes) {
+      createLips(state, dt, meanActivity, rng);
+      releaseLipCarbon(state, dt);
+    } else {
+      globals.lipOutgassing = 0;
+      state.geosphere.activeLips = state.geosphere.activeLips.filter(
+        (lip) => lip.endYear > state.globals.year + dt,
+      );
+    }
   },
 };
 

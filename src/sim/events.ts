@@ -40,7 +40,11 @@ export type EventKey =
   | 'goalWon'
   | 'goalLost'
   | 'deviceDestroyed'
-  | 'iceMeteor';
+  | 'iceMeteor'
+  | 'earthquake'
+  | 'tsunami'
+  | 'cyclone'
+  | 'drought';
 
 /** Only the most recent events are kept. */
 export const MAX_EVENTS = 100;

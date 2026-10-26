@@ -46,6 +46,7 @@ import { updateSurfacePressure } from './models/atmosphere/atmosphere';
 import { starProperties } from './models/atmosphere/star';
 import { goalTracker } from './goals/goals';
 import { terraformDevices } from './tools/devices';
+import { disasterModel } from './models/disasters';
 
 export interface WorldOptions extends PlanetOptions {
   /** Preset age and biosphere for a new random planet. Defaults to `young`. */
@@ -186,6 +187,7 @@ export function randomWorldFromPlanet(
       withMinInterval(tectonicUplift, SLOW_PROCESS_INTERVAL),
       withMinInterval(volcanicActivityModel, SLOW_PROCESS_INTERVAL),
       eruptionModel,
+      disasterModel,
       dustModel,
       withMinInterval(flowRouting, SLOW_PROCESS_INTERVAL),
       withMinInterval(createStreamPowerEroder(), SLOW_PROCESS_INTERVAL),
@@ -235,6 +237,8 @@ export function randomWorldFromPlanet(
       'lowCloud',
       'precipitation',
       'oceanAnomaly',
+      'windU',
+      'windV',
       'elevation',
       'upliftRate',
       'plateId',
@@ -243,8 +247,12 @@ export function randomWorldFromPlanet(
       'daisyBlack',
       'biome',
       'vegetation',
+      'civilization',
     ],
   );
+  // Goal scenarios can establish a civilization before rebuilding this pipeline;
+  // derive their hazard layer immediately without advancing time or sampling events.
+  disasterModel.runOneStep(planet, 0, createRng(0));
   return {
     planet,
     simulation,

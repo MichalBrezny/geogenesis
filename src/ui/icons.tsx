@@ -5,6 +5,7 @@ import type { Overlay, View } from './PlanetView';
 import type { ControlGroupId } from './ControlsPanel';
 import { EVENT_ICON_PATHS } from '../render/mapIcons';
 import type { EventKey } from '../sim/events';
+import type { DisasterSettings } from '../sim/core/planet';
 
 /**
  * Line icons drawn on a 24-unit grid in the current text colour, so they follow
@@ -55,6 +56,11 @@ export function EventIcon({ eventKey }: { eventKey: EventKey }) {
 const MOUNTAIN = 'M2 20 8 10l4 6 3-4 7 8Z';
 const FACTORY = 'M3 21V12l5 3v-3l5 3V9h4v12Z';
 const CLOUD = 'M7 18h10a4 4 0 0 0 .6-7.95A5.5 5.5 0 0 0 7.1 9.5 4.25 4.25 0 0 0 7 18Z';
+const QUAKE = 'M2 18 7 13l3 3 3-9 3 6 6-5M3 21h18';
+const WAVE = 'M2 16c3-4 6-4 9 0s6 4 11 0M2 20c3-4 6-4 9 0s6 4 11 0';
+const CYCLONE = 'M12 12c-5-1-7-5-5-8m5 8c1-5 5-7 8-5m-8 5c5 1 7 5 5 8m-5-8c-1 5-5 7-8 5';
+const FIRE =
+  'M12 22c-5 0-8-3-7-8 1-4 5-6 5-11 4 3 7 7 7 11 0 5-3 8-7 8Zm0-3c-2 0-3-2-2-4l2-4c2 2 3 4 2 6 0 1-1 2-2 2Z';
 
 export const TOOL_ICONS: Record<ToolId, ReactNode> = {
   raise: (
@@ -141,6 +147,28 @@ export const TOOL_ICONS: Record<ToolId, ReactNode> = {
       <path d="M12 21v-6m0 2c-2 0-3-1.5-3-3.5 2 0 3 1.5 3 3.5Zm0-1c2 0 3-1.5 3-3.5-2 0-3 1.5-3 3.5Z" />
     </Icon>
   ),
+  earthquake: (
+    <Icon>
+      <path d={QUAKE} />
+      <path d="M5 5h14m-3-3 3 3-3 3" />
+    </Icon>
+  ),
+  hurricane: (
+    <Icon>
+      <path d={CYCLONE} />
+    </Icon>
+  ),
+  tidalWave: (
+    <Icon>
+      <path d={WAVE} />
+      <path d="M3 12c4-8 10-9 18-5-5 0-7 3-7 6" />
+    </Icon>
+  ),
+  fire: (
+    <Icon>
+      <path d={FIRE} />
+    </Icon>
+  ),
 };
 
 export const LAYER_ICONS: Record<MapLayer, ReactNode> = {
@@ -210,6 +238,12 @@ export const LAYER_ICONS: Record<MapLayer, ReactNode> = {
       <path d="M11 8h1m-1 4h1m-1 4h1" />
     </Icon>
   ),
+  hazard: (
+    <Icon>
+      <path d="M12 2 2 21h20Z" />
+      <path d="M12 8v6m0 3v.5" />
+    </Icon>
+  ),
   clouds: (
     <Icon>
       <path d={CLOUD} />
@@ -250,6 +284,37 @@ export const LAYER_ICONS: Record<MapLayer, ReactNode> = {
       <path d="M12 9.5a3 3 0 1 1 0-6 3 3 0 1 1 0 6Zm0 5a3 3 0 1 1 0 6 3 3 0 1 1 0-6Zm-2.5-2.5a3 3 0 1 1-6 0 3 3 0 1 1 6 0Zm5 0a3 3 0 1 1 6 0 3 3 0 1 1-6 0Z" />
     </Icon>
   ),
+};
+
+export const DISASTER_ICONS: Record<keyof DisasterSettings, ReactNode> = {
+  earthquakes: (
+    <Icon>
+      <path d={QUAKE} />
+    </Icon>
+  ),
+  tsunamis: (
+    <Icon>
+      <path d={WAVE} />
+    </Icon>
+  ),
+  cyclones: (
+    <Icon>
+      <path d={CYCLONE} />
+    </Icon>
+  ),
+  droughts: (
+    <Icon>
+      <circle cx="17" cy="7" r="3" />
+      <path d="M3 21 8 12l3 4 3-3 7 8M17 1v2m0 8v2m-6-6h2m8 0h2" />
+    </Icon>
+  ),
+  dustStorms: (
+    <Icon>
+      <path d="M2 8h12c4 0 4-5 1-5-2 0-2 2-2 2M2 13h17c4 0 4 5 1 5-2 0-2-2-2-2M2 18h10" />
+    </Icon>
+  ),
+  impacts: TOOL_ICONS.meteor,
+  supervolcanoes: TOOL_ICONS.volcano,
 };
 
 export const OVERLAY_ICONS: Record<Overlay, ReactNode> = {

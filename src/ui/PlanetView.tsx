@@ -53,6 +53,7 @@ import { MAP_ICONS } from './icons';
 import { Minimap } from './Minimap';
 import { useShortcuts } from './shortcuts';
 import type { CellLife } from '../sim/models/biosphere/diversity';
+import type { ToolId } from '../sim/tools/tools';
 
 /** Ways to look at the planet. */
 export const VIEWS = ['map', 'globe'] as const;
@@ -147,10 +148,10 @@ interface Props {
   frame: Frame;
   layer: MapLayer;
   view: View;
-  /** Whether clicking applies a tool (changes the cursor). */
-  toolActive: boolean;
+  /** Selected player tool; earthquake turns a drag into a directed push. */
+  tool: ToolId | null;
   /** Called with the grid cell the player clicked. */
-  onCellClick: (x: number, y: number) => void;
+  onCellClick: (x: number, y: number, direction?: number) => void;
   /** Flow and pressure overlays to draw. */
   overlays: readonly Overlay[];
   temperatureMonth: TemperatureMonth;
@@ -169,7 +170,7 @@ export function PlanetView({
   frame,
   layer,
   view,
-  toolActive,
+  tool,
   onCellClick,
   overlays,
   temperatureMonth,
@@ -199,7 +200,21 @@ export function PlanetView({
   const [globeView, setGlobeView] = useState<GlobeView>({ longitude: 180, latitude: 20 });
   const [mapView, setMapView] = useState<MapViewport>(FULL_VIEW);
   const [minimapOn, setMinimapOn] = useState(() => localStorage.getItem(MINIMAP_KEY) !== 'false');
-  const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  const drag = useRef<{
+    x: number;
+    y: number;
+    originX: number;
+    originY: number;
+    startCell: number;
+    moved: boolean;
+  } | null>(null);
+  const suppressClick = useRef(false);
+  const [directionArrow, setDirectionArrow] = useState<{
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+  } | null>(null);
   // The map at 1 pixel per cell; the visible canvas shows the part in view.
   const mapSource = useRef<HTMLCanvasElement | null>(null);
 
@@ -433,6 +448,22 @@ export function PlanetView({
    */
   const onPointerMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
     const start = drag.current;
+    if (tool === 'earthquake' && start && event.buttons & 1) {
+      const dx = event.clientX - start.originX;
+      const dy = event.clientY - start.originY;
+      if (start.moved || Math.hypot(dx, dy) > CLICK_SLOP) {
+        const rect = event.currentTarget.getBoundingClientRect();
+        start.moved = true;
+        setDirectionArrow({
+          x1: start.originX - rect.left,
+          y1: start.originY - rect.top,
+          x2: event.clientX - rect.left,
+          y2: event.clientY - rect.top,
+        });
+        setHovered(null);
+        return;
+      }
+    }
     if ((view === 'globe' || zoomed) && start && event.buttons & 1) {
       const dx = event.clientX - start.x;
       const dy = event.clientY - start.y;
@@ -444,7 +475,7 @@ export function PlanetView({
         } else {
           setMapView((current) => panViewport(current, dx / rect.width, dy / rect.height));
         }
-        drag.current = { x: event.clientX, y: event.clientY, moved: true };
+        drag.current = { ...start, x: event.clientX, y: event.clientY, moved: true };
         setHovered(null);
         return;
       }
@@ -467,6 +498,10 @@ export function PlanetView({
 
   /** Clicks a cell (not at the end of a drag). */
   const onClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (suppressClick.current) {
+      suppressClick.current = false;
+      return;
+    }
     const dragged = drag.current?.moved;
     drag.current = null;
     if (dragged) return;
@@ -474,23 +509,67 @@ export function PlanetView({
     if (index >= 0) onCellClick(index % width, Math.floor(index / width));
   };
 
+  const onMouseUp = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    const start = drag.current;
+    if (tool !== 'earthquake' || !start?.moved || start.startCell < 0) return;
+    const end = cellAt(event);
+    drag.current = null;
+    setDirectionArrow(null);
+    suppressClick.current = true;
+    if (end < 0) return;
+    const direction = bearingBetweenCells(start.startCell, end, width, height);
+    onCellClick(start.startCell % width, Math.floor(start.startCell / width), direction);
+  };
+
   return (
     <>
       <div className={`planet-canvas ${view}-wrap`}>
         <canvas
           ref={canvasRef}
-          className={[view, zoomed ? 'zoomed' : '', toolActive ? 'tool-active' : ''].join(' ')}
+          className={[view, zoomed ? 'zoomed' : '', tool ? 'tool-active' : ''].join(' ')}
           onMouseDown={(event) => {
-            drag.current = { x: event.clientX, y: event.clientY, moved: false };
+            drag.current = {
+              x: event.clientX,
+              y: event.clientY,
+              originX: event.clientX,
+              originY: event.clientY,
+              startCell: cellAt(event),
+              moved: false,
+            };
           }}
+          onMouseUp={onMouseUp}
           onClick={onClick}
           onMouseMove={onPointerMove}
           onMouseLeave={() => {
             drag.current = null;
+            setDirectionArrow(null);
             setHovered(null);
           }}
           aria-label={t(view === 'globe' ? 'map.globeLabel' : 'map.label')}
         />
+        {directionArrow && (
+          <svg className="direction-arrow" aria-hidden="true">
+            <defs>
+              <marker
+                id="direction-arrow-head"
+                markerWidth="8"
+                markerHeight="8"
+                refX="7"
+                refY="4"
+                orient="auto"
+              >
+                <path d="M0 0 8 4 0 8Z" />
+              </marker>
+            </defs>
+            <line
+              x1={directionArrow.x1}
+              y1={directionArrow.y1}
+              x2={directionArrow.x2}
+              y2={directionArrow.y2}
+              markerEnd="url(#direction-arrow-head)"
+            />
+          </svg>
+        )}
         <canvas ref={overlayRef} className="overlay-arrows" aria-hidden="true" />
         <canvas ref={isobarRef} className="overlay-isobars" aria-hidden="true" />
         <div className="map-controls">
@@ -550,5 +629,21 @@ export function PlanetView({
       </div>
       {hovered && <CellInspector frame={frame} cell={hovered} life={cellLife} />}
     </>
+  );
+}
+
+/** Initial great-circle bearing, clockwise from north. */
+function bearingBetweenCells(start: number, end: number, width: number, height: number): number {
+  const x1 = start % width;
+  const y1 = Math.floor(start / width);
+  const x2 = end % width;
+  const y2 = Math.floor(end / width);
+  const lat1 = ((90 - ((y1 + 0.5) * 180) / height) * Math.PI) / 180;
+  const lat2 = ((90 - ((y2 + 0.5) * 180) / height) * Math.PI) / 180;
+  let dLon = ((((x2 - x1) * 2 * Math.PI) / width + Math.PI) % (2 * Math.PI)) - Math.PI;
+  if (dLon < -Math.PI) dLon += 2 * Math.PI;
+  return Math.atan2(
+    Math.sin(dLon) * Math.cos(lat2),
+    Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon),
   );
 }
