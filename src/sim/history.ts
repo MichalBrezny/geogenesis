@@ -31,6 +31,7 @@ export const HISTORY_SERIES = [
   'meanOceanOxygen',
   'clathrateMethane',
   'fossilCarbon',
+  'population',
   'pollution',
   'era',
 ] as const;
@@ -86,6 +87,7 @@ export const recordHistory: SimComponent = {
       meanOceanOxygen: meanOceanOxygen(state),
       clathrateMethane: globals.clathrateCarbon * 2.8,
       fossilCarbon: globals.fossilCarbon,
+      population: state.civilization.population,
       pollution: globals.pollution,
       era: ERAS.indexOf(planetEra(state)),
     };

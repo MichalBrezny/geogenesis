@@ -81,6 +81,7 @@ const SCENARIO_VIEW: Record<
       'meanOceanOxygen',
       'clathrateMethane',
       'fossilCarbon',
+      'population',
       'pollution',
     ],
     layers: [
@@ -188,6 +189,7 @@ const SCENARIO_VIEW: Record<
       'meanTemperature',
       'co2',
       'fossilCarbon',
+      'population',
       'pollution',
       'o2',
       'biodiversity',
@@ -534,7 +536,15 @@ export function App() {
     tabs.push({
       id: 'charts',
       label: 'panel.charts',
-      content: <HistoryCharts history={frame.history} series={scenarioView.charts} />,
+      content: (
+        <HistoryCharts
+          key={frame.scenario}
+          history={frame.history}
+          series={scenarioView.charts}
+          scenario={frame.scenario}
+          events={frame.events}
+        />
+      ),
     });
   }
   if (frame && frame.scenario !== 'daisyworld') {
