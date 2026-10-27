@@ -22,6 +22,8 @@ import {
   type FlowStyle,
 } from '../render/particles';
 import { drawIsobars } from '../render/isobars';
+import { drawHotspots, mantleVelocityField } from '../render/mantleFlow';
+import { drawMapLabels } from '../render/mapLabels';
 import {
   drawDeviceIcons,
   drawEventMarkers,
@@ -55,6 +57,13 @@ import { useShortcuts } from './shortcuts';
 import type { CellLife } from '../sim/models/biosphere/diversity';
 import type { ToolId } from '../sim/tools/tools';
 import type { MonthlyClimate } from '../sim/models/atmosphere/climateDiagram';
+import { EventMapPanel } from './EventMapPanel';
+import {
+  EVENT_CATEGORIES,
+  filterMapEvents,
+  type EventCategory,
+} from './eventMap';
+import type { PlanetEvent } from '../sim/events';
 
 /** Ways to look at the planet. */
 export const VIEWS = ['map', 'globe'] as const;
@@ -71,7 +80,7 @@ const WHEEL_ZOOM = 0.002;
 const MINIMAP_KEY = 'geogenesis.minimap';
 
 /** Vector fields that can be drawn over any layer: animated particles, or arrows for reduced motion. */
-export const OVERLAYS = ['wind', 'currents', 'isobars', 'icons'] as const;
+export const OVERLAYS = ['wind', 'currents', 'isobars', 'mantle', 'names', 'icons', 'events'] as const;
 export type Overlay = (typeof OVERLAYS)[number];
 type FlowOverlay = 'wind' | 'currents';
 
@@ -196,6 +205,10 @@ export function PlanetView({
     height: number;
   }>({ layers: new Map(), project: null, width: 0, height: 0 });
   const [hovered, setHovered] = useState<HoveredCell | null>(null);
+  const [eventCategories, setEventCategories] = useState<Set<EventCategory>>(
+    () => new Set(EVENT_CATEGORIES),
+  );
+  const [selectedEvent, setSelectedEvent] = useState<PlanetEvent | null>(null);
   const hoveredCell = hovered?.index;
   // One request per newly inspected cell and per new frame (the life changes as time runs).
   useEffect(() => {
@@ -252,6 +265,23 @@ export function PlanetView({
   const globeLookup = useMemo(
     () => (view === 'globe' ? buildGlobeLookup(GLOBE_SIZE, globeView, width, height) : null),
     [view, globeView, width, height],
+  );
+  const mapEvents = useMemo(
+    () => filterMapEvents(frame.events, eventCategories),
+    [frame.events, eventCategories],
+  );
+  // This allocates two grid-sized arrays only while the mantle overlay is visible.
+  const mantleField = useMemo(
+    () =>
+      overlays.includes('mantle')
+        ? mantleVelocityField({
+            grid: frame.grid,
+            radius: frame.planetParams.radius,
+            plateId: frame.fields.plateId,
+            plates: frame.tectonics.plates,
+          })
+        : null,
+    [frame, overlays],
   );
 
   useEffect(() => {
@@ -372,6 +402,22 @@ export function PlanetView({
         { width: w, height: h },
       );
     }
+    const arrowSpacing = ((view === 'globe' ? 180 : 360 / mapView.zoom) * ARROW_SPACING) / w;
+    if (mantleField) {
+      const scale = Math.max(0.65, view === 'globe' ? w / 640 : w / 1100);
+      drawArrows(ctx, mantleField, project, {
+        spacing: arrowSpacing,
+        pixelsPerUnit: 3.2 * scale,
+        maxLength: 28 * scale,
+        minSpeed: 0.15,
+        color: 'rgba(255, 224, 130, 0.92)',
+        lineWidth: 1.5,
+      });
+      drawHotspots(ctx, frame.tectonics.hotspots, project);
+    }
+    if (overlays.includes('names')) {
+      drawMapLabels(ctx, frame, project, view === 'map' ? mapView.zoom : Math.max(1.4, w / 512));
+    }
     let visible: VisibleMapIcons = { lifeClasses: [], cityAge: null };
     if (overlays.includes('icons')) {
       const bounds =
@@ -391,7 +437,23 @@ export function PlanetView({
     onVisibleIconsChange?.(visible);
     drawDeviceIcons(ctx, frame.devices, frame.grid.width, frame.grid.height, project);
     drawEventMarkers(ctx, frame.events, frame.grid.width, frame.grid.height, project);
-  }, [frame, overlays, view, globeView, mapView, overlaySize, onVisibleIconsChange]);
+    if (overlays.includes('events')) {
+      drawEventMarkers(ctx, mapEvents, frame.grid.width, frame.grid.height, project, {
+        limit: mapEvents.length,
+        fade: false,
+      });
+    }
+  }, [
+    frame,
+    overlays,
+    view,
+    globeView,
+    mapView,
+    overlaySize,
+    onVisibleIconsChange,
+    mantleField,
+    mapEvents,
+  ]);
 
   // Animate the particles; with reduced motion, draw still arrows instead.
   useEffect(() => {
@@ -509,6 +571,26 @@ export function PlanetView({
     const dragged = drag.current?.moved;
     drag.current = null;
     if (dragged) return;
+    if (overlays.includes('events')) {
+      const rect = event.currentTarget.getBoundingClientRect();
+      const pointerX = event.clientX - rect.left;
+      const pointerY = event.clientY - rect.top;
+      const project = projection(rect.width, rect.height, view, globeView, mapView);
+      for (let k = mapEvents.length - 1; k >= 0; k--) {
+        const mapEvent = mapEvents[k]!;
+        const cell = mapEvent.cell!;
+        const x = cell % width;
+        const y = Math.floor(cell / width);
+        const point = project(
+          90 - ((y + 0.5) * 180) / height,
+          ((x + 0.5) * 360) / width,
+        );
+        if (point && Math.hypot(point[0] - pointerX, point[1] - pointerY) <= 14) {
+          setSelectedEvent(mapEvent);
+          return;
+        }
+      }
+    }
     const index = cellAt(event);
     if (index >= 0) onCellClick(index % width, Math.floor(index / width));
   };
@@ -628,6 +710,22 @@ export function PlanetView({
                 ? setGlobeView({ latitude, longitude })
                 : setMapView((current) => clampViewport({ ...current, latitude, longitude }))
             }
+          />
+        )}
+        {overlays.includes('events') && (
+          <EventMapPanel
+            enabled={eventCategories}
+            onToggle={(category) => {
+              setEventCategories((current) => {
+                const next = new Set(current);
+                if (next.has(category)) next.delete(category);
+                else next.add(category);
+                return next;
+              });
+              setSelectedEvent(null);
+            }}
+            selected={selectedEvent}
+            onClear={() => setSelectedEvent(null)}
           />
         )}
       </div>

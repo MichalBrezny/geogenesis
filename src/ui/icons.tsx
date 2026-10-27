@@ -178,6 +178,12 @@ export const LAYER_ICONS: Record<MapLayer, ReactNode> = {
       <path d="m6.5 12.5 1.5 1 1.5-1" />
     </Icon>
   ),
+  seafloor: (
+    <Icon>
+      <path d="M2 17c4-5 7-5 10 0 3-5 6-5 10 0M2 10c4 3 7 3 10 0 3 3 6 3 10 0" />
+      <path d="M2 21h20" />
+    </Icon>
+  ),
   plates: (
     <Icon>
       <circle cx="12" cy="12" r="9" />
@@ -321,11 +327,27 @@ export const OVERLAY_ICONS: Record<Overlay, ReactNode> = {
   wind: LAYER_ICONS.wind,
   currents: LAYER_ICONS.oceanCurrents,
   isobars: LAYER_ICONS.pressure,
+  mantle: (
+    <Icon>
+      <path d="M3 17h13m0 0-4-4m4 4-4 4M5 7h13m0 0-4-4m4 4-4 4" />
+    </Icon>
+  ),
+  names: (
+    <Icon>
+      <path d="M4 20 10 4h4l6 16M7 14h10" />
+    </Icon>
+  ),
   icons: (
     <Icon>
       <path d="M3 20V9l5-4 4 4 4-6 5 5v12Z" />
       <circle cx="8" cy="13" r="1.5" fill="currentColor" />
       <path d="M14 20v-6h4v6" />
+    </Icon>
+  ),
+  events: (
+    <Icon>
+      <path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Z" />
+      <circle cx="12" cy="9" r="2" />
     </Icon>
   ),
 };

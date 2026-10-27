@@ -47,6 +47,7 @@ import { starProperties } from './models/atmosphere/star';
 import { goalTracker } from './goals/goals';
 import { terraformDevices } from './tools/devices';
 import { disasterModel } from './models/disasters';
+import { mapNamingModel } from './mapNames';
 
 export interface WorldOptions extends PlanetOptions {
   /** Preset age and biosphere for a new random planet. Defaults to `young`. */
@@ -210,6 +211,7 @@ export function randomWorldFromPlanet(
       atmosphericWaterCycle,
       atmosphericEscape,
       seaLevelModel,
+      withMinInterval(mapNamingModel, SLOW_PROCESS_INTERVAL),
       biomeModel,
       oceanChemistry,
       withMinInterval(

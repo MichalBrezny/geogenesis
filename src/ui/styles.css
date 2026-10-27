@@ -199,6 +199,78 @@ body {
   image-rendering: auto;
 }
 
+/* M16d: event-map filters and tectonic legend symbols. */
+.event-map-panel {
+  position: absolute;
+  z-index: 5;
+  left: 8px;
+  top: 8px;
+  width: min(230px, calc(100% - 16px));
+  padding: 8px 10px;
+  border: 1px solid var(--grid);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--surface-chart) 92%, transparent);
+  color: var(--text-primary);
+  line-height: 1.25;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.35);
+}
+
+.event-map-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 10px;
+  margin-top: 5px;
+  font-size: 0.75rem;
+}
+
+.event-map-filters label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+}
+
+.event-map-filters input {
+  margin: 0;
+  padding: 0;
+}
+
+.event-map-selected {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  width: 100%;
+  margin-top: 7px;
+  padding: 5px;
+  text-align: left;
+}
+
+.mantle-arrow {
+  color: #ffe082;
+  font-size: 1.15rem;
+  text-shadow: 0 1px 2px #111;
+}
+
+.hotspot-swatch {
+  width: 8px;
+  height: 8px;
+  border: 2px solid #ffda70;
+  border-radius: 50%;
+  background: #da492b;
+}
+
+@media (max-width: 699px) {
+  .event-map-panel {
+    position: absolute;
+    top: auto;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    box-sizing: border-box;
+    border-radius: 8px 8px 0 0;
+  }
+}
+
 .direction-arrow {
   position: absolute;
   inset: 0;

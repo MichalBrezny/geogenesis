@@ -19,6 +19,8 @@ import type { Device } from '../sim/tools/devices';
 import type { Biosignature } from '../sim/models/biosphere/biosignature';
 import type { CivilizationPolicyChanges } from '../sim/data/civilization';
 import type { MonthlyClimate } from '../sim/models/atmosphere/climateDiagram';
+import type { NamedMapFeature } from '../sim/mapNames';
+import type { HotspotMarker, PlateMotion } from '../render/mantleFlow';
 
 export interface FrameGoal extends GoalState {
   conditions: GoalCondition[];
@@ -85,6 +87,10 @@ export interface Frame extends MapSource {
   pollution: number;
   /** Most recent notable events, oldest first. */
   events: PlanetEvent[];
+  /** Compact labels; overlap footprints remain private to the simulation state. */
+  mapFeatures: Omit<NamedMapFeature, 'footprint'>[];
+  /** Small rigid-plate and mantle-frame records used to derive the arrow overlay in the UI. */
+  tectonics: { plates: PlateMotion[]; hotspots: HotspotMarker[] };
   /** Simulated years the next step will cover. */
   stepYears: number;
   /** The planet's era (sets the step length), or null for scenarios without eras. */

@@ -38,6 +38,16 @@ export const elevationPalette = gradient([
   { value: 5000, color: [240, 240, 240] },
 ]);
 
+/** Drained-ocean relief: abyssal plains through ridges and pale continental shelves. */
+export const bathymetricReliefPalette = gradient([
+  { value: -8000, color: [34, 32, 58] },
+  { value: -5000, color: [48, 61, 82] },
+  { value: -3000, color: [67, 91, 103] },
+  { value: -1000, color: [111, 126, 117] },
+  { value: -200, color: [171, 163, 132] },
+  { value: 0, color: [211, 197, 154] },
+]);
+
 export const temperaturePalette = gradient([
   { value: -40, color: [60, 20, 140] },
   { value: -10, color: [70, 130, 220] },

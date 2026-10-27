@@ -9,6 +9,7 @@ import {
 import { LIFE_TIERS } from '../sim/data/lifeClasses';
 import {
   clathratePalette,
+  bathymetricReliefPalette,
   cloudPalette,
   diversityPalette,
   elevationPalette,
@@ -46,6 +47,13 @@ const SCALES: Partial<Record<MapLayer, Scale>> = {
     min: -8000,
     max: 6000,
     ticks: [-6000, 0, 3000, 6000],
+    unit: 'm',
+  },
+  seafloor: {
+    palette: bathymetricReliefPalette,
+    min: -8000,
+    max: 0,
+    ticks: [-8000, -6000, -4000, -2000, 0],
     unit: 'm',
   },
   airTemperature: {
@@ -247,16 +255,30 @@ function LayerLegend({ layer }: { layer: MapLayer }) {
 export function MapLegend({
   layer,
   iconsOn,
+  mantleOn,
   visibleIcons,
 }: {
   layer: MapLayer;
   iconsOn: boolean;
+  mantleOn: boolean;
   visibleIcons: VisibleMapIcons;
 }) {
   const city = visibleIcons.cityAge === null ? null : TECH_AGES[visibleIcons.cityAge];
   return (
     <div className="map-legends">
       <LayerLegend layer={layer} />
+      {mantleOn && (
+        <ul className="legend mantle-legend" aria-label={t('legend.mantleFlow')}>
+          <li>
+            <span className="mantle-arrow">&#8594;</span>
+            {t('legend.mantleFlow')}: {t('legend.mantleFlowUnit')}
+          </li>
+          <li>
+            <span className="hotspot-swatch" />
+            {t('legend.hotspots')}
+          </li>
+        </ul>
+      )}
       {iconsOn && (visibleIcons.lifeClasses.length > 0 || city) && (
         <ul className="legend icon-legend" aria-label={t('legend.mapIcons')}>
           {visibleIcons.lifeClasses.map((index) => {

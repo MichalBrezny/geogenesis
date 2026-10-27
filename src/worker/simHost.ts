@@ -11,9 +11,11 @@ import { clampGoalCivilizationPolicy, clampGoalControls, GOALS } from '../sim/go
 import { biosignature } from '../sim/models/biosphere/biosignature';
 import { updateCivilizationPolicy } from '../sim/data/civilization';
 import { monthlyClimate } from '../sim/models/atmosphere/climateDiagram';
+import { MAX_EVENTS } from '../sim/events';
+import { updateMapNames } from '../sim/mapNames';
 
 /** How many recent events each frame carries. */
-const EVENTS_IN_FRAME = 30;
+const EVENTS_IN_FRAME = MAX_EVENTS;
 
 /**
  * Owns the simulation inside the worker. Kept free of worker globals so it can
@@ -139,6 +141,7 @@ export class SimHost {
       if (!isScenarioId(game.scenario)) throw new Error(`Unknown scenario "${game.scenario}"`);
       this.scenario = game.scenario;
       this.world = restoreScenario(game.scenario, game.planet, game.settings);
+      if (this.world.planet.mapNaming.updatedYear < 0) updateMapNames(this.world.planet);
       this.sendFrame();
     } catch (error) {
       this.post({ type: 'error', message: String(error) }, []);
@@ -207,6 +210,26 @@ export class SimHost {
       fossilCarbon: planet.globals.fossilCarbon,
       pollution: planet.globals.pollution,
       events: planet.events.slice(-EVENTS_IN_FRAME),
+      mapFeatures: planet.mapNaming.features.map((feature) => ({
+        id: feature.id,
+        kind: feature.kind,
+        name: feature.name,
+        cell: feature.cell,
+        size: feature.size,
+        ...(feature.plateId === undefined ? {} : { plateId: feature.plateId }),
+      })),
+      tectonics: {
+        plates: planet.plates.map(({ id, eulerPole, angularSpeed }) => ({
+          id,
+          eulerPole: [...eulerPole] as [number, number, number],
+          angularSpeed,
+        })),
+        hotspots: planet.geosphere.hotspots.map(({ id, position, strength }) => ({
+          id,
+          position: [...position] as [number, number, number],
+          strength,
+        })),
+      },
       stepYears: this.world.stepYears(planet),
       era: this.world.era(planet),
       energy: planet.globals.energy,
