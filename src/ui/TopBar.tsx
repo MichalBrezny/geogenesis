@@ -5,6 +5,7 @@ import type { Frame } from '../worker/protocol';
 import { PLANET_STARTS, type PlanetStart } from '../sim/world';
 import { formatGyr, formatPpm, formatStep } from './format';
 import type { PlanetParameters, StarType } from '../sim/core/planet';
+import { GaiaFace } from './GaiaFace';
 
 /** Pause between simulation steps for each speed setting, ms. */
 export const SPEEDS = { slow: 500, normal: 120, fast: 0 } as const;
@@ -156,6 +157,12 @@ function Vitals({ frame }: { frame: Frame }) {
   ];
   return (
     <dl className="vitals">
+      <div className="gaia-vital">
+        <dt className="visually-hidden">{t('gaia.title')}</dt>
+        <dd>
+          <GaiaFace gaia={frame.gaia} />
+        </dd>
+      </div>
       {items.map(([label, hint, value, warning]) => (
         <div key={label} title={t(hint)} className={warning ? 'warning' : undefined}>
           <dt>{t(label)}</dt>

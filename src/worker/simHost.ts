@@ -13,6 +13,7 @@ import { updateCivilizationPolicy } from '../sim/data/civilization';
 import { monthlyClimate } from '../sim/models/atmosphere/climateDiagram';
 import { MAX_EVENTS } from '../sim/events';
 import { updateMapNames } from '../sim/mapNames';
+import { gaiaDiagnostic } from '../sim/diagnostics';
 
 /** How many recent events each frame carries. */
 const EVENTS_IN_FRAME = MAX_EVENTS;
@@ -209,6 +210,9 @@ export class SimHost {
       },
       fossilCarbon: planet.globals.fossilCarbon,
       pollution: planet.globals.pollution,
+      carbonBudget: structuredClone(planet.globals.carbonBudget),
+      energyBalance: structuredClone(planet.globals.energyBalance),
+      gaia: gaiaDiagnostic(planet),
       events: planet.events.slice(-EVENTS_IN_FRAME),
       mapFeatures: planet.mapNaming.features.map((feature) => ({
         id: feature.id,

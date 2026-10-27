@@ -24,6 +24,7 @@ import type { PlanetStart } from '../sim/world';
 import type { PlanetParameters } from '../sim/core/planet';
 import { DEFAULT_CONTROLS } from '../sim/core/planet';
 import { PlanetPanel } from './PlanetPanel';
+import { AtmosphereDiagnostics, BiosphereDiagnostics } from './PlanetDiagnostics';
 import { GoalOutcome, GoalPanel } from './GoalPanel';
 import type { VisibleMapIcons } from '../render/mapIcons';
 import { DisasterPanel } from './DisasterPanel';
@@ -801,13 +802,17 @@ export function App() {
                   onChange={(policy) => send({ type: 'civPolicy', policy })}
                 />
               ) : (
-                <ControlsPanel
-                  controls={frame.controls}
-                  group={id as ControlGroupId}
-                  defaults={{ ...DEFAULT_CONTROLS, obliquity: obliquityDefault }}
-                  controlLimits={frame.goal?.controlLimits}
-                  onChange={(controls) => send({ type: 'controls', controls })}
-                />
+                <>
+                  <ControlsPanel
+                    controls={frame.controls}
+                    group={id as ControlGroupId}
+                    defaults={{ ...DEFAULT_CONTROLS, obliquity: obliquityDefault }}
+                    controlLimits={frame.goal?.controlLimits}
+                    onChange={(controls) => send({ type: 'controls', controls })}
+                  />
+                  {id === 'atmosphere' && <AtmosphereDiagnostics frame={frame} />}
+                  {id === 'biosphere' && <BiosphereDiagnostics frame={frame} />}
+                </>
               )}
             </FloatingWindow>
           );

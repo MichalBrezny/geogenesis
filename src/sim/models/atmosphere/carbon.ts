@@ -1,6 +1,11 @@
 import type { SimComponent } from '../../core/component';
 import { areaWeightedMean, EARTH_RADIUS } from '../../core/grid';
-import { EARTH_SURFACE_GRAVITY, type PlanetState } from '../../core/planet';
+import {
+  createCarbonBudgetDiagnostic,
+  EARTH_SURFACE_GRAVITY,
+  type CarbonFluxDiagnostic,
+  type PlanetState,
+} from '../../core/planet';
 import { Biome, BIOMES } from '../../data/biomes';
 import { isOcean, liquidWaterGel } from '../geosphere/seaLevel';
 import { MODERN_PHOTOSYNTHESIS, photosynthesis } from './biogeochemistry';
@@ -100,6 +105,28 @@ const MAX_WET_CO2 = 3e6;
  */
 export const DRY_DEGASSING_TIME = 3e8;
 
+/** Clears per-step carbon accounting before any civilization, device or natural flux runs. */
+export const resetCarbonBudget: SimComponent = {
+  name: 'carbonBudgetReset',
+  inputs: [],
+  outputs: [],
+  runOneStep(state) {
+    state.globals.carbonBudget = createCarbonBudgetDiagnostic();
+  },
+};
+
+/** Writes one signed carbon rate in the two equivalent diagnostic units. */
+export function carbonFluxDiagnostic(
+  microbarPerYear: number,
+  state: PlanetState,
+): CarbonFluxDiagnostic {
+  const rate = microbarPerYear === 0 ? 0 : microbarPerYear;
+  return {
+    microbarPerYear: rate,
+    gtCarbonPerYear: rate * gtCarbonPerMicrobar(state),
+  };
+}
+
 /**
  * Long-term (geological) carbon cycle: the silicate-weathering thermostat.
  *
@@ -143,7 +170,14 @@ export function createCarbonCycle(options: CarbonCycleOptions = {}): SimComponen
         Math.max(0, state.globals.civilizationCarbonEmissions),
         state,
       );
+      const beforeIndustry = atmosphere.co2;
       if (industrialRise > 0) atmosphere.co2 = Math.min(ceiling, atmosphere.co2 + industrialRise);
+      const industrialRate =
+        dtYears > 0 ? Math.max(0, atmosphere.co2 - beforeIndustry) / dtYears : 0;
+      state.globals.carbonBudget.civilizationEmissions = carbonFluxDiagnostic(
+        industrialRate,
+        state,
+      );
       state.globals.civilizationCarbonEmissions = 0;
       const before = atmosphere.co2;
       // Burial needs carbon to fix: it fades out as CO₂ runs out, like weathering.
@@ -234,10 +268,123 @@ export function createCarbonCycle(options: CarbonCycleOptions = {}): SimComponen
         weathering: weathering(atmosphere.co2),
         burial: burialAt(atmosphere.co2),
       };
+      writeNaturalCarbonBudget(
+        state,
+        dtYears,
+        before,
+        atmosphere.co2,
+        activity,
+        state.globals.lipOutgassing,
+        outgassing,
+        current,
+        warmingAt(atmosphere.co2),
+        state.globals.carbon.weathering,
+        state.globals.carbon.burial,
+        sinkless || steamAtmosphere,
+      );
       accumulateFossilCarbon(state, dtYears, state.globals.carbon.burial);
       updateSurfacePressure(state.globals);
     },
   };
+}
+
+/**
+ * Decomposes the implicit solve without feeding diagnostics back into it. In the
+ * normal wet branch the component rates come from the exact equation evaluated at
+ * the solved CO2. The tiny bisection/cap residual is assigned to the largest term,
+ * making the displayed terms add exactly to the realized natural change.
+ */
+function writeNaturalCarbonBudget(
+  state: PlanetState,
+  dtYears: number,
+  before: number,
+  after: number,
+  activity: number,
+  lipActivity: number,
+  outgassing: number,
+  rawLand: number,
+  warming: number,
+  totalWeathering: number,
+  burial: number,
+  sourceOnly: boolean,
+): void {
+  const budget = state.globals.carbonBudget;
+  if (!(dtYears > 0)) {
+    budget.net = carbonFluxDiagnostic(0, state);
+    return;
+  }
+  const realized = (after - before) / dtYears;
+  let volcanic: number;
+  let lip: number;
+  let land: number;
+  let seafloorSink: number;
+  let organic: number;
+  if (sourceOnly) {
+    const ordinaryShare = activity + lipActivity > 0 ? activity / (activity + lipActivity) : 1;
+    volcanic = realized * ordinaryShare;
+    lip = realized - volcanic;
+    land = 0;
+    seafloorSink = 0;
+    organic = 0;
+  } else {
+    const scale = before / RESERVOIR_TIME;
+    const landWeathering =
+      ((1 - SEAFLOOR_SHARE) *
+        rawLand *
+        Math.exp(WEATHERING_TEMPERATURE_SENSITIVITY * warming) *
+        (co2Factor(after) / co2Factor(before))) /
+      REFERENCE_WEATHERING;
+    const seaWeathering = Math.max(0, totalWeathering - landWeathering);
+    const controlledActivity = Math.max(0, outgassing);
+    const lipShare = activity + lipActivity > 0 ? lipActivity / (activity + lipActivity) : 0;
+    lip = scale * controlledActivity * lipShare;
+    volcanic = scale * controlledActivity - lip;
+    land = -scale * landWeathering;
+    seafloorSink = -scale * seaWeathering;
+    organic = -scale * burial;
+    const rates = [volcanic, lip, land, seafloorSink, organic];
+    const sources = rates.reduce((sum, value) => sum + Math.max(0, value), 0);
+    const sinks = rates.reduce((sum, value) => sum + Math.max(0, -value), 0);
+    if (realized >= 0 && sources > 0) {
+      const sourceScale = (sinks + realized) / sources;
+      for (let i = 0; i < rates.length; i++) if (rates[i]! > 0) rates[i] = rates[i]! * sourceScale;
+    } else if (realized < 0 && sinks > 0) {
+      const sinkScale = (sources - realized) / sinks;
+      for (let i = 0; i < rates.length; i++) if (rates[i]! < 0) rates[i] = rates[i]! * sinkScale;
+    }
+    // Absorb only floating-point summation noise after the sign-preserving rescale.
+    const residual = realized - rates.reduce((sum, value) => sum + value, 0);
+    let largest = 0;
+    for (let i = 1; i < rates.length; i++) {
+      if (Math.abs(rates[i]!) > Math.abs(rates[largest]!)) largest = i;
+    }
+    rates[largest] = rates[largest]! + residual;
+    volcanic = rates[0]!;
+    lip = rates[1]!;
+    land = rates[2]!;
+    seafloorSink = rates[3]!;
+    organic = rates[4]!;
+  }
+  budget.volcanicOutgassing = carbonFluxDiagnostic(volcanic, state);
+  budget.lipOutgassing = carbonFluxDiagnostic(lip, state);
+  budget.landWeathering = carbonFluxDiagnostic(land, state);
+  budget.seafloorWeathering = carbonFluxDiagnostic(seafloorSink, state);
+  budget.organicBurial = carbonFluxDiagnostic(organic, state);
+  const rates = [
+    budget.volcanicOutgassing,
+    budget.lipOutgassing,
+    budget.landWeathering,
+    budget.seafloorWeathering,
+    budget.organicBurial,
+    budget.civilizationEmissions,
+    budget.clathrateRelease,
+    budget.deviceSources,
+    budget.deviceSinks,
+  ];
+  budget.net = carbonFluxDiagnostic(
+    rates.reduce((sum, flux) => sum + flux.microbarPerYear, 0),
+    state,
+  );
 }
 
 /** Atmospheric carbon represented by one microbar of CO₂ on this planet, Gt C. */

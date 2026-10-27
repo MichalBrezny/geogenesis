@@ -72,5 +72,6 @@ export const cloudModel: SimComponent = {
       cloudCover[i] = 1 - (1 - high) * (1 - low);
     }
     globals.cloudCover = areaWeightedMean(grid, cloudCover);
+    globals.lowCloudCover = areaWeightedMean(grid, lowCloud);
   },
 };

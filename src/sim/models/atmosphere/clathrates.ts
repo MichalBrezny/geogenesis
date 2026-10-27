@@ -2,6 +2,7 @@ import type { SimComponent } from '../../core/component';
 import { recordEvent } from '../../events';
 import { isOcean } from '../geosphere/seaLevel';
 import { methaneTarget } from './biogeochemistry';
+import { carbonFluxDiagnostic } from './carbon';
 
 /** 7,000 Gt C, using 1 ppm (and here 1 microbar) CH4 ~= 2.8 Gt C. */
 export const MAX_CLATHRATE_CARBON = 2_500;
@@ -46,6 +47,10 @@ export const clathrateModel: SimComponent = {
       (temperature - reference) * Math.min(1, WARMING_REFERENCE_TIME / Math.max(dtYears, 1));
     const exposure = rapidWarmingExposure(observedAnomaly, dtYears);
     const released = reservoir * -Math.expm1(-exposure / RELEASE_TIME);
+    globals.carbonBudget.clathrateRelease = carbonFluxDiagnostic(
+      dtYears > 0 ? released / dtYears : 0,
+      state,
+    );
     reservoir -= released;
 
     if (dtYears > 0) {

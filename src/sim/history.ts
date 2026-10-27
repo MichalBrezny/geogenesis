@@ -33,6 +33,10 @@ export const HISTORY_SERIES = [
   'fossilCarbon',
   'population',
   'pollution',
+  'carbonOutgassing',
+  'carbonWeathering',
+  'carbonBurial',
+  'carbonNet',
   'era',
 ] as const;
 export type HistorySeries = (typeof HISTORY_SERIES)[number];
@@ -89,6 +93,18 @@ export const recordHistory: SimComponent = {
       fossilCarbon: globals.fossilCarbon,
       population: state.civilization.population,
       pollution: globals.pollution,
+      carbonOutgassing:
+        globals.carbonBudget.volcanicOutgassing.microbarPerYear +
+        globals.carbonBudget.lipOutgassing.microbarPerYear,
+      carbonWeathering: Math.max(
+        0,
+        -(
+          globals.carbonBudget.landWeathering.microbarPerYear +
+          globals.carbonBudget.seafloorWeathering.microbarPerYear
+        ),
+      ),
+      carbonBurial: Math.max(0, -globals.carbonBudget.organicBurial.microbarPerYear),
+      carbonNet: globals.carbonBudget.net.microbarPerYear,
       era: ERAS.indexOf(planetEra(state)),
     };
     const last = history.year[history.year.length - 1];

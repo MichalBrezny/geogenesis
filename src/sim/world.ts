@@ -6,7 +6,7 @@ import {
   type PlanetState,
 } from './core/planet';
 import { createRng, type Rng } from './core/rng';
-import { createCarbonCycle } from './models/atmosphere/carbon';
+import { createCarbonCycle, resetCarbonBudget } from './models/atmosphere/carbon';
 import { createClimate } from './models/atmosphere/climate';
 import { circulationModel } from './models/atmosphere/circulation';
 import { oceanModel } from './models/atmosphere/ocean';
@@ -222,6 +222,7 @@ export function randomWorldFromPlanet(
         }),
         EVOLUTION_INTERVAL,
       ),
+      resetCarbonBudget,
       createCivilization(),
       terraformDevices,
       clathrateModel,
