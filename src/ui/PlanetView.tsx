@@ -54,6 +54,7 @@ import { Minimap } from './Minimap';
 import { useShortcuts } from './shortcuts';
 import type { CellLife } from '../sim/models/biosphere/diversity';
 import type { ToolId } from '../sim/tools/tools';
+import type { MonthlyClimate } from '../sim/models/atmosphere/climateDiagram';
 
 /** Ways to look at the planet. */
 export const VIEWS = ['map', 'globe'] as const;
@@ -159,6 +160,8 @@ interface Props {
   onInspect?: (cell: number) => void;
   /** The worker's answer for the inspected cell. */
   cellLife?: CellLife | null;
+  /** Monthly climate returned in the same inspection response. */
+  cellClimate?: MonthlyClimate | null;
   /** A log entry can request that both projections face this cell. */
   centreRequest?: { cell: number; serial: number } | null;
   /** Reports the life/city symbols actually represented by the current lattice. */
@@ -176,6 +179,7 @@ export function PlanetView({
   temperatureMonth,
   onInspect,
   cellLife,
+  cellClimate,
   centreRequest,
   onVisibleIconsChange,
 }: Props) {
@@ -627,7 +631,9 @@ export function PlanetView({
           />
         )}
       </div>
-      {hovered && <CellInspector frame={frame} cell={hovered} life={cellLife} />}
+      {hovered && (
+        <CellInspector frame={frame} cell={hovered} life={cellLife} climate={cellClimate} />
+      )}
     </>
   );
 }

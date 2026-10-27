@@ -5,6 +5,7 @@ import type { Frame, WorkerRequest, WorkerResponse } from '../worker/protocol';
 import type { ScenarioId } from '../sim/scenarios';
 import type { LifeClassKey } from '../sim/data/lifeClasses';
 import type { CellLife } from '../sim/models/biosphere/diversity';
+import type { MonthlyClimate } from '../sim/models/atmosphere/climateDiagram';
 import type { ToolId } from '../sim/tools/tools';
 import { HistoryCharts, type ChartSeries } from './charts/HistoryCharts';
 import { CivilizationPanel, EventLog } from './CivilizationPanel';
@@ -317,6 +318,7 @@ export function App() {
   const [tool, setTool] = useState<ToolId | null>(null);
   const [lifeClass, setLifeClass] = useState<LifeClassKey>('prokaryotes');
   const [cellLife, setCellLife] = useState<CellLife | null>(null);
+  const [cellClimate, setCellClimate] = useState<MonthlyClimate | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [windowOpen, setWindowOpen] = useState<WindowOpenState>(loadWindowOpenState);
@@ -415,8 +417,10 @@ export function App() {
           setObliquityDefault(message.frame.controls.obliquity);
           captureObliquityDefault.current = false;
         }
-      } else if (message.type === 'cellLife') setCellLife(message.life);
-      else if (message.type === 'error') setError(message.message);
+      } else if (message.type === 'cellLife') {
+        setCellLife(message.life);
+        setCellClimate(message.climate ?? null);
+      } else if (message.type === 'error') setError(message.message);
       else if (message.type === 'saved') download(message.bytes, message.fileName);
       else {
         setNotice(t(message.reason === 'energy' ? 'tools.noEnergy' : 'tools.notAllowed'));
@@ -646,6 +650,7 @@ export function App() {
                   overlays={frame.scenario === 'daisyworld' ? [] : overlays}
                   temperatureMonth={temperatureMonth}
                   cellLife={cellLife}
+                  cellClimate={cellClimate}
                   onInspect={inspectCell}
                   centreRequest={centreRequest}
                   onVisibleIconsChange={visibleIconsChanged}

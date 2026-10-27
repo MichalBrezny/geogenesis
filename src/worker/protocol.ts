@@ -18,6 +18,7 @@ import type { ControlKey, GoalCondition, GoalState } from '../sim/goals/goals';
 import type { Device } from '../sim/tools/devices';
 import type { Biosignature } from '../sim/models/biosphere/biosignature';
 import type { CivilizationPolicyChanges } from '../sim/data/civilization';
+import type { MonthlyClimate } from '../sim/models/atmosphere/climateDiagram';
 
 export interface FrameGoal extends GoalState {
   conditions: GoalCondition[];
@@ -46,7 +47,7 @@ export type WorkerRequest =
   | { type: 'disasters'; disasters: Partial<DisasterSettings> }
   | { type: 'unlimitedEnergy'; enabled: boolean }
   | { type: 'save' }
-  /** Ask for the life in one cell (the inspected one); answered with a `cellLife` response. */
+  /** Ask for the life and monthly climate in one cell; answered with one `cellLife` response. */
   | { type: 'inspect'; cell: number }
   /** Pause between steps while running, ms. */
   | { type: 'speed'; delayMs: number }
@@ -110,7 +111,7 @@ export interface Frame extends MapSource {
 /** Messages from the simulation worker to the UI. */
 export type WorkerResponse =
   | { type: 'frame'; frame: Frame }
-  | { type: 'cellLife'; life: CellLife }
+  | { type: 'cellLife'; life: CellLife; climate?: MonthlyClimate }
   | { type: 'error'; message: string }
   /** A tool could not be used; the UI explains why. */
   | { type: 'toolRefused'; reason: 'energy' | 'notAllowed' }

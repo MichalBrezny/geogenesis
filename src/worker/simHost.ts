@@ -10,6 +10,7 @@ import type { Frame, WorkerRequest, WorkerResponse } from './protocol';
 import { clampGoalCivilizationPolicy, clampGoalControls, GOALS } from '../sim/goals/goals';
 import { biosignature } from '../sim/models/biosphere/biosignature';
 import { updateCivilizationPolicy } from '../sim/data/civilization';
+import { monthlyClimate } from '../sim/models/atmosphere/climateDiagram';
 
 /** How many recent events each frame carries. */
 const EVENTS_IN_FRAME = 30;
@@ -84,7 +85,13 @@ export class SimHost {
         case 'inspect':
           if (!this.world) break;
           this.post(
-            { type: 'cellLife', life: inspectCellLife(this.world.planet, request.cell) },
+            {
+              type: 'cellLife',
+              life: inspectCellLife(this.world.planet, request.cell),
+              ...(this.scenario === 'daisyworld'
+                ? {}
+                : { climate: monthlyClimate(this.world.planet, request.cell) }),
+            },
             [],
           );
           break;

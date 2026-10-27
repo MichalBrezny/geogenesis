@@ -6,6 +6,8 @@ import type { CellLife } from '../sim/models/biosphere/diversity';
 import { RIVER_MIN_DISCHARGE } from '../render/mapRenderer';
 import { LakeType } from '../sim/models/geosphere/flowRouting';
 import type { Frame } from '../worker/protocol';
+import type { MonthlyClimate } from '../sim/models/atmosphere/climateDiagram';
+import { ClimateDiagram } from './ClimateDiagram';
 
 /** Cell under the pointer and where to draw the readout (page coordinates). */
 export interface HoveredCell {
@@ -21,11 +23,14 @@ export function CellInspector({
   frame,
   cell,
   life,
+  climate,
 }: {
   frame: Frame;
   cell: HoveredCell;
   /** Per-class life of this cell from the worker, once it has answered. */
   life?: CellLife | null;
+  /** Monthly diagnostic returned alongside life for the same inspected cell. */
+  climate?: MonthlyClimate | null;
 }) {
   const f = frame.fields;
   const i = cell.index;
@@ -82,6 +87,13 @@ export function CellInspector({
           </div>
         ))}
       </dl>
+      {climate && life?.cell === i && (
+        <ClimateDiagram
+          climate={climate}
+          elevation={f.elevation[i]! - frame.seaLevel}
+          latitude={cell.latitude}
+        />
+      )}
       {present.length > 0 && (
         <div className="inspector-life">
           <h4>{t('inspect.lifeClasses')}</h4>
