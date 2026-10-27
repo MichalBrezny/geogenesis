@@ -1,153 +1,439 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
 import { t, type MessageKey } from '../../i18n/i18n';
 import type { HistorySeries } from '../../sim/history';
 import { ERAS, type Era } from '../../sim/eras';
+import type { PlanetEvent } from '../../sim/events';
+import type { ScenarioId } from '../../sim/scenarios';
 import { formatGyr, formatPpm } from '../format';
+import { CHART_ICONS, EventIcon } from '../icons';
+import { describeEvent } from '../CivilizationPanel';
+import {
+  clampLogValue,
+  formatAxisNumber,
+  loadChartSelection,
+  saveChartSelection,
+  selectTimeUnit,
+} from './historyChartUtils';
 
+type SeriesFamily = 'climate' | 'atmosphere' | 'life' | 'civilization';
 interface ChartSpec {
   series: Exclude<HistorySeries, 'year' | 'era'>;
   title: MessageKey;
-  /** Converts the recorded value to the plotted one (e.g. fraction to %). */
+  hint: MessageKey;
+  unit: string;
+  family: SeriesFamily;
   scale?: number;
   format: (value: number) => string;
-  log?: boolean;
+  /** Explicit positive floor for logarithmic plots; zero samples are clamped to it. */
+  logFloor?: number;
 }
 
 const CHARTS: readonly ChartSpec[] = [
   {
     series: 'runawayMargin',
     title: 'chart.runawayMargin',
-    format: (v) => `${v.toFixed(1)} W/m2`,
+    hint: 'chartHint.runawayMargin',
+    unit: 'W/m²',
+    family: 'climate',
+    format: (v) => `${v.toFixed(1)} W/m²`,
   },
-  { series: 'meanTemperature', title: 'chart.temperature', format: (v) => `${v.toFixed(1)} °C` },
-  { series: 'biodiversity', title: 'chart.biodiversity', format: (v) => v.toFixed(2) },
-  { series: 'co2', title: 'chart.co2', format: (v) => `${formatPpm(v)} ppm`, log: true },
+  {
+    series: 'meanTemperature',
+    title: 'chart.temperature',
+    hint: 'chartHint.temperature',
+    unit: '°C',
+    family: 'climate',
+    format: (v) => `${v.toFixed(1)} °C`,
+  },
+  {
+    series: 'biodiversity',
+    title: 'chart.biodiversity',
+    hint: 'chartHint.biodiversity',
+    unit: 'index',
+    family: 'life',
+    format: (v) => v.toFixed(2),
+  },
+  {
+    series: 'co2',
+    title: 'chart.co2',
+    hint: 'chartHint.co2',
+    unit: 'ppm',
+    family: 'atmosphere',
+    format: (v) => `${formatPpm(v)} ppm`,
+    logFloor: 0.01,
+  },
   {
     series: 'co2Ice',
     title: 'chart.co2Ice',
-    format: (v) => `${(v * 1000).toFixed(2)} mbar`,
+    hint: 'chartHint.co2Ice',
+    unit: 'mbar',
+    family: 'atmosphere',
+    scale: 1000,
+    format: (v) => `${v.toFixed(2)} mbar`,
   },
   {
     series: 'surfacePressure',
     title: 'chart.surfacePressure',
-    format: (v) => `${v.toFixed(2)} bar`,
-    log: true,
+    hint: 'chartHint.surfacePressure',
+    unit: 'bar',
+    family: 'atmosphere',
+    format: (v) => `${v.toPrecision(3)} bar`,
+    logFloor: 1e-9,
   },
-  { series: 'water', title: 'chart.water', format: (v) => `${v.toFixed(0)} m GEL` },
-  { series: 'iceFraction', title: 'chart.ice', scale: 100, format: (v) => `${v.toFixed(1)}%` },
-  { series: 'landFraction', title: 'chart.land', scale: 100, format: (v) => `${v.toFixed(1)}%` },
-  { series: 'seaLevel', title: 'chart.seaLevel', format: (v) => `${v.toFixed(0)} m` },
-  { series: 'solarInput', title: 'chart.sun', scale: 100, format: (v) => `${v.toFixed(1)}%` },
-  { series: 'o2', title: 'chart.o2', scale: 100, format: (v) => `${v.toFixed(1)}%` },
-  { series: 'ch4', title: 'chart.ch4', format: (v) => `${v.toFixed(1)} ppm`, log: true },
-  { series: 'livingClasses', title: 'chart.livingClasses', format: (v) => v.toFixed(0) },
-  { series: 'dust', title: 'chart.dust', format: (v) => v.toFixed(3) },
+  {
+    series: 'water',
+    title: 'chart.water',
+    hint: 'chartHint.water',
+    unit: 'm GEL',
+    family: 'climate',
+    format: (v) => `${formatAxisNumber(v)} m GEL`,
+  },
+  {
+    series: 'iceFraction',
+    title: 'chart.ice',
+    hint: 'chartHint.ice',
+    unit: '%',
+    family: 'climate',
+    scale: 100,
+    format: (v) => `${v.toFixed(1)}%`,
+  },
+  {
+    series: 'landFraction',
+    title: 'chart.land',
+    hint: 'chartHint.land',
+    unit: '%',
+    family: 'climate',
+    scale: 100,
+    format: (v) => `${v.toFixed(1)}%`,
+  },
+  {
+    series: 'seaLevel',
+    title: 'chart.seaLevel',
+    hint: 'chartHint.seaLevel',
+    unit: 'm',
+    family: 'climate',
+    format: (v) => `${formatAxisNumber(v)} m`,
+  },
+  {
+    series: 'solarInput',
+    title: 'chart.sun',
+    hint: 'chartHint.sun',
+    unit: '% present Sun',
+    family: 'climate',
+    scale: 100,
+    format: (v) => `${v.toFixed(1)}%`,
+  },
+  {
+    series: 'o2',
+    title: 'chart.o2',
+    hint: 'chartHint.o2',
+    unit: '%',
+    family: 'atmosphere',
+    scale: 100,
+    format: (v) => `${v.toFixed(2)}%`,
+  },
+  {
+    series: 'ch4',
+    title: 'chart.ch4',
+    hint: 'chartHint.ch4',
+    unit: 'ppm',
+    family: 'atmosphere',
+    format: (v) => `${formatPpm(v)} ppm`,
+    logFloor: 0.01,
+  },
+  {
+    series: 'livingClasses',
+    title: 'chart.livingClasses',
+    hint: 'chartHint.livingClasses',
+    unit: 'classes',
+    family: 'life',
+    format: (v) => v.toFixed(0),
+  },
+  {
+    series: 'dust',
+    title: 'chart.dust',
+    hint: 'chartHint.dust',
+    unit: 'optical depth',
+    family: 'atmosphere',
+    format: (v) => v.toFixed(3),
+  },
   {
     series: 'oceanAcidity',
     title: 'chart.oceanAcidity',
-    // The chemistry model records a pH drop. Milli-pH keeps small transient
-    // excursions visible and gives uPlot useful labelled ticks near zero.
+    hint: 'chartHint.oceanAcidity',
+    unit: 'milli-pH',
+    family: 'life',
     scale: 1000,
     format: (v) => `${v.toFixed(1)} milli-pH`,
   },
   {
     series: 'meanOceanOxygen',
     title: 'chart.meanOceanOxygen',
+    hint: 'chartHint.meanOceanOxygen',
+    unit: '% saturation',
+    family: 'life',
     scale: 100,
     format: (v) => `${v.toFixed(1)}% saturation`,
   },
   {
     series: 'clathrateMethane',
     title: 'chart.clathrateMethane',
-    format: (v) => `${v.toFixed(0)} Gt C`,
+    hint: 'chartHint.clathrateMethane',
+    unit: 'Gt C',
+    family: 'climate',
+    format: (v) => `${formatAxisNumber(v)} Gt C`,
   },
   {
     series: 'fossilCarbon',
     title: 'chart.fossilCarbon',
-    format: (v) => `${v.toFixed(0)} Gt C`,
+    hint: 'chartHint.fossilCarbon',
+    unit: 'Gt C',
+    family: 'civilization',
+    format: (v) => `${formatAxisNumber(v)} Gt C`,
+    logFloor: 0.1,
+  },
+  {
+    series: 'population',
+    title: 'chart.population',
+    hint: 'chartHint.population',
+    unit: 'billion',
+    family: 'civilization',
+    format: (v) =>
+      v < 1 ? `${formatAxisNumber(v * 1000)} million` : `${formatAxisNumber(v)} billion`,
+    logFloor: 0.000001,
   },
   {
     series: 'pollution',
     title: 'chart.pollution',
+    hint: 'chartHint.pollution',
+    unit: 'index',
+    family: 'civilization',
     format: (v) => v.toFixed(2),
   },
   {
     series: 'forestFraction',
     title: 'chart.forest',
+    hint: 'chartHint.forest',
+    unit: '% surface',
+    family: 'life',
     scale: 100,
     format: (v) => `${v.toFixed(1)}%`,
   },
   {
     series: 'desertFraction',
     title: 'chart.desert',
+    hint: 'chartHint.desert',
+    unit: '% surface',
+    family: 'climate',
     scale: 100,
     format: (v) => `${v.toFixed(1)}%`,
   },
   {
     series: 'whiteDaisies',
     title: 'chart.whiteDaisies',
+    hint: 'chartHint.whiteDaisies',
+    unit: '% surface',
+    family: 'life',
     scale: 100,
     format: (v) => `${v.toFixed(1)}%`,
   },
   {
     series: 'blackDaisies',
     title: 'chart.blackDaisies',
+    hint: 'chartHint.blackDaisies',
+    unit: '% surface',
+    family: 'life',
     scale: 100,
     format: (v) => `${v.toFixed(1)}%`,
   },
 ];
 
 export type ChartSeries = ChartSpec['series'];
-
-/** Shared by all charts so hovering one shows the same moment in all of them. */
+const AVAILABLE_CHARTS = new Set(CHARTS.map((chart) => chart.series));
 const CURSOR_SYNC_KEY = 'planet-history';
-
 const ERA_LABELS: Record<Era, MessageKey> = {
   geological: 'eraName.geological',
   evolution: 'eraName.evolution',
   civilization: 'eraName.civilization',
   technology: 'eraName.technology',
 };
+const MAJOR_EVENTS = new Set<PlanetEvent['key']>([
+  'lifeOrigin',
+  'massExtinction',
+  'sentience',
+  'eraReached',
+  'runawayGreenhouse',
+  'oceansLost',
+  'civilizationCollapsed',
+  'exodus',
+  'goalWon',
+  'goalLost',
+]);
 
 interface Props {
   history: Record<HistorySeries, Float64Array>;
-  /** Which measures to chart, in this order. */
   series: readonly ChartSeries[];
+  scenario: ScenarioId;
+  events: readonly PlanetEvent[];
 }
 
-/**
- * Small multiples of the planet's global history, one measure per chart on a
- * shared time axis (never two measures on one chart with two y-axes).
- */
-export function HistoryCharts({ history, series }: Props) {
-  const specs = series.map((name) => CHARTS.find((spec) => spec.series === name)!);
+/** Small multiples with one measure per chart and a shared, synchronized time cursor. */
+export function HistoryCharts({ history, series, scenario, events }: Props) {
+  const [selected, setSelected] = useState<ChartSeries[]>(() =>
+    loadChartSelection(chartStorage(), scenario, series, AVAILABLE_CHARTS),
+  );
+  const update = (next: ChartSeries[]) => {
+    setSelected(next);
+    saveChartSelection(chartStorage(), scenario, next);
+  };
+  const specs = selected
+    .map((name) => CHARTS.find((spec) => spec.series === name)!)
+    .filter(Boolean);
   return (
     <section className="history" aria-label={t('chart.sectionLabel')}>
+      <details className="chart-picker">
+        <summary title={t('chart.pickerHint')}>{t('chart.picker')}</summary>
+        <div className="chart-picker-list">
+          {CHARTS.map((spec) => (
+            <label key={spec.series} title={t(spec.hint)}>
+              <input
+                type="checkbox"
+                checked={selected.includes(spec.series)}
+                onChange={(event) =>
+                  update(
+                    event.target.checked
+                      ? [...selected, spec.series]
+                      : selected.filter((name) => name !== spec.series),
+                  )
+                }
+              />
+              <span className="chart-picker-icon">{CHART_ICONS[spec.series]}</span>
+              {t(spec.title)}
+            </label>
+          ))}
+        </div>
+        <button type="button" title={t('chart.resetHint')} onClick={() => update([...series])}>
+          {t('chart.reset')}
+        </button>
+      </details>
+      <EraLegend />
       {specs.map((spec) => (
-        <HistoryChart key={spec.series} spec={spec} history={history} />
+        <HistoryChart key={spec.series} spec={spec} history={history} events={events} />
       ))}
+      {specs.length === 0 && <p className="chart-empty">{t('chart.noneSelected')}</p>}
     </section>
   );
 }
 
-function HistoryChart({ spec, history }: { spec: ChartSpec; history: Props['history'] }) {
+function chartStorage(): Storage | undefined {
+  try {
+    return globalThis.localStorage;
+  } catch {
+    return undefined;
+  }
+}
+
+function EraLegend() {
+  return (
+    <ul className="era-legend" aria-label={t('chart.eraLegend')}>
+      {(Object.keys(ERA_LABELS) as Era[]).map((era) => (
+        <li key={era} title={t(ERA_LABELS[era])}>
+          <i className={`era-swatch era-${era}`} />
+          {t(ERA_LABELS[era])}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function HistoryChart({
+  spec,
+  history,
+  events,
+}: {
+  spec: ChartSpec;
+  history: Props['history'];
+  events: Props['events'];
+}) {
+  const years = history.year;
+  const values = history[spec.series];
+  const scale = spec.scale ?? 1;
+  if (years.length === 0 || values.length === 0)
+    return (
+      <ChartShell spec={spec}>
+        <p className="chart-state">{t('chart.noData')}</p>
+      </ChartShell>
+    );
+  if (years.length === 1 || values.length === 1)
+    return (
+      <ChartShell spec={spec} value={spec.format(values[0]! * scale)}>
+        <p className="chart-state">{t('chart.oneSample')}</p>
+      </ChartShell>
+    );
+  return <PlottedChart spec={spec} history={history} events={events} />;
+}
+
+function ChartShell({
+  spec,
+  value,
+  children,
+}: {
+  spec: ChartSpec;
+  value?: string;
+  children: ReactNode;
+}) {
+  return (
+    <figure className={`chart chart-${spec.family}`}>
+      <figcaption title={t(spec.hint)}>
+        <span className="chart-heading">
+          <span className="chart-title-icon">{CHART_ICONS[spec.series]}</span>
+          <span className="chart-title">
+            {t(spec.title)} <small>({spec.unit})</small>
+          </span>
+        </span>
+        {value && <span className="chart-value">{value}</span>}
+      </figcaption>
+      {children}
+    </figure>
+  );
+}
+
+function PlottedChart({
+  spec,
+  history,
+  events,
+}: {
+  spec: ChartSpec;
+  history: Props['history'];
+  events: Props['events'];
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const plotRef = useRef<uPlot | null>(null);
   const historyRef = useRef(history);
-  const [hovered, setHovered] = useState<{ year: number; value: number } | null>(null);
-
+  const valuesRef = useRef(history[spec.series]);
+  const eventsRef = useRef<readonly PlanetEvent[]>(events);
+  const [hovered, setHovered] = useState<{
+    year: number;
+    value: number;
+    era?: Era;
+    event?: PlanetEvent;
+  } | null>(null);
   const scale = spec.scale ?? 1;
   const years = history.year;
   const values = history[spec.series];
-  const latest = values.length > 0 ? values[values.length - 1]! * scale : undefined;
-
+  const timeUnit = selectTimeUnit(years[years.length - 1]! - years[0]!);
+  const majorEvents = useMemo(
+    () => events.filter((event) => MAJOR_EVENTS.has(event.key)),
+    [events],
+  );
   useEffect(() => {
     historyRef.current = history;
-  }, [history]);
+    valuesRef.current = values;
+    eventsRef.current = majorEvents;
+  }, [history, values, majorEvents]);
 
-  // Create the plot once; data updates go through setData below.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -158,20 +444,22 @@ function HistoryChart({ spec, history }: { spec: ChartSpec; history: Props['hist
       grid: { stroke: token('--grid'), width: 1 },
       ticks: { stroke: token('--grid'), width: 1 },
       font: '11px system-ui, sans-serif',
+      space: 42,
     };
+    const colour = token(`--chart-${spec.family}`);
     const plot = new uPlot(
       {
         width: container.clientWidth,
-        height: 140,
+        height: 154,
         legend: { show: false },
         cursor: {
           sync: { key: CURSOR_SYNC_KEY },
-          points: { size: 8, fill: token('--series-1'), stroke: token('--surface-chart') },
+          drag: { x: true, y: false },
+          points: { size: 8, fill: colour, stroke: token('--surface-chart') },
         },
         scales: {
           x: { time: false },
-          // With a single sample uPlot would pick an arbitrary range; pad around it instead.
-          y: spec.log
+          y: spec.logFloor
             ? { distr: 3 }
             : {
                 range: (_, min, max) =>
@@ -181,24 +469,42 @@ function HistoryChart({ spec, history }: { spec: ChartSpec; history: Props['hist
         axes: [
           {
             ...axis,
-            // Planet age in Gyr, with enough decimals to tell neighbouring ticks apart.
             values: (u, ticks) => {
-              const span = ((u.scales.x!.max ?? 0) - (u.scales.x!.min ?? 0)) / 1e9;
-              const decimals = span < 0.05 ? 3 : 2;
-              return ticks.map((v) => (v / 1e9).toFixed(decimals));
+              const unit = selectTimeUnit((u.scales.x!.max ?? 0) - (u.scales.x!.min ?? 0));
+              return ticks.map((value) =>
+                (value / unit.divisor).toLocaleString('en-US', {
+                  maximumFractionDigits: unit.decimals,
+                }),
+              );
             },
           },
-          { ...axis, size: 56 },
+          { ...axis, size: 58, space: 30, values: (_, ticks) => ticks.map(formatAxisNumber) },
         ],
-        series: [{}, { stroke: token('--series-1'), width: 2, points: { show: false } }],
+        series: [{}, { stroke: colour, width: 2, points: { show: false } }],
         hooks: {
-          draw: [(u) => drawEraTransitions(u, historyRef.current, token)],
+          drawClear: [(u) => drawEraBands(u, historyRef.current, token)],
+          draw: [(u) => drawEventTicks(u, eventsRef.current, token)],
           setCursor: [
             (u) => {
               const index = u.cursor.idx;
-              const year = index == null ? undefined : u.data[0][index];
-              const value = index == null ? undefined : u.data[1]![index];
-              setHovered(year != null && value != null ? { year, value } : null);
+              if (index == null) {
+                setHovered(null);
+                return;
+              }
+              const year = u.data[0][index];
+              const raw = valuesRef.current[index];
+              if (year == null || raw == null) {
+                setHovered(null);
+                return;
+              }
+              const eraIndex = historyRef.current.era[index];
+              const era = eraIndex == null ? undefined : (ERAS[eraIndex] as Era | undefined);
+              setHovered({
+                year,
+                value: raw * scale,
+                era,
+                event: nearestEvent(u, year, eventsRef.current),
+              });
             },
           ],
         },
@@ -208,7 +514,7 @@ function HistoryChart({ spec, history }: { spec: ChartSpec; history: Props['hist
     );
     plotRef.current = plot;
     const resize = new ResizeObserver(() =>
-      plot.setSize({ width: container.clientWidth, height: 140 }),
+      plot.setSize({ width: container.clientWidth, height: 154 }),
     );
     resize.observe(container);
     return () => {
@@ -216,83 +522,107 @@ function HistoryChart({ spec, history }: { spec: ChartSpec; history: Props['hist
       plot.destroy();
       plotRef.current = null;
     };
-  }, [spec.log]);
+  }, [spec.family, spec.logFloor, scale]);
 
   useEffect(() => {
-    const plot = plotRef.current;
-    if (!plot) return;
-    const plotted = Array.from(values, (v) => v * scale);
-    plot.setData([Array.from(years), plotted]);
-    // uPlot does not pad the x range around a lone sample; give it a sensible window.
-    if (years.length === 1) plot.setScale('x', { min: years[0]! - 5e6, max: years[0]! + 5e6 });
-  }, [years, values, scale]);
+    const plotted = Array.from(values, (value) => {
+      const scaled = value * scale;
+      // Log charts declare a physically small display floor so zero never reaches uPlot.
+      return spec.logFloor === undefined ? scaled : clampLogValue(scaled, spec.logFloor);
+    });
+    plotRef.current?.setData([Array.from(years), plotted]);
+  }, [years, values, scale, spec.logFloor]);
 
-  const shown =
-    hovered ?? (latest === undefined ? null : { year: years[years.length - 1]!, value: latest });
-
+  const latest = values.length - 1;
+  const shown = hovered ?? {
+    year: years[latest]!,
+    value: values[latest]! * scale,
+    era: ERAS[history.era[latest]!] as Era | undefined,
+  };
   return (
-    <figure className="chart">
-      <figcaption>
-        <span className="chart-title">{t(spec.title)}</span>
-        {shown && (
-          <span className="chart-value">
-            {spec.format(shown.value)}
-            <span className="chart-when"> {t('chart.at', { age: formatGyr(shown.year) })}</span>
+    <ChartShell spec={spec}>
+      <div className="chart-readout">
+        <span className="chart-value">{spec.format(shown.value)}</span>
+        <span className="chart-when">
+          {t('chart.at', { age: formatGyr(shown.year) })}
+          {shown.era ? ` · ${t(ERA_LABELS[shown.era])}` : ''}
+        </span>
+        {shown.event && (
+          <span className="chart-event" title={describeEvent(shown.event)}>
+            <EventIcon eventKey={shown.event.key} />
+            {describeEvent(shown.event)}
           </span>
         )}
-      </figcaption>
-      <div ref={containerRef} className="chart-plot" />
-    </figure>
+      </div>
+      <div className="chart-plot-wrap">
+        <div ref={containerRef} className="chart-plot" />
+        <span className="chart-time-unit">{timeUnit.label}</span>
+      </div>
+    </ChartShell>
   );
 }
 
-/** Draws all transition lines, but skips labels that would overlap a previous one. */
-function drawEraTransitions(
-  plot: uPlot,
-  history: Props['history'],
-  token: (name: string) => string,
-) {
-  const { year: years, era: eras } = history;
-  if (years.length < 2 || eras.length !== years.length) return;
-  const ratio = uPlot.pxRatio;
+function drawEraBands(plot: uPlot, history: Props['history'], token: (name: string) => string) {
+  const { year, era } = history;
+  if (year.length < 2 || era.length !== year.length) return;
   const { ctx, bbox } = plot;
-  const minYear = plot.scales.x!.min ?? -Infinity;
-  const maxYear = plot.scales.x!.max ?? Infinity;
-  let labelRight = -Infinity;
-
   ctx.save();
   ctx.beginPath();
   ctx.rect(bbox.left, bbox.top, bbox.width, bbox.height);
   ctx.clip();
-  ctx.lineWidth = ratio;
-  ctx.strokeStyle = token('--text-secondary');
-  ctx.fillStyle = token('--text-secondary');
-  ctx.font = `${10 * ratio}px system-ui, sans-serif`;
-  ctx.textBaseline = 'top';
-
-  for (let index = 1; index < years.length; index++) {
-    if (eras[index] === eras[index - 1]) continue;
-    const year = years[index]!;
-    const era = ERAS[eras[index]!] as Era | undefined;
-    if (!era || year < minYear || year > maxYear) continue;
-    const x = Math.round(plot.valToPos(year, 'x', true)) + 0.5 * ratio;
-    ctx.globalAlpha = 0.55;
-    ctx.beginPath();
-    ctx.moveTo(x, bbox.top);
-    ctx.lineTo(x, bbox.top + bbox.height);
-    ctx.stroke();
-
-    const label = t(ERA_LABELS[era]);
-    const labelWidth = ctx.measureText(label).width;
-    const labelX = Math.min(x + 4 * ratio, bbox.left + bbox.width - labelWidth - 2 * ratio);
-    if (labelX <= labelRight) continue;
-    ctx.globalAlpha = 0.9;
-    ctx.lineWidth = 3 * ratio;
-    ctx.strokeStyle = token('--surface-chart');
-    ctx.strokeText(label, labelX, bbox.top + 3 * ratio);
-    ctx.fillText(label, labelX, bbox.top + 3 * ratio);
-    ctx.strokeStyle = token('--text-secondary');
-    labelRight = labelX + labelWidth + 8 * ratio;
+  let start = 0;
+  for (let index = 1; index <= year.length; index++) {
+    if (index < year.length && era[index] === era[start]) continue;
+    const name = ERAS[era[start]!] as Era | undefined;
+    if (name) {
+      const from = Math.max(bbox.left, plot.valToPos(year[start]!, 'x', true));
+      const to = Math.min(
+        bbox.left + bbox.width,
+        plot.valToPos(index < year.length ? year[index]! : year[index - 1]!, 'x', true),
+      );
+      ctx.fillStyle = token(`--era-${name}`);
+      ctx.fillRect(from, bbox.top, Math.max(1, to - from), bbox.height);
+    }
+    start = index;
   }
   ctx.restore();
+}
+
+function drawEventTicks(
+  plot: uPlot,
+  events: readonly PlanetEvent[],
+  token: (name: string) => string,
+) {
+  const { ctx, bbox } = plot;
+  const ratio = uPlot.pxRatio;
+  ctx.save();
+  ctx.strokeStyle = token('--chart-event');
+  ctx.lineWidth = 1.5 * ratio;
+  for (const event of events) {
+    const x = plot.valToPos(event.year, 'x', true);
+    if (x < bbox.left || x > bbox.left + bbox.width) continue;
+    ctx.beginPath();
+    ctx.moveTo(x, bbox.top + bbox.height - 7 * ratio);
+    ctx.lineTo(x, bbox.top + bbox.height);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function nearestEvent(
+  plot: uPlot,
+  year: number,
+  events: readonly PlanetEvent[],
+): PlanetEvent | undefined {
+  let nearest: PlanetEvent | undefined;
+  let distance = 8 * uPlot.pxRatio;
+  const cursorX = plot.valToPos(year, 'x', true);
+  for (const event of events) {
+    const next = Math.abs(plot.valToPos(event.year, 'x', true) - cursorX);
+    if (next <= distance) {
+      distance = next;
+      nearest = event;
+    }
+  }
+  return nearest;
 }

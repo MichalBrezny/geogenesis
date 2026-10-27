@@ -10,10 +10,31 @@
   --grid: #2a3139;
   /* Categorical slot 1 of the dark data palette. */
   --series-1: #3987e5;
+  --chart-climate: #59a5f5;
+  --chart-atmosphere: #b58af2;
+  --chart-life: #55bd78;
+  --chart-civilization: #ef9b4e;
+  --chart-event: #f3c25d;
+  --era-geological: rgb(117 134 151 / 0.12);
+  --era-evolution: rgb(76 175 105 / 0.12);
+  --era-civilization: rgb(229 151 67 / 0.13);
+  --era-technology: rgb(171 112 222 / 0.14);
   --accent-strong: #1f5fae;
   --warning: #f0ad4e;
   background: var(--surface-page);
   color: var(--text-primary);
+}
+
+[data-theme='light'] {
+  --chart-climate: #1769aa;
+  --chart-atmosphere: #6f42a5;
+  --chart-life: #267c3e;
+  --chart-civilization: #a55313;
+  --chart-event: #9a6400;
+  --era-geological: rgb(82 101 119 / 0.11);
+  --era-evolution: rgb(36 126 62 / 0.1);
+  --era-civilization: rgb(177 94 24 / 0.11);
+  --era-technology: rgb(111 66 165 / 0.11);
 }
 
 body {
@@ -652,6 +673,87 @@ kbd {
   gap: 10px;
 }
 
+/* History charts: families, era bands, picker and synchronized readouts. */
+.chart-picker {
+  padding: 7px 10px;
+  border: 1px solid var(--grid);
+  border-radius: 6px;
+  background: var(--surface-chart);
+  font-size: 0.82rem;
+}
+
+.chart-picker summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.chart-picker-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px 10px;
+  margin: 9px 0;
+}
+
+.chart-picker-list label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.chart-picker-list input {
+  accent-color: var(--series-1);
+}
+
+.chart-picker-icon,
+.chart-title-icon {
+  display: inline-flex;
+  flex: none;
+}
+
+.chart-picker-icon .icon,
+.chart-title-icon .icon {
+  width: 15px;
+  height: 15px;
+}
+
+.era-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 0;
+  padding: 0 2px;
+  list-style: none;
+  color: var(--text-secondary);
+  font-size: 0.68rem;
+}
+
+.era-legend li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.era-swatch {
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--grid);
+  border-radius: 2px;
+}
+
+.era-geological {
+  background: var(--era-geological);
+}
+.era-evolution {
+  background: var(--era-evolution);
+}
+.era-civilization {
+  background: var(--era-civilization);
+}
+.era-technology {
+  background: var(--era-technology);
+}
+
 .chart {
   margin: 0;
   padding: 8px 10px 4px;
@@ -673,6 +775,31 @@ kbd {
   color: var(--text-secondary);
 }
 
+.chart-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.chart-title small {
+  font-size: 0.7rem;
+  font-weight: 400;
+}
+
+.chart-climate .chart-title-icon {
+  color: var(--chart-climate);
+}
+.chart-atmosphere .chart-title-icon {
+  color: var(--chart-atmosphere);
+}
+.chart-life .chart-title-icon {
+  color: var(--chart-life);
+}
+.chart-civilization .chart-title-icon {
+  color: var(--chart-civilization);
+}
+
 .chart-value {
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
@@ -682,8 +809,51 @@ kbd {
   color: var(--text-secondary);
 }
 
+.chart-readout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px 8px;
+  min-height: 19px;
+  font-size: 0.75rem;
+}
+
+.chart-event {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--chart-event);
+}
+
+.chart-event .map-glyph {
+  width: 14px;
+  height: 14px;
+}
+
+.chart-plot-wrap {
+  position: relative;
+}
+
 .chart-plot {
   width: 100%;
+  touch-action: pan-y;
+}
+
+.chart-time-unit {
+  position: absolute;
+  right: 2px;
+  bottom: 1px;
+  color: var(--text-secondary);
+  font-size: 0.65rem;
+  pointer-events: none;
+}
+
+.chart-state,
+.chart-empty {
+  margin: 9px 0;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  text-align: center;
 }
 
 .legend {

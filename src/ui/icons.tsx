@@ -396,3 +396,55 @@ export const GOAL_ICON = (
     <path d="m14 10 6-6m-3 0h3v3" />
   </Icon>
 );
+
+/** Compact measure glyphs used beside history-chart titles and picker labels. */
+export const CHART_ICONS: Record<string, ReactNode> = {
+  meanTemperature: LAYER_ICONS.airTemperature,
+  runawayMargin: (
+    <Icon>
+      <path d="M4 19 12 3l8 16M8 14h8" />
+      <path d="M12 8v3m0 4v.5" />
+    </Icon>
+  ),
+  co2: TOOL_ICONS.addCo2,
+  co2Ice: LAYER_ICONS.clathrates,
+  surfacePressure: LAYER_ICONS.pressure,
+  water: LAYER_ICONS.precipitation,
+  iceFraction: (
+    <Icon>
+      <path d="M12 2v20M3.3 7l17.4 10M3.3 17 20.7 7M8 4l4 3 4-3M8 20l4-3 4 3" />
+    </Icon>
+  ),
+  landFraction: LAYER_ICONS.terrain,
+  seaLevel: LAYER_ICONS.oceanCurrents,
+  solarInput: (
+    <Icon>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2m0-14-2 2M7 17l-2 2" />
+    </Icon>
+  ),
+  o2: LAYER_ICONS.oceanOxygen,
+  ch4: LAYER_ICONS.clathrates,
+  livingClasses: LAYER_ICONS.life,
+  biodiversity: LAYER_ICONS.diversity,
+  dust: DISASTER_ICONS.dustStorms,
+  oceanAcidity: (
+    <Icon>
+      <path d="M4 18c4-3 12-3 16 0M6 11h5m-2.5-2.5v5M15 9h5" />
+      <path d="M12 3s-7 8-7 12a7 7 0 0 0 14 0c0-4-7-12-7-12Z" />
+    </Icon>
+  ),
+  meanOceanOxygen: LAYER_ICONS.oceanOxygen,
+  clathrateMethane: LAYER_ICONS.clathrates,
+  fossilCarbon: (
+    <Icon>
+      <path d="M4 20h16M6 20v-6l6-10 6 10v6M9 14h6M10 17h4" />
+    </Icon>
+  ),
+  population: LAYER_ICONS.civilization,
+  pollution: DISASTER_ICONS.dustStorms,
+  forestFraction: LAYER_ICONS.biomes,
+  desertFraction: DISASTER_ICONS.droughts,
+  whiteDaisies: LAYER_ICONS.daisies,
+  blackDaisies: LAYER_ICONS.daisies,
+};
