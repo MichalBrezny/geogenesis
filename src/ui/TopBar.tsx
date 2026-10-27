@@ -127,6 +127,21 @@ function Vitals({ frame }: { frame: Frame }) {
     ['stat.ice', 'stat.iceHint', `${(frame.iceFraction * 100).toFixed(0)}%`],
     ['stat.seaLevel', 'stat.seaLevelHint', `${frame.seaLevel.toFixed(0)} m`],
     ['stat.sun', 'stat.sunHint', `${(frame.solarInput * 100).toFixed(1)}%`],
+    ...(frame.civilization.species !== null || frame.fossilCarbon > 0
+      ? [
+          [
+            'stat.fossilCarbon',
+            'stat.fossilCarbonHint',
+            `${frame.fossilCarbon.toFixed(0)} Gt C`,
+          ] as [MessageKey, MessageKey, string],
+          [
+            'stat.pollution',
+            'stat.pollutionHint',
+            frame.pollution.toFixed(2),
+            frame.pollution >= 1,
+          ] as [MessageKey, MessageKey, string, boolean],
+        ]
+      : []),
     [
       'stat.runawayMargin',
       'stat.runawayMarginHint',

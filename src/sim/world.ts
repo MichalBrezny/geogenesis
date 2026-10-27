@@ -136,6 +136,9 @@ export function createRandomWorld(options: WorldOptions = {}): World {
     planet.planetParams.initialWaterGel = planet.globals.initialWater;
   }
   if (start !== 'young') seedPrimordialLife(planet);
+  // Starts with an implied biological past receive a modest marine-derived reserve;
+  // the explicit Cambrian and Stone Age scenarios refine this after seeding their life.
+  planet.globals.fossilCarbon = start === 'quick' ? 1_000 : start === 'microbial' ? 250 : 0;
   planet.globals.atmosphere.o2 = 0;
   planet.globals.energy = STARTING_ENERGY;
   const world = randomWorldFromPlanet(planet, {
@@ -145,6 +148,7 @@ export function createRandomWorld(options: WorldOptions = {}): World {
   // Run once with dt = 0 so derived fields are valid before the first real step.
   world.simulation.step(planet, 0);
   const carbonInventory = planet.globals.crustalCarbon + planet.globals.atmosphere.co2 * 1e-6;
+  const fossilInventory = planet.globals.fossilCarbon;
   // An explicitly requested CO2 inventory is an upper bound for the spin-up: a cold
   // planet without a working weathering sink has no balance to settle into and would
   // otherwise open at the wet guardrail instead of with the atmosphere it was given.
@@ -155,6 +159,8 @@ export function createRandomWorld(options: WorldOptions = {}): World {
     0,
     carbonInventory - planet.globals.atmosphere.co2 * 1e-6,
   );
+  // The fixed-point atmosphere spin-up also represents no geological time.
+  planet.globals.fossilCarbon = fossilInventory;
   recordHistory.runOneStep(planet, 0, createRng(0));
   return world;
 }

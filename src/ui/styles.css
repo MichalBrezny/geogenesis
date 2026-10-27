@@ -1007,6 +1007,39 @@ button.event-entry:hover:not(:disabled) {
   padding: 0;
 }
 
+.civilization-controls > section h3 {
+  margin: 14px 0 7px;
+  font-size: 0.85rem;
+}
+
+.policy-sliders {
+  display: grid;
+  gap: 7px;
+}
+
+.policy-sliders > div {
+  display: grid;
+  grid-template-columns: minmax(8rem, auto) minmax(7rem, 1fr) 3rem;
+  align-items: center;
+  gap: 8px;
+}
+
+.policy-sliders input[type='range'] {
+  width: 100%;
+  min-width: 0;
+  accent-color: var(--series-1);
+}
+
+.policy-sliders output {
+  text-align: right;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.policy-sliders .locked {
+  opacity: 0.55;
+}
+
 .window-launchers {
   display: grid;
   grid-template-columns: 1fr 1fr;

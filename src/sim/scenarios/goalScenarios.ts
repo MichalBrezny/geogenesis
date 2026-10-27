@@ -31,6 +31,8 @@ const ISLAND_MAX_AREA = 2.5e12;
 /** Geological steps that let a new world's climate settle before life is placed. */
 const SETTLING_STEPS = 4;
 const SETTLING_STEP_YEARS = 500e3;
+const CAMBRIAN_FOSSIL_CARBON = 1_500;
+const STONE_AGE_FOSSIL_CARBON = 8_000;
 
 /**
  * Earth-like world on a brightening Sun. At 5.6 Gyr weathering has already drawn
@@ -102,6 +104,7 @@ export function createStoneAge(options: PlanetOptions): World {
   const mammals = lifeClassIndex('mammals');
   const home = islandHome(planet, mammals);
   makeSentient(planet, mammals, home);
+  planet.globals.fossilCarbon = STONE_AGE_FOSSIL_CARBON;
   // A band of neighbouring settlements rather than one cell, so the first people do
   // not fall below the collapse threshold on fine grids, where cells are small.
   const { neighbors } = getTopology(planet.grid);
@@ -129,6 +132,7 @@ export function createCambrian(options: PlanetOptions): World {
     oxygen: CAMBRIAN_OXYGEN,
     exclude: ['plants'],
   });
+  base.planet.globals.fossilCarbon = CAMBRIAN_FOSSIL_CARBON;
   return randomWorldFromPlanet(base.planet, base.settings);
 }
 
@@ -248,6 +252,8 @@ function seedEstablishedComplexLife(
   planet.civilization.population = 0;
   planet.civilization.sentientSince = null;
   planet.civilization.exodusYear = null;
+  planet.civilization.energySupply = 1;
+  planet.civilization.fossilSupply = 1;
   planet.fields.civilization.fill(0);
   createLife().runOneStep(planet, 0, createRng(planet.rngState));
 }

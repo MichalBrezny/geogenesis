@@ -5,7 +5,18 @@ import { SENTIENCE_POTENTIAL, TECH_AGES } from '../../data/civilization';
 import { LIFE_CLASS_COUNT, lifeClassIndex } from '../../data/lifeClasses';
 import { Biome } from '../../data/biomes';
 import { eraStepYears } from '../../eras';
-import { createCivilization, occupiedHabitatShare, SENTIENCE_TIME } from './civilization';
+import {
+  civilizationProduction,
+  createCivilization,
+  effectiveEnergyMix,
+  makeSentient,
+  occupiedHabitatShare,
+  POLLUTION_RESIDENCE_TIME,
+  SENTIENCE_TIME,
+  updatePollution,
+} from './civilization';
+import { createCarbonCycle } from '../atmosphere/carbon';
+import { normalizeCivilizationPolicy, updateCivilizationPolicy } from '../../data/civilization';
 
 const rng = createRng(7);
 
@@ -79,14 +90,19 @@ describe('civilization', () => {
   it('grows, advances through the ages, burns fossil fuels and finally leaves', () => {
     const planet = mammalWorld();
     const civilization = createCivilization({ sentienceTime: 1e3 });
+    const carbon = createCarbonCycle();
+    planet.globals.fossilCarbon = 8_000;
+    const fossilBefore = planet.globals.fossilCarbon;
     civilization.runOneStep(planet, 1e6, rng);
     expect(planet.civilization.species).not.toBeNull();
 
     const co2Before = planet.globals.atmosphere.co2;
     let steps = 0;
     while (planet.civilization.exodusYear === null && steps < 5000) {
-      civilization.runOneStep(planet, eraStepYears(planet), rng);
-      planet.globals.year += eraStepYears(planet);
+      const dt = eraStepYears(planet);
+      civilization.runOneStep(planet, dt, rng);
+      carbon.runOneStep(planet, dt, rng);
+      planet.globals.year += dt;
       steps++;
     }
     expect(planet.civilization.exodusYear).not.toBeNull();
@@ -95,6 +111,7 @@ describe('civilization', () => {
     expect(reached).toContain('industrial');
     expect(reached).toContain('nanotech');
     expect(planet.globals.atmosphere.co2).toBeGreaterThan(co2Before + 50);
+    expect(planet.globals.fossilCarbon).toBeLessThan(fossilBefore);
     // Settlements are cleared when the civilization leaves.
     expect(Math.max(...planet.fields.civilization)).toBe(0);
   });
@@ -107,5 +124,82 @@ describe('civilization', () => {
       civilization.runOneStep(planet, eraStepYears(planet), rng);
     }
     expect(Math.min(...planet.fields.vegetation)).toBeLessThan(0.8);
+  });
+
+  it('unlocks energy sources by technology age and falls back while a chosen source is locked', () => {
+    const planet = mammalWorld();
+    makeSentient(planet, lifeClassIndex('mammals'), 0);
+    planet.civPolicy.energy = {
+      biomass: 0,
+      fossil: 0,
+      nuclear: 0,
+      solarWind: 100,
+      hydroGeothermal: 0,
+    };
+    expect(effectiveEnergyMix(planet).solarWind).toBe(0);
+    expect(effectiveEnergyMix(planet).biomass).toBeGreaterThan(0);
+    planet.civilization.age = 5;
+    expect(effectiveEnergyMix(planet).solarWind).toBe(1);
+  });
+
+  it('renormalizes policy groups to 100 percent and changes energy output', () => {
+    const normalized = normalizeCivilizationPolicy({
+      energy: { biomass: 1, fossil: 1, nuclear: 1, solarWind: 1, hydroGeothermal: 1 },
+      investment: { science: 2, agriculture: 2, medicine: 2, philosophy: 2, culture: 2 },
+    });
+    expect(Object.values(normalized.energy).reduce((a, b) => a + b, 0)).toBeCloseTo(100);
+    const changed = updateCivilizationPolicy(normalized, { energy: { fossil: 80 } });
+    expect(changed.energy.fossil).toBeCloseTo(80);
+    expect(Object.values(changed.energy).reduce((a, b) => a + b, 0)).toBeCloseTo(100);
+
+    const planet = mammalWorld();
+    makeSentient(planet, lifeClassIndex('mammals'), 0);
+    planet.civilization.age = 5;
+    planet.globals.fossilCarbon = 0;
+    const scarce = civilizationProduction(planet).energySupply;
+    planet.civPolicy.energy = {
+      biomass: 0,
+      fossil: 0,
+      nuclear: 0,
+      solarWind: 100,
+      hydroGeothermal: 0,
+    };
+    expect(civilizationProduction(planet).energySupply).not.toBeCloseTo(scarce);
+  });
+
+  it('decays pollution exactly independent of step length', () => {
+    const once = mammalWorld();
+    const stepped = mammalWorld();
+    once.globals.pollution = stepped.globals.pollution = 2;
+    updatePollution(once, 100, 0);
+    for (let k = 0; k < 20; k++) updatePollution(stepped, 5, 0);
+    expect(once.globals.pollution).toBeCloseTo(2 * Math.exp(-100 / POLLUTION_RESIDENCE_TIME), 12);
+    expect(stepped.globals.pollution).toBeCloseTo(once.globals.pollution, 12);
+  });
+
+  it('keeps a 1000-year industrial civilization close at 5-year and 100-year steps', () => {
+    const run = (dt: number) => {
+      const planet = mammalWorld();
+      makeSentient(planet, lifeClassIndex('mammals'), 0);
+      planet.civilization.age = 3;
+      planet.civilization.progress = -20;
+      planet.globals.fossilCarbon = 8_000;
+      planet.fields.civilization.fill(0.0001);
+      planet.civilization.population = 4;
+      const civilization = createCivilization();
+      const carbon = createCarbonCycle();
+      const stepRng = createRng(91);
+      for (let elapsed = 0; elapsed < 1000; elapsed += dt) {
+        civilization.runOneStep(planet, dt, stepRng);
+        carbon.runOneStep(planet, dt, stepRng);
+        planet.globals.year += dt;
+      }
+      return planet;
+    };
+    const short = run(5);
+    const long = run(100);
+    expect(long.civilization.population).toBeCloseTo(short.civilization.population, 1);
+    expect(long.globals.fossilCarbon / short.globals.fossilCarbon).toBeCloseTo(1, 1);
+    expect(long.globals.pollution / short.globals.pollution).toBeCloseTo(1, 1);
   });
 });

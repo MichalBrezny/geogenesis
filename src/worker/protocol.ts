@@ -1,6 +1,7 @@
 import type { MapSource } from '../render/mapRenderer';
 import type {
   CivilizationState,
+  CivilizationPolicy,
   DisasterSettings,
   ModelControls,
   PlanetParameters,
@@ -16,10 +17,12 @@ import type { CellLife } from '../sim/models/biosphere/diversity';
 import type { ControlKey, GoalCondition, GoalState } from '../sim/goals/goals';
 import type { Device } from '../sim/tools/devices';
 import type { Biosignature } from '../sim/models/biosphere/biosignature';
+import type { CivilizationPolicyChanges } from '../sim/data/civilization';
 
 export interface FrameGoal extends GoalState {
   conditions: GoalCondition[];
   controlLimits?: Partial<Record<ControlKey, [number, number]>>;
+  civPolicyLimits?: import('../sim/goals/goals').GoalDefinition['civPolicyLimits'];
 }
 
 /** Messages from the UI to the simulation worker. */
@@ -39,6 +42,7 @@ export type WorkerRequest =
   | { type: 'step' }
   | { type: 'tool'; use: ToolUse }
   | { type: 'controls'; controls: Partial<ModelControls> }
+  | { type: 'civPolicy'; policy: CivilizationPolicyChanges }
   | { type: 'disasters'; disasters: Partial<DisasterSettings> }
   | { type: 'unlimitedEnergy'; enabled: boolean }
   | { type: 'save' }
@@ -75,6 +79,9 @@ export interface Frame extends MapSource {
   /** Planet-wide cover (0..1) and first appearance (year or null) of each life class. */
   life: { cover: number[]; appeared: (number | null)[] };
   civilization: CivilizationState;
+  civPolicy: CivilizationPolicy;
+  fossilCarbon: number;
+  pollution: number;
   /** Most recent notable events, oldest first. */
   events: PlanetEvent[];
   /** Simulated years the next step will cover. */

@@ -1,5 +1,12 @@
 import type { SimComponent } from '../core/component';
-import type { ModelControls, PlanetState } from '../core/planet';
+import type {
+  CivilizationPolicy,
+  EnergySourceKey,
+  InvestmentKey,
+  ModelControls,
+  PlanetState,
+} from '../core/planet';
+import { normalizeCivilizationPolicy } from '../data/civilization';
 import { TECH_AGES } from '../data/civilization';
 import { LIFE_CLASSES } from '../data/lifeClasses';
 import { recordEvent } from '../events';
@@ -39,6 +46,10 @@ export interface GoalDefinition {
   evaluate(state: PlanetState, goal: GoalState, dtYears: number): void;
   conditions(state: PlanetState, goal: GoalState): GoalCondition[];
   controlLimits?: Partial<Record<ControlKey, [number, number]>>;
+  civPolicyLimits?: {
+    energy?: Partial<Record<EnergySourceKey, [number, number]>>;
+    investment?: Partial<Record<InvestmentKey, [number, number]>>;
+  };
 }
 
 const BRIGHTENING_TARGET_YEAR = 8.1e9;
@@ -546,4 +557,32 @@ export function clampGoalControls(
     clamped[key] = range ? Math.min(range[1], Math.max(range[0], value)) : value;
   }
   return clamped;
+}
+
+/** Applies any scenario policy ranges and restores the two 100% totals. */
+export function clampGoalCivilizationPolicy(
+  state: PlanetState,
+  policy: CivilizationPolicy,
+): CivilizationPolicy {
+  const limits = state.goal ? GOALS[state.goal.id].civPolicyLimits : undefined;
+  if (!limits) return normalizeCivilizationPolicy(policy);
+  const next: CivilizationPolicy = {
+    energy: { ...policy.energy },
+    investment: { ...policy.investment },
+  };
+  if (limits.energy) {
+    for (const key of Object.keys(limits.energy) as EnergySourceKey[]) {
+      const range = limits.energy[key];
+      if (!range) continue;
+      next.energy[key] = Math.min(range[1], Math.max(range[0], next.energy[key]));
+    }
+  }
+  if (limits.investment) {
+    for (const key of Object.keys(limits.investment) as InvestmentKey[]) {
+      const range = limits.investment[key];
+      if (!range) continue;
+      next.investment[key] = Math.min(range[1], Math.max(range[0], next.investment[key]));
+    }
+  }
+  return normalizeCivilizationPolicy(next);
 }

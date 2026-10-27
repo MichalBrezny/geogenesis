@@ -1,6 +1,6 @@
 import type { SimComponent } from '../../core/component';
 import { areaWeightedMean, EARTH_RADIUS } from '../../core/grid';
-import type { PlanetState } from '../../core/planet';
+import { EARTH_SURFACE_GRAVITY, type PlanetState } from '../../core/planet';
 import { Biome, BIOMES } from '../../data/biomes';
 import { isOcean, liquidWaterGel } from '../geosphere/seaLevel';
 import { MODERN_PHOTOSYNTHESIS, photosynthesis } from './biogeochemistry';
@@ -49,7 +49,13 @@ const RESERVOIR_TIME = 300_000;
  * of the present-day carbon flux (Earth: about a fifth; the rest is silicate
  * weathering). Burial is what leaves oxygen behind in the air.
  */
-const MODERN_BURIAL = 0.2;
+export const MODERN_BURIAL = 0.2;
+/** Geological loss time of accessible coal, oil and gas deposits. */
+export const FOSSIL_CARBON_LOSS_TIME = 3e8;
+/** Modern organic-carbon burial, in Gt C/yr. */
+const MODERN_BURIAL_GT_C_PER_YEAR = 0.1;
+/** Tiny share of burial that ultimately remains recoverable after geological processing. */
+const RECOVERABLE_BURIAL_SHARE = 2.5e-4;
 /** Global warming per e-fold of CO₂ (°C) near 280 ppm, used to predict temperature while solving for CO₂. */
 const CLIMATE_SENSITIVITY = 2.6;
 /** CO₂ forcing per e-fold at the pre-industrial level (W/m², Myhre et al. 1998). */
@@ -130,6 +136,15 @@ export function createCarbonCycle(options: CarbonCycleOptions = {}): SimComponen
       const outgassing =
         volcanism * state.controls.volcanism * (activity + state.globals.lipOutgassing);
       const atmosphere = state.globals.atmosphere;
+      // Industry runs before the carbon cycle. Put its finite-reserve pulse into the
+      // exchangeable atmosphere here, so weathering and greenhouse-predicted warming
+      // respond in the same implicit solve as every natural carbon flux.
+      const industrialRise = gtCarbonToMicrobar(
+        Math.max(0, state.globals.civilizationCarbonEmissions),
+        state,
+      );
+      if (industrialRise > 0) atmosphere.co2 = Math.min(ceiling, atmosphere.co2 + industrialRise);
+      state.globals.civilizationCarbonEmissions = 0;
       const before = atmosphere.co2;
       // Burial needs carbon to fix: it fades out as CO₂ runs out, like weathering.
       const burialAt = (co2: number) =>
@@ -219,9 +234,40 @@ export function createCarbonCycle(options: CarbonCycleOptions = {}): SimComponen
         weathering: weathering(atmosphere.co2),
         burial: burialAt(atmosphere.co2),
       };
+      accumulateFossilCarbon(state, dtYears, state.globals.carbon.burial);
       updateSurfacePressure(state.globals);
     },
   };
+}
+
+/** Atmospheric carbon represented by one microbar of CO₂ on this planet, Gt C. */
+export function gtCarbonPerMicrobar(state: PlanetState): number {
+  const { radius, surfaceGravity } = state.planetParams;
+  const earthScale =
+    (radius / EARTH_RADIUS) ** 2 * (EARTH_SURFACE_GRAVITY / Math.max(0.01, surfaceGravity));
+  // One microbar is 0.1 Pa; column mass is pressure/g and carbon is 12/44 of CO2.
+  return (
+    (0.1 * 4 * Math.PI * EARTH_RADIUS ** 2 * (12 / 44) * earthScale) / EARTH_SURFACE_GRAVITY / 1e12
+  );
+}
+
+export function gtCarbonToMicrobar(carbon: number, state: PlanetState): number {
+  return carbon / gtCarbonPerMicrobar(state);
+}
+
+/** Exact integration of formation at the step's burial rate and first-order geological loss. */
+export function accumulateFossilCarbon(
+  state: PlanetState,
+  dtYears: number,
+  burial = state.globals.carbon.burial,
+): void {
+  if (!(dtYears > 0)) return;
+  const decay = Math.exp(-dtYears / FOSSIL_CARBON_LOSS_TIME);
+  const sourceRate =
+    MODERN_BURIAL_GT_C_PER_YEAR * RECOVERABLE_BURIAL_SHARE * Math.max(0, burial / MODERN_BURIAL);
+  state.globals.fossilCarbon =
+    Math.max(0, state.globals.fossilCarbon) * decay +
+    sourceRate * FOSSIL_CARBON_LOSS_TIME * (1 - decay);
 }
 
 /**

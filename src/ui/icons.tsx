@@ -346,7 +346,7 @@ export const VIEW_ICONS: Record<View, ReactNode> = {
   ),
 };
 
-export type FloatingWindowId = ControlGroupId | 'planet';
+export type FloatingWindowId = ControlGroupId | 'civilization' | 'planet';
 
 export const WINDOW_ICONS: Record<FloatingWindowId, ReactNode> = {
   geosphere: LAYER_ICONS.plates,
@@ -357,6 +357,7 @@ export const WINDOW_ICONS: Record<FloatingWindowId, ReactNode> = {
     </Icon>
   ),
   biosphere: LAYER_ICONS.life,
+  civilization: LAYER_ICONS.civilization,
   planet: VIEW_ICONS.globe,
 };
 
