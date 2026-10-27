@@ -58,7 +58,7 @@ export interface WorldOptions extends PlanetOptions {
   startYear?: number;
   /** Fraction of the surface under water; 0.7 is Earth-like. */
   oceanFraction?: number;
-  /** Continental crust the planet keeps regrowing towards (see plate drift). */
+  /** Mature ice-free land share; plate drift derives the larger crust target. */
   continentalFraction?: number;
 }
 
@@ -122,7 +122,7 @@ export function createRandomWorld(options: WorldOptions = {}): World {
   planet.controls.obliquity = randomObliquity(parameterRng);
   planet.rngState = parameterRng.state;
   planet.globals.year = options.startYear ?? PLANET_START_AGES[start];
-  const continentalFraction = options.continentalFraction ?? 0.3;
+  const continentalFraction = options.continentalFraction ?? 0.28;
   generateTectonicPlanet(planet, {
     oceanFraction:
       options.oceanFraction ?? 1 - continentalCrustTarget(planet.globals.year, continentalFraction),
@@ -174,7 +174,7 @@ function randomObliquity(rng: Rng): number {
 /** Builds the random-planet simulation around an existing planet (new or loaded). */
 export function randomWorldFromPlanet(
   planet: PlanetState,
-  settings: RandomWorldSettings = { continentalFraction: 0.3, start: 'quick' },
+  settings: RandomWorldSettings = { continentalFraction: 0.28, start: 'quick' },
 ): World {
   const simulation = createSimulation(
     [
@@ -286,7 +286,7 @@ export function createPlanetPreset(preset: PlanetPreset, options: PlanetOptions 
   // Earth-sized sea of the generated terrain would otherwise flood the first frame.
   seaLevelDatumModel.runOneStep(planet, 0, createRng(0));
   planet.globals.seaLevel = equilibriumSeaLevel(planet);
-  const world = randomWorldFromPlanet(planet, { continentalFraction: 0.3, start: 'quick' });
+  const world = randomWorldFromPlanet(planet, { continentalFraction: 0.28, start: 'quick' });
   world.simulation.step(planet, 0);
   recordHistory.runOneStep(planet, 0, createRng(0));
   return world;

@@ -60,6 +60,7 @@ const SCENARIO_VIEW: Record<
     overlays: ['icons'],
     charts: [
       'meanTemperature',
+      'runawayMargin',
       'co2',
       'surfacePressure',
       'water',
@@ -108,6 +109,7 @@ const SCENARIO_VIEW: Record<
     overlays: ['icons'],
     charts: [
       'meanTemperature',
+      'runawayMargin',
       'co2',
       'surfacePressure',
       'water',
@@ -191,6 +193,7 @@ const SCENARIO_VIEW: Record<
     overlays: ['icons'],
     charts: [
       'meanTemperature',
+      'runawayMargin',
       'co2',
       'water',
       'biodiversity',
@@ -212,7 +215,15 @@ const SCENARIO_VIEW: Record<
   },
   snowball: {
     overlays: ['icons'],
-    charts: ['meanTemperature', 'co2', 'iceFraction', 'water', 'seaLevel', 'solarInput'],
+    charts: [
+      'meanTemperature',
+      'runawayMargin',
+      'co2',
+      'iceFraction',
+      'water',
+      'seaLevel',
+      'solarInput',
+    ],
     layers: ['airTemperature', 'terrain', 'clouds', 'precipitation', 'biomes', 'life', 'hazard'],
     layer: 'airTemperature',
   },
@@ -332,11 +343,21 @@ export function App() {
       resolutionIndex: number,
       start: PlanetStart = 'young',
       planetParams?: Partial<PlanetParameters>,
+      continentalFraction?: number,
     ) => {
       const [width, height] = RESOLUTIONS[resolutionIndex]!;
       captureObliquityDefault.current = true;
       lastGoalStatus.current = null;
-      send({ type: 'create', scenario, seed: randomSeed(), width, height, start, planetParams });
+      send({
+        type: 'create',
+        scenario,
+        seed: randomSeed(),
+        width,
+        height,
+        start,
+        continentalFraction,
+        planetParams,
+      });
     },
     [send],
   );
@@ -345,11 +366,12 @@ export function App() {
     resolutionIndex: number,
     start: PlanetStart,
     planetParams?: Partial<PlanetParameters>,
+    continentalFraction?: number,
   ) => {
     send({ type: 'run', running: false });
     setRunning(false);
     setDismissedOutcome(null);
-    createPlanet(scenario, resolutionIndex, start, planetParams);
+    createPlanet(scenario, resolutionIndex, start, planetParams, continentalFraction);
     setLayer(SCENARIO_VIEW[scenario].layer);
     setOverlays(SCENARIO_VIEW[scenario].overlays ?? []);
     setError(null);

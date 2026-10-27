@@ -16,6 +16,11 @@ interface ChartSpec {
 }
 
 const CHARTS: readonly ChartSpec[] = [
+  {
+    series: 'runawayMargin',
+    title: 'chart.runawayMargin',
+    format: (v) => `${v.toFixed(1)} W/m2`,
+  },
   { series: 'meanTemperature', title: 'chart.temperature', format: (v) => `${v.toFixed(1)} °C` },
   { series: 'biodiversity', title: 'chart.biodiversity', format: (v) => v.toFixed(2) },
   { series: 'co2', title: 'chart.co2', format: (v) => `${formatPpm(v)} ppm`, log: true },

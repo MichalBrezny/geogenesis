@@ -79,6 +79,8 @@ export const EVENT_ICON_PATHS: Record<EventKey, string> = {
   largeEruption: EVENT_GROUP_PATHS.geology,
   largeIgneousProvince: 'M2 21 6 11l4 4 4-11 3 9 5 8Zm5-13 2-6 3 7-3 3Z',
   runawayGreenhouse: EVENT_GROUP_PATHS.climate,
+  runawayWarning: EVENT_GROUP_PATHS.climate,
+  runawayEnded: EVENT_GROUP_PATHS.climate,
   oceansLost: 'M12 2s7 8 7 13a7 7 0 0 1-14 0C5 10 12 2 12 2Zm-6 16 12-8-1 8Z',
   magneticFieldLost: 'M5 3h4v10a3 3 0 0 0 6 0V3h4v10a7 7 0 0 1-14 0Zm-3 17L20 2l2 2L4 22Z',
   stagnantLid: 'M2 8h20v5H2Zm2 8h16v5H4Z',

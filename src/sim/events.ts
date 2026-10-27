@@ -30,6 +30,8 @@ export type EventKey =
   | 'largeEruption'
   | 'largeIgneousProvince'
   | 'runawayGreenhouse'
+  | 'runawayWarning'
+  | 'runawayEnded'
   | 'oceansLost'
   | 'magneticFieldLost'
   | 'stagnantLid'

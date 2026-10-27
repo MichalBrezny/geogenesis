@@ -5,6 +5,7 @@ import { Biome, BIOMES } from '../../data/biomes';
 import { isOcean, liquidWaterGel } from '../geosphere/seaLevel';
 import { MODERN_PHOTOSYNTHESIS, photosynthesis } from './biogeochemistry';
 import { updateSurfacePressure } from './atmosphere';
+import { greenhouseForcing } from './climate';
 
 export interface CarbonCycleOptions {
   /** Multiplier on volcanic CO₂ outgassing (a future player control). */
@@ -49,8 +50,10 @@ const RESERVOIR_TIME = 300_000;
  * weathering). Burial is what leaves oxygen behind in the air.
  */
 const MODERN_BURIAL = 0.2;
-/** Global warming per e-fold of CO₂ (°C), used to predict temperature while solving for CO₂. */
+/** Global warming per e-fold of CO₂ (°C) near 280 ppm, used to predict temperature while solving for CO₂. */
 const CLIMATE_SENSITIVITY = 2.6;
+/** CO₂ forcing per e-fold at the pre-industrial level (W/m², Myhre et al. 1998). */
+const MODERN_CO2_FORCING_PER_EFOLD = 5.35;
 /**
  * Share of the present-day carbon sink taken by seafloor weathering: hot seawater reacting
  * with young basalt at the ridges (Earth: up to about a tenth). It grows with spreading, ocean
@@ -64,6 +67,17 @@ const SEAFLOOR_TEMPERATURE_SENSITIVITY = 0.04;
 const SEAFLOOR_CO2_EXPONENT = 0.23;
 /** Ocean share of the surface the seafloor share is defined for. */
 const REFERENCE_OCEAN_FRACTION = 0.7;
+const REFERENCE_CO2 = 280;
+/** Above this exposed-land share, continental weathering needs no marine backstop. */
+const SEAFLOOR_LAND_THRESHOLD = 0.22;
+/** Extra warm-basalt circulation at 15 °C on a planet with no exposed land. */
+const MAX_LOW_LAND_SEAFLOOR_BOOST = 1.5;
+/**
+ * Per-°C sensitivity of that extra circulation: an activation energy near the upper
+ * end of Krissansen-Totton et al. (2018), so the backstop barely cools a cold young
+ * planet but bites hard before a warm low-land world can run away.
+ */
+const LOW_LAND_SEAFLOOR_TEMPERATURE_SENSITIVITY = 0.1;
 const MIN_CO2 = 1;
 /** 100 bar in microbar: enough for a Venus-like 90 bar CO2 atmosphere. */
 export const MAX_CO2 = 1e8;
@@ -125,20 +139,27 @@ export function createCarbonCycle(options: CarbonCycleOptions = {}): SimComponen
       // One pass over the planet; other CO₂ levels scale it analytically (uniform warming).
       const current = rawWeathering(state, before);
       const seafloor = seafloorWeathering(state);
-      const weathering = (co2: number) =>
-        ((1 - SEAFLOOR_SHARE) *
-          (current *
-            Math.exp(
-              WEATHERING_TEMPERATURE_SENSITIVITY * CLIMATE_SENSITIVITY * Math.log(co2 / before),
-            ) *
-            (co2Factor(co2) / co2Factor(before)))) /
-          REFERENCE_WEATHERING +
-        seafloor *
-          Math.exp(
-            SEAFLOOR_TEMPERATURE_SENSITIVITY * CLIMATE_SENSITIVITY * Math.log(co2 / before),
-          ) *
-          Math.pow(co2 / 280, SEAFLOOR_CO2_EXPONENT) *
-          (co2 / (co2 + WEATHERING_CO2_HALF_SATURATION));
+      // Warming predicted from the greenhouse forcing itself, so thick CO₂ (quadratic
+      // term, pressure broadening) is not underestimated: a fixed sensitivity let the
+      // lagged climate overshoot in bar-sized CO₂ swings until it ran away.
+      const forcingBefore = greenhouseForcing(atmosphere);
+      const warmingAt = (co2: number) =>
+        (CLIMATE_SENSITIVITY / MODERN_CO2_FORCING_PER_EFOLD) *
+        (greenhouseForcing({ ...atmosphere, co2 }) - forcingBefore);
+      const weathering = (co2: number) => {
+        const warming = warmingAt(co2);
+        return (
+          ((1 - SEAFLOOR_SHARE) *
+            (current *
+              Math.exp(WEATHERING_TEMPERATURE_SENSITIVITY * warming) *
+              (co2Factor(co2) / co2Factor(before)))) /
+            REFERENCE_WEATHERING +
+          (seafloor.modern * Math.exp(SEAFLOOR_TEMPERATURE_SENSITIVITY * warming) +
+            seafloor.lowLand * Math.exp(LOW_LAND_SEAFLOOR_TEMPERATURE_SENSITIVITY * warming)) *
+            Math.pow(co2 / 280, SEAFLOOR_CO2_EXPONENT) *
+            (co2 / (co2 + WEATHERING_CO2_HALF_SATURATION))
+        );
+      };
 
       // Most net degassing the crust can supply in this step (bar): exact first-order
       // release of the remaining reservoir, so it does not depend on the step length.
@@ -149,8 +170,16 @@ export function createCarbonCycle(options: CarbonCycleOptions = {}): SimComponen
       );
       // No silicate-weathering sink: no liquid water, or all of it frozen with no
       // ice-free rained-on land and no seafloor weathering (a stagnant lid).
-      const sinkless = current <= 0 && seafloor <= 0;
-      if (dtYears > 0 && sinkless) {
+      const sinkless = current <= 0 && seafloor.modern + seafloor.lowLand <= 0;
+      const steamAtmosphere = state.globals.runawayGreenhouse && state.globals.water > 0.01;
+      if (dtYears > 0 && steamAtmosphere) {
+        // A transient steam atmosphere has no rain-driven sink, but it is not a
+        // dry stagnant planet that can rapidly drain the whole crustal reservoir.
+        // Continue the calibrated volcanic flux additively until rain-out or
+        // complete ocean loss; this also makes a short runaway reversible.
+        const rise = (REFERENCE_CO2 * Math.max(0, outgassing) * dtYears) / RESERVOIR_TIME;
+        atmosphere.co2 = before + Math.min(rise, maxRise / 1e-6);
+      } else if (dtYears > 0 && sinkless) {
         // A finite flux from the crust, not the multiplicative implicit solve, which
         // without a sink grows CO₂ geometrically up to the guardrail.
         atmosphere.co2 = before + maxRise / 1e-6;
@@ -242,11 +271,12 @@ export function tectonicActivity(state: PlanetState): number {
 }
 
 /**
- * Seafloor weathering at 280 ppm and the current mean temperature, as a share of the
+ * Seafloor weathering at 280 ppm and the current mean temperature, as shares of the
  * present-day carbon flux: scales with ocean area, spreading (plate vigour) and mantle heat.
  */
-function seafloorWeathering(state: PlanetState): number {
-  if (liquidWaterGel(state) <= 1e-6) return 0;
+function seafloorWeathering(state: PlanetState): { modern: number; lowLand: number } {
+  if (state.globals.runawayGreenhouse || liquidWaterGel(state) <= 1e-6)
+    return { modern: 0, lowLand: 0 };
   const { grid, fields, globals } = state;
   let ocean = 0;
   for (let i = 0; i < grid.cellCount; i++) {
@@ -254,13 +284,29 @@ function seafloorWeathering(state: PlanetState): number {
       ocean += grid.rowAreaWeight[Math.floor(i / grid.width)]!;
     }
   }
-  return (
+  // Warm low-land planets need a stronger marine backstop. Krissansen-Totton et al.
+  // (2018, PNAS 115:4105, doi:10.1073/pnas.1721296115) found temperature-dependent
+  // seafloor weathering kept even their no-land Archean endmember temperate. This
+  // boost fades out before modern land shares, preserving the Earth calibration.
+  const land = Math.max(0, 1 - ocean);
+  const lowLand = Math.max(
+    0,
+    Math.min(1, (SEAFLOOR_LAND_THRESHOLD - land) / SEAFLOOR_LAND_THRESHOLD),
+  );
+  const share =
     SEAFLOOR_SHARE *
     (ocean / REFERENCE_OCEAN_FRACTION) *
     tectonicActivity(state) *
-    mantleHeat(globals.year, state.planetParams.radius) *
-    Math.exp(SEAFLOOR_TEMPERATURE_SENSITIVITY * (globals.meanTemperature - 15))
-  );
+    mantleHeat(globals.year, state.planetParams.radius);
+  const warmth = globals.meanTemperature - 15;
+  return {
+    modern: share * Math.exp(SEAFLOOR_TEMPERATURE_SENSITIVITY * warmth),
+    lowLand:
+      share *
+      MAX_LOW_LAND_SEAFLOOR_BOOST *
+      lowLand *
+      Math.exp(LOW_LAND_SEAFLOOR_TEMPERATURE_SENSITIVITY * warmth),
+  };
 }
 
 /**
@@ -270,7 +316,7 @@ function seafloorWeathering(state: PlanetState): number {
  */
 export function rawWeathering(state: PlanetState, co2: number, warming = 0): number {
   // Silicate weathering needs liquid water and rain; it ceases after ocean loss.
-  if (liquidWaterGel(state) <= 1e-6) return 0;
+  if (state.globals.runawayGreenhouse || liquidWaterGel(state) <= 1e-6) return 0;
   const { grid, fields } = state;
   const { elevation, airTemperature, precipitation, iceCover, biome, vegetation } = fields;
   let total = 0;

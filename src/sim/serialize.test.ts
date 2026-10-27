@@ -16,7 +16,7 @@ describe('save files', () => {
     );
     const loaded = deserializeGame(await decompress(bytes));
     expect(loaded.scenario).toBe('random');
-    expect(loaded.settings).toEqual({ start: 'young', continentalFraction: 0.3 });
+    expect(loaded.settings).toEqual({ start: 'young', continentalFraction: 0.28 });
     expect(loaded.planet).toEqual(world.planet);
     expect(loaded.planet.fields.elevation).toBeInstanceOf(Float32Array);
     expect(loaded.planet.plates[0]!.crust.owned).toBeInstanceOf(Uint8Array);

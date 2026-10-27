@@ -147,6 +147,8 @@ function hydrateAddedState(planet: PlanetState): void {
   planet.globals.initialWater ??= planet.globals.water;
   planet.globals.escapedWater ??= 0;
   planet.globals.runawayGreenhouse ??= false;
+  planet.globals.runawayMargin ??= 0;
+  planet.globals.runawayWarningArmed ??= true;
   planet.globals.magneticField ??= 1;
   planet.globals.tectonicRegime ??= planet.planetParams.tectonicRegime;
   planet.globals.crustalCarbon ??= Math.max(

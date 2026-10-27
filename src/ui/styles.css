@@ -11,6 +11,7 @@
   /* Categorical slot 1 of the dark data palette. */
   --series-1: #3987e5;
   --accent-strong: #1f5fae;
+  --warning: #f0ad4e;
   background: var(--surface-page);
   color: var(--text-primary);
 }
@@ -90,6 +91,11 @@ body {
 .vitals dd {
   margin: 0;
   font-variant-numeric: tabular-nums;
+}
+
+.vitals .warning dt,
+.vitals .warning dd {
+  color: var(--warning);
 }
 
 .sidebar {

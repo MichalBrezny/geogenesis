@@ -31,6 +31,8 @@ export type WorkerRequest =
       width: number;
       height: number;
       start: PlanetStart;
+      /** Desired mature ice-free land share, 0..1. */
+      continentalFraction?: number;
       planetParams?: Partial<PlanetParameters>;
     }
   | { type: 'run'; running: boolean }
@@ -52,6 +54,8 @@ export interface Frame extends MapSource {
   scenario: ScenarioId;
   year: number;
   meanTemperature: number;
+  /** Headroom below the wet outgoing-radiation limit, W/m2. */
+  runawayMargin: number;
   /** Star luminosity relative to the present Sun. */
   solarInput: number;
   /** Atmospheric CO₂, ppm. */

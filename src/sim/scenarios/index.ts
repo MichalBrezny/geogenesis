@@ -20,13 +20,15 @@ import {
 
 interface Scenario {
   /** Generates a new planet. */
-  create: (options: PlanetOptions) => World;
+  create: (options: ScenarioOptions) => World;
   /** Rebuilds the simulation around a saved planet. */
   restore: (planet: PlanetState, settings?: RandomWorldSettings) => World;
 }
 
 export interface ScenarioOptions extends PlanetOptions {
   start?: PlanetStart;
+  /** Desired mature ice-free land share for random planets. */
+  continentalFraction?: number;
 }
 
 /** Scenarios the player can start; ids are stable (used in messages and saves). */
