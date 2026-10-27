@@ -178,7 +178,7 @@ describe('SimHost', () => {
 });
 
 describe('SimHost cell inspection', () => {
-  it('answers an inspect request with the life of that cell only', () => {
+  it('answers an inspect request with that cell life and monthly climate only', () => {
     const { host, messages } = createHost();
     host.handle({
       type: 'create',
@@ -193,7 +193,11 @@ describe('SimHost cell inspection', () => {
     expect(messages).toHaveLength(framesBefore + 1);
     const reply = messages[messages.length - 1]!;
     expect(reply.type).toBe('cellLife');
-    if (reply.type === 'cellLife') expect(reply.life.cell).toBe(5);
+    if (reply.type === 'cellLife') {
+      expect(reply.life.cell).toBe(5);
+      expect(reply.climate?.temperature).toHaveLength(12);
+      expect(reply.climate?.precipitation).toHaveLength(12);
+    }
     expect(lastFrameFields(messages)).not.toContain('populations');
   });
 });
