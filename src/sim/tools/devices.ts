@@ -4,6 +4,7 @@ import { EARTH_SURFACE_GRAVITY, type PlanetState } from '../core/planet';
 import { lifeClassIndex } from '../data/lifeClasses';
 import { recordEvent } from '../events';
 import { updateSurfacePressure } from '../models/atmosphere/atmosphere';
+import { carbonFluxDiagnostic } from '../models/atmosphere/carbon';
 import { classSuitability } from '../models/biosphere/life';
 
 /**
@@ -127,13 +128,19 @@ export const terraformDevices: SimComponent = {
     const scale = gasScale(state) * dtYears;
     const count = (kind: DeviceKind) => state.devices.filter((d) => d.kind === kind).length;
     const atmosphere = state.globals.atmosphere;
-    atmosphere.co2 += (count('co2Generator') * CO2_GENERATOR_RATE * scale) / 1e-6;
+    const generated = (count('co2Generator') * CO2_GENERATOR_RATE * scale) / 1e-6;
+    atmosphere.co2 += generated;
     atmosphere.n2 += count('n2Generator') * N2_GENERATOR_RATE * scale;
     const scrubbed = Math.min(
       Math.max(0, atmosphere.co2 - CO2_SCRUBBER_FLOOR) * 1e-6,
       count('co2Scrubber') * CO2_SCRUBBER_RATE * scale,
     );
     atmosphere.co2 -= scrubbed / 1e-6;
+    state.globals.carbonBudget.deviceSources = carbonFluxDiagnostic(generated / dtYears, state);
+    state.globals.carbonBudget.deviceSinks = carbonFluxDiagnostic(
+      -(scrubbed / 1e-6) / dtYears,
+      state,
+    );
     state.globals.crustalCarbon += scrubbed;
     const oxygen = count('o2Generator') * O2_GENERATOR_RATE * scale;
     if (oxygen > 0) addOxygen(state, oxygen);

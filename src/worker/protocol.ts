@@ -6,6 +6,8 @@ import type {
   ModelControls,
   PlanetParameters,
   TectonicRegime,
+  CarbonBudgetDiagnostic,
+  EnergyBalanceDiagnostic,
 } from '../sim/core/planet';
 import type { ToolUse } from '../sim/tools/tools';
 import type { PlanetEvent } from '../sim/events';
@@ -19,6 +21,7 @@ import type { Device } from '../sim/tools/devices';
 import type { Biosignature } from '../sim/models/biosphere/biosignature';
 import type { CivilizationPolicyChanges } from '../sim/data/civilization';
 import type { MonthlyClimate } from '../sim/models/atmosphere/climateDiagram';
+import type { GaiaDiagnostic } from '../sim/diagnostics';
 
 export interface FrameGoal extends GoalState {
   conditions: GoalCondition[];
@@ -83,6 +86,9 @@ export interface Frame extends MapSource {
   civPolicy: CivilizationPolicy;
   fossilCarbon: number;
   pollution: number;
+  carbonBudget: CarbonBudgetDiagnostic;
+  energyBalance: EnergyBalanceDiagnostic;
+  gaia: GaiaDiagnostic;
   /** Most recent notable events, oldest first. */
   events: PlanetEvent[];
   /** Simulated years the next step will cover. */

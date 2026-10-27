@@ -116,6 +116,8 @@ const LOCKED_HEAT_TRANSPORT = 2.5;
 const TRACE_WATER_GEL = 0.01;
 /** Ocean share of the surface above which lapse-rate heights are measured from the sea. */
 const LAPSE_DATUM_OCEAN_FRACTION = 0.2;
+/** Baseline albedo used only to attribute global reflective cooling terms. */
+const REFERENCE_PLANETARY_ALBEDO = 0.3;
 
 export interface ClimateOptions {
   /** Heat transport coefficient; larger values even out the pole-equator contrast. */
@@ -127,6 +129,14 @@ export interface ClimateOptions {
   iceAlbedo?: number;
 }
 
+export interface GreenhouseForcingTerms {
+  co2: number;
+  waterVapor: number;
+  methane: number;
+  /** Exact total used by the climate model (keeps the calibrated summation order). */
+  total: number;
+}
+
 /**
  * Radiative forcing (W/m²) of CO₂ and CH₄ relative to pre-industrial levels.
  * The logarithmic CO₂ term (Myhre et al. 1998) underestimates forcing at the very
@@ -134,6 +144,11 @@ export interface ClimateOptions {
  * reference level (rough fit to radiative-convective models).
  */
 export function greenhouseForcing(atmosphere: Atmosphere): number {
+  return greenhouseForcingTerms(atmosphere).total;
+}
+
+/** The same greenhouse calculation split into gases for read-only diagnostics. */
+export function greenhouseForcingTerms(atmosphere: Atmosphere): GreenhouseForcingTerms {
   const logRatio = Math.log(Math.max(atmosphere.co2, 1e-3) / REFERENCE_CO2);
   const co2 = 5.35 * logRatio + 0.4 * Math.max(0, logRatio) ** 2;
   const water = 2 * Math.log(Math.max(atmosphere.waterVapor, 1e-8) / REFERENCE_WATER_VAPOR);
@@ -151,7 +166,12 @@ export function greenhouseForcing(atmosphere: Atmosphere): number {
   );
   // The methane formula uses ppb.
   const ch4 = 0.036 * (Math.sqrt(atmosphere.ch4 * 1000) - Math.sqrt(REFERENCE_CH4 * 1000));
-  return broadening * (co2 + water) + ch4;
+  return {
+    co2: broadening * co2,
+    waterVapor: broadening * water,
+    methane: ch4,
+    total: broadening * (co2 + water) + ch4,
+  };
 }
 
 /** Cubic 0..1 transition with zero slope at both ends. */
@@ -564,7 +584,61 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
 
       globals.meanTemperature = areaWeightedMean(grid, airTemperature);
       globals.iceFraction = areaWeightedMean(grid, iceCover);
+      writeEnergyBalance(state, requiredOlr, forcing, hazeAlbedo, iceAlbedo);
     },
+  };
+}
+
+/**
+ * Records forcing terms after the converged climate solve. The UI uses 2 W/m2
+ * as the documented minimum influence worth naming in its generated sentence.
+ * This function only writes the diagnostic object; the climate never reads it.
+ */
+function writeEnergyBalance(
+  state: Parameters<SimComponent['runOneStep']>[0],
+  requiredOlr: number,
+  forcing: number,
+  hazeAlbedo: number,
+  iceAlbedo: number,
+): void {
+  const { globals } = state;
+  const greenhouse = greenhouseForcingTerms(globals.atmosphere);
+  const greenhouseControl = state.controls.greenhouse;
+  const meanInsolation = (SOLAR_CONSTANT * globals.solarInput) / 4;
+  const iceCooling =
+    meanInsolation * Math.max(0, iceAlbedo - REFERENCE_PLANETARY_ALBEDO) * globals.iceFraction;
+  const cloudCooling =
+    meanInsolation *
+    Math.max(
+      0,
+      state.controls.cloudAlbedo *
+        LOW_CLOUD_ALBEDO *
+        ((globals.lowCloudCover ?? REFERENCE_LOW_CLOUD) - REFERENCE_LOW_CLOUD),
+    );
+  const hazeCooling =
+    meanInsolation *
+    Math.max(0, hazeAlbedo - REFERENCE_PLANETARY_ALBEDO) *
+    (1 - globals.iceFraction);
+  const absorbedSunlight = requiredOlr - forcing;
+  const greenhouseTotal = greenhouse.total * greenhouseControl;
+  globals.energyBalance = {
+    absorbedSunlight,
+    outgoingLongwave: requiredOlr - greenhouseTotal,
+    greenhouse: {
+      co2: greenhouse.co2 * greenhouseControl,
+      waterVapor: greenhouse.waterVapor * greenhouseControl,
+      methane: greenhouse.methane * greenhouseControl,
+    },
+    cooling: {
+      iceAlbedo: iceCooling,
+      cloudAlbedo: cloudCooling,
+      haze: hazeCooling,
+      dustAerosol:
+        thinAtmosphereCooling(globals.surfacePressure) +
+        globals.volcanicAerosol +
+        dustForcing(globals.dust),
+    },
+    runawayMargin: globals.runawayMargin,
   };
 }
 

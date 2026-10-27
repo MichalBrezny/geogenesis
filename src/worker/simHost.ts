@@ -11,6 +11,7 @@ import { clampGoalCivilizationPolicy, clampGoalControls, GOALS } from '../sim/go
 import { biosignature } from '../sim/models/biosphere/biosignature';
 import { updateCivilizationPolicy } from '../sim/data/civilization';
 import { monthlyClimate } from '../sim/models/atmosphere/climateDiagram';
+import { gaiaDiagnostic } from '../sim/diagnostics';
 
 /** How many recent events each frame carries. */
 const EVENTS_IN_FRAME = 30;
@@ -206,6 +207,9 @@ export class SimHost {
       },
       fossilCarbon: planet.globals.fossilCarbon,
       pollution: planet.globals.pollution,
+      carbonBudget: structuredClone(planet.globals.carbonBudget),
+      energyBalance: structuredClone(planet.globals.energyBalance),
+      gaia: gaiaDiagnostic(planet),
       events: planet.events.slice(-EVENTS_IN_FRAME),
       stepYears: this.world.stepYears(planet),
       era: this.world.era(planet),

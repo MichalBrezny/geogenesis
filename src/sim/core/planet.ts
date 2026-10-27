@@ -97,6 +97,62 @@ export interface DustSource {
   end: number;
 }
 
+/** One carbon flow in both display units. Sources are positive; sinks are negative. */
+export interface CarbonFluxDiagnostic {
+  microbarPerYear: number;
+  gtCarbonPerYear: number;
+}
+
+/** Read-only accounting written by carbon-changing components during each step. */
+export interface CarbonBudgetDiagnostic {
+  volcanicOutgassing: CarbonFluxDiagnostic;
+  lipOutgassing: CarbonFluxDiagnostic;
+  landWeathering: CarbonFluxDiagnostic;
+  seafloorWeathering: CarbonFluxDiagnostic;
+  organicBurial: CarbonFluxDiagnostic;
+  civilizationEmissions: CarbonFluxDiagnostic;
+  clathrateRelease: CarbonFluxDiagnostic;
+  deviceSources: CarbonFluxDiagnostic;
+  deviceSinks: CarbonFluxDiagnostic;
+  net: CarbonFluxDiagnostic;
+}
+
+/** Global energy-balance terms, all in W/m2 and positive in the named direction. */
+export interface EnergyBalanceDiagnostic {
+  absorbedSunlight: number;
+  outgoingLongwave: number;
+  greenhouse: { co2: number; waterVapor: number; methane: number };
+  cooling: { iceAlbedo: number; cloudAlbedo: number; haze: number; dustAerosol: number };
+  runawayMargin: number;
+}
+
+const zeroCarbonFlux = (): CarbonFluxDiagnostic => ({ microbarPerYear: 0, gtCarbonPerYear: 0 });
+
+export function createCarbonBudgetDiagnostic(): CarbonBudgetDiagnostic {
+  return {
+    volcanicOutgassing: zeroCarbonFlux(),
+    lipOutgassing: zeroCarbonFlux(),
+    landWeathering: zeroCarbonFlux(),
+    seafloorWeathering: zeroCarbonFlux(),
+    organicBurial: zeroCarbonFlux(),
+    civilizationEmissions: zeroCarbonFlux(),
+    clathrateRelease: zeroCarbonFlux(),
+    deviceSources: zeroCarbonFlux(),
+    deviceSinks: zeroCarbonFlux(),
+    net: zeroCarbonFlux(),
+  };
+}
+
+export function createEnergyBalanceDiagnostic(): EnergyBalanceDiagnostic {
+  return {
+    absorbedSunlight: 0,
+    outgoingLongwave: 0,
+    greenhouse: { co2: 0, waterVapor: 0, methane: 0 },
+    cooling: { iceAlbedo: 0, cloudAlbedo: 0, haze: 0, dustAerosol: 0 },
+    runawayMargin: 0,
+  };
+}
+
 /** Planet-wide (non-gridded) state. */
 export interface GlobalState {
   /** Simulated years since the planet formed (the star is assumed to be the same age). */
@@ -164,10 +220,16 @@ export interface GlobalState {
   sedimentExport: number;
   /** Area-mean total cloud cover, 0..1 (written by the cloud model). */
   cloudCover?: number;
+  /** Area-mean low-cloud cover, used only for the radiative diagnostic. */
+  lowCloudCover?: number;
   /** Shape of the general circulation (written by the circulation model). */
   circulation?: { hadleyWidth: number; meanItcz: number };
   /** Carbon fluxes relative to present-day Earth (written by the carbon cycle). */
   carbon: { outgassing: number; weathering: number; burial: number };
+  /** Diagnostic carbon accounting; no model component reads this back. */
+  carbonBudget: CarbonBudgetDiagnostic;
+  /** Diagnostic radiative accounting; no model component reads this back. */
+  energyBalance: EnergyBalanceDiagnostic;
   /**
    * Cooling radiative forcing from volcanic aerosols, W/m² (positive means cooling),
    * averaged over the last step: the forcing the step's climate sees.
@@ -555,6 +617,8 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
       escapedAtmosphere: { n2: 0, co2: 0, inert: 0, waterVapor: 0 },
       sedimentExport: 0,
       carbon: { outgassing: 1, weathering: 1, burial: 0 },
+      carbonBudget: createCarbonBudgetDiagnostic(),
+      energyBalance: createEnergyBalanceDiagnostic(),
       volcanicAerosol: 0,
       volcanicAerosolEnd: 0,
       lipOutgassing: 0,

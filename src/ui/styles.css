@@ -98,6 +98,135 @@ body {
   color: var(--warning);
 }
 
+/* M17b climate/carbon explanations and the compact Gaia health face. */
+.gaia-vital dd {
+  display: flex;
+  align-items: center;
+}
+
+.gaia-face {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: help;
+}
+
+.gaia-face svg {
+  width: 25px;
+  height: 25px;
+  fill: color-mix(in srgb, currentColor 12%, transparent);
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.gaia-face .eye {
+  fill: currentColor;
+  stroke: none;
+}
+
+.gaia-face.happy {
+  color: #5fc77a;
+}
+.gaia-face.neutral {
+  color: var(--text-primary);
+}
+.gaia-face.sad {
+  color: var(--warning);
+}
+.gaia-face.sick {
+  color: #e06b65;
+}
+.gaia-face.asleep {
+  color: var(--text-secondary);
+}
+
+.gaia-face.large svg {
+  width: 82px;
+  height: 82px;
+  stroke-width: 1.1;
+}
+
+.gaia-face.large > span {
+  display: grid;
+  gap: 3px;
+}
+
+.gaia-face.large small {
+  color: var(--text-secondary);
+}
+
+.planet-diagnostics,
+.gaia-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--grid);
+}
+
+.planet-diagnostics section {
+  display: grid;
+  gap: 7px;
+}
+
+.planet-diagnostics h3,
+.gaia-panel h3 {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.planet-diagnostics p {
+  margin: 0;
+  line-height: 1.35;
+}
+
+.diagnostic-net {
+  font-variant-numeric: tabular-nums;
+}
+
+.diagnostic-bars {
+  display: grid;
+  gap: 4px;
+}
+
+.diagnostic-bars > div {
+  display: grid;
+  grid-template-columns: minmax(6.5rem, 1fr) minmax(5rem, 1.5fr) 4.2rem;
+  align-items: center;
+  gap: 6px;
+  cursor: help;
+}
+
+.diagnostic-bars i {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--surface-control);
+}
+
+.diagnostic-bars b {
+  display: block;
+  height: 100%;
+  min-width: 1px;
+  border-radius: inherit;
+}
+
+.diagnostic-bars .source,
+.diagnostic-bars .warming {
+  background: #df765d;
+}
+.diagnostic-bars .sink,
+.diagnostic-bars .cooling {
+  background: #4b9ed8;
+}
+
+.diagnostic-bars output {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .sidebar {
   overflow-y: auto;
   padding: 12px;

@@ -74,6 +74,26 @@ const CHARTS: readonly ChartSpec[] = [
     format: (v) => v.toFixed(2),
   },
   {
+    series: 'carbonOutgassing',
+    title: 'chart.carbonOutgassing',
+    format: (v) => `${v.toFixed(3)} microbar/yr`,
+  },
+  {
+    series: 'carbonWeathering',
+    title: 'chart.carbonWeathering',
+    format: (v) => `${v.toFixed(3)} microbar/yr`,
+  },
+  {
+    series: 'carbonBurial',
+    title: 'chart.carbonBurial',
+    format: (v) => `${v.toFixed(3)} microbar/yr`,
+  },
+  {
+    series: 'carbonNet',
+    title: 'chart.carbonNet',
+    format: (v) => `${v.toFixed(3)} microbar/yr`,
+  },
+  {
     series: 'forestFraction',
     title: 'chart.forest',
     scale: 100,

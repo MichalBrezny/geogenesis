@@ -1,4 +1,6 @@
 import {
+  createCarbonBudgetDiagnostic,
+  createEnergyBalanceDiagnostic,
   DEFAULT_CONTROLS,
   DEFAULT_CIV_POLICY,
   DEFAULT_DISASTERS,
@@ -171,6 +173,8 @@ function hydrateAddedState(planet: PlanetState): void {
   planet.globals.clathrateReferenceTemperature ??= planet.globals.meanTemperature;
   planet.globals.biodiversity ??= 0;
   planet.globals.lastMassExtinctionYear ??= -1;
+  planet.globals.carbonBudget ??= createCarbonBudgetDiagnostic();
+  planet.globals.energyBalance ??= createEnergyBalanceDiagnostic();
   planet.globals.escapedAtmosphere ??= { n2: 0, co2: 0, inert: 0, waterVapor: 0 };
   planet.globals.volcanicAerosol ??= 0;
   planet.globals.volcanicAerosolEnd ??= planet.globals.volcanicAerosol;
