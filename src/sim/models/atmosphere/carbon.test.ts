@@ -4,7 +4,14 @@ import { createPlanet, type PlanetState } from '../../core/planet';
 import { createRng } from '../../core/rng';
 import { lifeClassIndex } from '../../data/lifeClasses';
 import { generateTectonicPlanet } from '../geosphere/tectonics';
-import { createCarbonCycle, DRY_DEGASSING_TIME, mantleHeat } from './carbon';
+import {
+  accumulateFossilCarbon,
+  createCarbonCycle,
+  DRY_DEGASSING_TIME,
+  FOSSIL_CARBON_LOSS_TIME,
+  mantleHeat,
+  MODERN_BURIAL,
+} from './carbon';
 import { circulationModel } from './circulation';
 import { createClimate } from './climate';
 import { landIceMassBalance } from './ice';
@@ -37,6 +44,18 @@ function settle(planet: PlanetState, withCarbon: boolean): void {
 }
 
 describe('carbon cycle', () => {
+  it('forms an Earth-like recoverable reserve from sustained organic burial', () => {
+    const planet = createPlanet({ width: 8, height: 4 });
+    accumulateFossilCarbon(planet, 1e9, MODERN_BURIAL);
+    const equilibrium = 0.1 * 2.5e-4 * FOSSIL_CARBON_LOSS_TIME;
+    expect(planet.globals.fossilCarbon).toBeCloseTo(
+      equilibrium * (1 - Math.exp(-1e9 / FOSSIL_CARBON_LOSS_TIME)),
+      5,
+    );
+    expect(planet.globals.fossilCarbon).toBeGreaterThan(5_000);
+    expect(planet.globals.atmosphere.co2).toBe(280);
+  });
+
   it('balances outgassing and weathering once settled', () => {
     const planet = planetAt(1);
     settle(planet, true);

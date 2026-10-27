@@ -130,6 +130,12 @@ export interface GlobalState {
   tectonicRegime: TectonicRegime;
   /** Carbon still available for net degassing, bar of CO₂ equivalent. */
   crustalCarbon: number;
+  /** Recoverable coal, oil and gas carbon, gigatonnes of carbon (Gt C). */
+  fossilCarbon: number;
+  /** Carbon emitted by civilization during the current step, Gt C. */
+  civilizationCarbonEmissions: number;
+  /** Persistent industrial pollution burden; zero is pristine and one is a crisis. */
+  pollution: number;
   /** Condensed surface CO2, bar equivalent when spread over the whole planet. */
   co2Ice: number;
   /** Atmospheric dust optical depth (impacts, eruptions, nuclear war); 0 = clear sky. */
@@ -323,7 +329,46 @@ export interface CivilizationState {
   sentientSince: number | null;
   /** Year a civilization left the planet, if one has. */
   exodusYear: number | null;
+  /** Useful energy output relative to the balanced default mix. */
+  energySupply: number;
+  /** Share of requested fossil output actually supplied, 0..1. */
+  fossilSupply: number;
 }
+
+export const ENERGY_SOURCE_KEYS = [
+  'biomass',
+  'fossil',
+  'nuclear',
+  'solarWind',
+  'hydroGeothermal',
+] as const;
+export type EnergySourceKey = (typeof ENERGY_SOURCE_KEYS)[number];
+
+export const INVESTMENT_KEYS = [
+  'science',
+  'agriculture',
+  'medicine',
+  'philosophy',
+  'culture',
+] as const;
+export type InvestmentKey = (typeof INVESTMENT_KEYS)[number];
+
+/** Player choices for civilization. Each group is maintained as percentages summing to 100. */
+export interface CivilizationPolicy {
+  energy: Record<EnergySourceKey, number>;
+  investment: Record<InvestmentKey, number>;
+}
+
+export const DEFAULT_CIV_POLICY: Readonly<CivilizationPolicy> = {
+  energy: {
+    biomass: 20,
+    fossil: 50,
+    nuclear: 10,
+    solarWind: 10,
+    hydroGeothermal: 10,
+  },
+  investment: { science: 20, agriculture: 20, medicine: 20, philosophy: 20, culture: 20 },
+};
 
 /**
  * Player-adjustable model parameters, as multipliers on each process (1 = normal),
@@ -412,6 +457,8 @@ export interface PlanetState {
   history: History;
   biota: Biota;
   civilization: CivilizationState;
+  /** Saved civilization choices; kept separate from the species that may rise and fall. */
+  civPolicy: CivilizationPolicy;
   /** Notable moments, most recent last (see events.ts). */
   events: PlanetEvent[];
   controls: ModelControls;
@@ -492,6 +539,9 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
         0,
         planetParams.crustalCarbonBar - planetParams.initialCo2Microbar * 1e-6,
       ),
+      fossilCarbon: 0,
+      civilizationCarbonEmissions: 0,
+      pollution: 0,
       co2Ice: 0,
       dust: 0,
       dustBurden: [0, 0, 0],
@@ -554,6 +604,12 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
       population: 0,
       sentientSince: null,
       exodusYear: null,
+      energySupply: 1,
+      fossilSupply: 1,
+    },
+    civPolicy: {
+      energy: { ...DEFAULT_CIV_POLICY.energy },
+      investment: { ...DEFAULT_CIV_POLICY.investment },
     },
     events: [],
     controls: { ...DEFAULT_CONTROLS },

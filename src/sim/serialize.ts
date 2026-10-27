@@ -1,9 +1,11 @@
 import {
   DEFAULT_CONTROLS,
+  DEFAULT_CIV_POLICY,
   DEFAULT_DISASTERS,
   EARTH_PLANET_PARAMETERS,
   type PlanetState,
 } from './core/planet';
+import { normalizeCivilizationPolicy } from './data/civilization';
 import { HISTORY_SERIES } from './history';
 import { LIFE_CLASSES } from './data/lifeClasses';
 import type { RandomWorldSettings } from './world';
@@ -155,6 +157,9 @@ function hydrateAddedState(planet: PlanetState): void {
     0,
     planet.planetParams.crustalCarbonBar - planet.globals.atmosphere.co2 * 1e-6,
   );
+  planet.globals.fossilCarbon ??= planet.civilization?.species === null ? 0 : 8_000;
+  planet.globals.civilizationCarbonEmissions ??= 0;
+  planet.globals.pollution ??= 0;
   planet.globals.co2Ice ??= 0;
   planet.globals.dust ??= 0;
   planet.globals.dustBurden ??= [0, 0, 0];
@@ -224,6 +229,14 @@ function hydrateAddedState(planet: PlanetState): void {
   planet.controls.advanceRate ??= DEFAULT_CONTROLS.advanceRate;
   planet.controls.reproduction ??= DEFAULT_CONTROLS.reproduction;
   planet.controls.thermalTolerance ??= DEFAULT_CONTROLS.thermalTolerance;
+  planet.civPolicy = normalizeCivilizationPolicy(
+    planet.civPolicy ?? {
+      energy: { ...DEFAULT_CIV_POLICY.energy },
+      investment: { ...DEFAULT_CIV_POLICY.investment },
+    },
+  );
+  planet.civilization.energySupply ??= 1;
+  planet.civilization.fossilSupply ??= 1;
   planet.disasters ??= { ...DEFAULT_DISASTERS };
   for (const key of Object.keys(DEFAULT_DISASTERS) as (keyof typeof DEFAULT_DISASTERS)[]) {
     planet.disasters[key] ??= DEFAULT_DISASTERS[key];

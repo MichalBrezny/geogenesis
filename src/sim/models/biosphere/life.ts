@@ -195,7 +195,15 @@ export function createLife(options: LifeOptions = {}): SimComponent {
   const mutationRate = options.mutationRate ?? 1;
   return {
     name: 'life',
-    inputs: ['elevation', 'airTemperature', 'iceCover', 'biome', 'oceanOxygen', 'nutrients'],
+    inputs: [
+      'elevation',
+      'airTemperature',
+      'iceCover',
+      'biome',
+      'oceanOxygen',
+      'nutrients',
+      'civilization',
+    ],
     outputs: ['vegetation', 'lifeTier', 'dominantClass'],
     runOneStep(state, dtYears, rng) {
       const tally = emptyTally();
@@ -668,7 +676,15 @@ export function classSuitability(
     if (lifeClass.nutrientLimited) value *= nutrientFactor(nutrients[i]!);
     const anoxia =
       minOceanOxygen > 0 ? clamp01((oceanOxygen[i]! - minOceanOxygen) / minOceanOxygen) : 1;
-    const stressed = value * oxygen * light * climate * fire * co2 * acidity * anoxia;
+    // Industrial pollution is global state, but exposure is concentrated where people
+    // live; even a crisis removes only a mild share of complex-life capacity.
+    const pollution = complex
+      ? 1 -
+        0.15 *
+          (globals.pollution / (1 + Math.max(0, globals.pollution))) *
+          Math.min(1, fields.civilization[i]! * 2)
+      : 1;
+    const stressed = value * oxygen * light * climate * fire * co2 * acidity * anoxia * pollution;
     out[i] = stressed;
     if (tally && complex && value > 0) {
       const exposed = populations[c * n + i]! * grid.rowAreaWeight[Math.floor(i / grid.width)]!;

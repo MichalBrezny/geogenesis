@@ -26,6 +26,7 @@ import { PlanetPanel } from './PlanetPanel';
 import { GoalOutcome, GoalPanel } from './GoalPanel';
 import type { VisibleMapIcons } from '../render/mapIcons';
 import { DisasterPanel } from './DisasterPanel';
+import { CivilizationControlsPanel } from './CivilizationControlsPanel';
 
 /** How long a tool notice stays on screen, ms. */
 const NOTICE_DURATION = 3000;
@@ -34,6 +35,7 @@ const FLOATING_WINDOWS: readonly FloatingWindowId[] = [
   'geosphere',
   'atmosphere',
   'biosphere',
+  'civilization',
   'planet',
 ];
 
@@ -77,6 +79,8 @@ const SCENARIO_VIEW: Record<
       'oceanAcidity',
       'meanOceanOxygen',
       'clathrateMethane',
+      'fossilCarbon',
+      'pollution',
     ],
     layers: [
       'terrain',
@@ -179,7 +183,16 @@ const SCENARIO_VIEW: Record<
   },
   stoneAge: {
     overlays: ['icons'],
-    charts: ['meanTemperature', 'co2', 'o2', 'biodiversity', 'iceFraction', 'seaLevel'],
+    charts: [
+      'meanTemperature',
+      'co2',
+      'fossilCarbon',
+      'pollution',
+      'o2',
+      'biodiversity',
+      'iceFraction',
+      'seaLevel',
+    ],
     layers: ['civilization', 'hazard', 'terrain', 'life', 'biomes', 'airTemperature', 'diversity'],
     layer: 'civilization',
   },
@@ -587,6 +600,7 @@ export function App() {
           </Collapsible>
           <nav className="window-launchers" aria-label={t('window.launchers')}>
             {FLOATING_WINDOWS.map((id) => {
+              const disabled = id === 'civilization' && frame.civilization.species === null;
               const pressed = windowOpen[id] && (!narrowWindows || activeWindow === id);
               return (
                 <button
@@ -594,6 +608,7 @@ export function App() {
                   type="button"
                   className={pressed ? 'selected' : undefined}
                   aria-pressed={pressed}
+                  disabled={disabled}
                   title={t(`window.${id}Hint` as MessageKey)}
                   onClick={() => toggleWindow(id)}
                 >
@@ -675,12 +690,16 @@ export function App() {
       {frame &&
         FLOATING_WINDOWS.map((id, index) => {
           if (!windowOpen[id]) return null;
+          if (id === 'civilization' && frame.civilization.species === null) return null;
           if (narrowWindows && activeWindow !== id) return null;
           const activate = () => {
             setFocusedWindow(id);
             setActiveWindow(id);
           };
-          const group = id === 'planet' ? null : (id as ControlGroupId);
+          const group =
+            id === 'geosphere' || id === 'atmosphere' || id === 'biosphere'
+              ? (id as ControlGroupId)
+              : null;
           const defaults = { ...DEFAULT_CONTROLS, obliquity: obliquityDefault };
           const resetAll = group
             ? Object.fromEntries(CONTROL_GROUPS[group].map((key) => [key, defaults[key]]))
@@ -712,6 +731,16 @@ export function App() {
             >
               {id === 'planet' ? (
                 <PlanetPanel frame={frame} />
+              ) : id === 'civilization' ? (
+                <CivilizationControlsPanel
+                  policy={frame.civPolicy}
+                  age={frame.civilization.age}
+                  energySupply={frame.civilization.energySupply}
+                  fossilSupply={frame.civilization.fossilSupply}
+                  fossilCarbon={frame.fossilCarbon}
+                  pollution={frame.pollution}
+                  onChange={(policy) => send({ type: 'civPolicy', policy })}
+                />
               ) : (
                 <ControlsPanel
                   controls={frame.controls}

@@ -7,8 +7,9 @@ import { compress, decompress, deserializeGame, serializeGame } from '../sim/ser
 import { applyTool } from '../sim/tools/tools';
 import type { World } from '../sim/world';
 import type { Frame, WorkerRequest, WorkerResponse } from './protocol';
-import { clampGoalControls, GOALS } from '../sim/goals/goals';
+import { clampGoalCivilizationPolicy, clampGoalControls, GOALS } from '../sim/goals/goals';
 import { biosignature } from '../sim/models/biosphere/biosignature';
+import { updateCivilizationPolicy } from '../sim/data/civilization';
 
 /** How many recent events each frame carries. */
 const EVENTS_IN_FRAME = 30;
@@ -64,6 +65,14 @@ export class SimHost {
           Object.assign(
             this.world.planet.controls,
             clampGoalControls(this.world.planet, request.controls),
+          );
+          this.sendFrame();
+          break;
+        case 'civPolicy':
+          if (!this.world) break;
+          this.world.planet.civPolicy = clampGoalCivilizationPolicy(
+            this.world.planet,
+            updateCivilizationPolicy(this.world.planet.civPolicy, request.policy),
           );
           this.sendFrame();
           break;
@@ -180,6 +189,12 @@ export class SimHost {
       ch4: planet.globals.atmosphere.ch4,
       life: { cover: [...planet.biota.cover], appeared: [...planet.biota.appeared] },
       civilization: { ...planet.civilization },
+      civPolicy: {
+        energy: { ...planet.civPolicy.energy },
+        investment: { ...planet.civPolicy.investment },
+      },
+      fossilCarbon: planet.globals.fossilCarbon,
+      pollution: planet.globals.pollution,
       events: planet.events.slice(-EVENTS_IN_FRAME),
       stepYears: this.world.stepYears(planet),
       era: this.world.era(planet),
@@ -195,6 +210,7 @@ export class SimHost {
             memory: { ...planet.goal.memory },
             conditions: GOALS[planet.goal.id].conditions(planet, planet.goal),
             controlLimits: GOALS[planet.goal.id].controlLimits,
+            civPolicyLimits: GOALS[planet.goal.id].civPolicyLimits,
           }
         : null,
       planetParams: { ...planet.planetParams },

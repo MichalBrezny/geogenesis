@@ -95,6 +95,12 @@ describe('save files', () => {
     delete (planet.globals as Partial<typeof planet.globals>).magneticField;
     delete (planet.globals as Partial<typeof planet.globals>).tectonicRegime;
     delete (planet.globals as Partial<typeof planet.globals>).crustalCarbon;
+    delete (planet.globals as Partial<typeof planet.globals>).fossilCarbon;
+    delete (planet.globals as Partial<typeof planet.globals>).civilizationCarbonEmissions;
+    delete (planet.globals as Partial<typeof planet.globals>).pollution;
+    delete (planet as Partial<typeof planet>).civPolicy;
+    delete (planet.civilization as Partial<typeof planet.civilization>).energySupply;
+    delete (planet.civilization as Partial<typeof planet.civilization>).fossilSupply;
     delete (planet.globals as Partial<typeof planet.globals>).co2Ice;
     delete (planet.globals as Partial<typeof planet.globals>).dustBurden;
     delete (planet.globals as Partial<typeof planet.globals>).dustSources;
@@ -142,6 +148,14 @@ describe('save files', () => {
     expect(loaded.planet.globals.magneticField).toBe(1);
     expect(loaded.planet.globals.tectonicRegime).toBe('mobile');
     expect(loaded.planet.globals.co2Ice).toBe(0);
+    expect(loaded.planet.globals.fossilCarbon).toBe(0);
+    expect(loaded.planet.globals.civilizationCarbonEmissions).toBe(0);
+    expect(loaded.planet.globals.pollution).toBe(0);
+    expect(Object.values(loaded.planet.civPolicy.energy).reduce((a, b) => a + b, 0)).toBeCloseTo(
+      100,
+    );
+    expect(loaded.planet.civilization.energySupply).toBe(1);
+    expect(loaded.planet.civilization.fossilSupply).toBe(1);
     expect(loaded.planet.globals.dustBurden).toEqual([0, 0, 0]);
     expect(loaded.planet.globals.dustSources).toEqual([]);
     expect(loaded.planet.globals.dustIntegralSinceLife).toBe(0);

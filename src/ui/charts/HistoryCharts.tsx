@@ -64,6 +64,16 @@ const CHARTS: readonly ChartSpec[] = [
     format: (v) => `${v.toFixed(0)} Gt C`,
   },
   {
+    series: 'fossilCarbon',
+    title: 'chart.fossilCarbon',
+    format: (v) => `${v.toFixed(0)} Gt C`,
+  },
+  {
+    series: 'pollution',
+    title: 'chart.pollution',
+    format: (v) => v.toFixed(2),
+  },
+  {
     series: 'forestFraction',
     title: 'chart.forest',
     scale: 100,

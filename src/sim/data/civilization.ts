@@ -1,4 +1,24 @@
+import type { CivilizationPolicy, EnergySourceKey } from '../core/planet';
 import type { LifeClassKey } from './lifeClasses';
+
+const ENERGY_SOURCE_KEYS: readonly EnergySourceKey[] = [
+  'biomass',
+  'fossil',
+  'nuclear',
+  'solarWind',
+  'hydroGeothermal',
+];
+const INVESTMENT_KEYS = ['science', 'agriculture', 'medicine', 'philosophy', 'culture'] as const;
+const DEFAULT_POLICY: CivilizationPolicy = {
+  energy: {
+    biomass: 20,
+    fossil: 50,
+    nuclear: 10,
+    solarWind: 10,
+    hydroGeothermal: 10,
+  },
+  investment: { science: 20, agriculture: 20, medicine: 20, philosophy: 20, culture: 20 },
+};
 
 /** SimEarth's technology ages, in order; reaching the end of Nanotech means Exodus. */
 export interface TechAge {
@@ -15,7 +35,7 @@ export interface TechAge {
   growthRate: number;
   /** Fraction of a fully settled cell's vegetation cleared for farms and cities. */
   landUse: number;
-  /** CO₂ emitted per billion people per year, ppm (fossil fuels). */
+  /** Baseline fossil CO₂ emitted per billion people per year, ppm. */
   emissions: number;
   /** Yearly chance of nuclear war per civilization, once weapons exist. */
   warRisk: number;
@@ -118,6 +138,140 @@ export const TECH_AGES: readonly TechAge[] = [
     spreadSpeed: 30000,
   },
 ];
+
+export interface EnergySource {
+  key: EnergySourceKey;
+  /** First index in TECH_AGES in which this source can be used. */
+  unlockAge: number;
+  /** Useful output from one policy point in each technology age. */
+  efficiency: readonly number[];
+  /** Pollution produced per unit of energy relative to fossil fuel. */
+  pollution: number;
+  /** Direct CO₂ per unit of energy relative to fossil fuel. */
+  co2: number;
+  /** Extra annual nuclear-war/accident escalation at a 100% share. */
+  risk: number;
+}
+
+/** Energy technologies and their age-dependent output. */
+export const ENERGY_SOURCES: Readonly<Record<EnergySourceKey, EnergySource>> = {
+  biomass: {
+    key: 'biomass',
+    unlockAge: 0,
+    efficiency: [1, 1, 0.95, 0.75, 0.65, 0.55, 0.45],
+    pollution: 0.25,
+    co2: 0.12,
+    risk: 0,
+  },
+  fossil: {
+    key: 'fossil',
+    unlockAge: 3,
+    efficiency: [0, 0, 0, 1, 1.05, 1, 0.85],
+    pollution: 1,
+    co2: 1,
+    risk: 0,
+  },
+  nuclear: {
+    key: 'nuclear',
+    unlockAge: 4,
+    efficiency: [0, 0, 0, 0, 1, 1.1, 1.15],
+    pollution: 0.08,
+    co2: 0,
+    risk: 0.001,
+  },
+  solarWind: {
+    key: 'solarWind',
+    unlockAge: 5,
+    efficiency: [0, 0, 0, 0, 0, 0.72, 1.2],
+    pollution: 0.02,
+    co2: 0,
+    risk: 0,
+  },
+  hydroGeothermal: {
+    key: 'hydroGeothermal',
+    unlockAge: 0,
+    efficiency: [0.9, 0.95, 1, 0.95, 0.9, 0.85, 0.8],
+    pollution: 0.03,
+    co2: 0,
+    risk: 0,
+  },
+};
+
+export function energySourceUnlocked(key: EnergySourceKey, age: number): boolean {
+  return age >= ENERGY_SOURCES[key].unlockAge;
+}
+
+/** Returns a defensive, normalized policy; malformed or empty groups fall back to defaults. */
+export function normalizeCivilizationPolicy(
+  policy: Partial<CivilizationPolicy>,
+): CivilizationPolicy {
+  return {
+    energy: normalizeGroup(ENERGY_SOURCE_KEYS, policy.energy, DEFAULT_POLICY.energy),
+    investment: normalizeGroup(INVESTMENT_KEYS, policy.investment, DEFAULT_POLICY.investment),
+  };
+}
+
+export interface CivilizationPolicyChanges {
+  energy?: Partial<CivilizationPolicy['energy']>;
+  investment?: Partial<CivilizationPolicy['investment']>;
+}
+
+/** Applies slider changes while preserving the changed values and proportionally scaling the rest. */
+export function updateCivilizationPolicy(
+  current: CivilizationPolicy,
+  changes: CivilizationPolicyChanges,
+): CivilizationPolicy {
+  return {
+    energy: changes.energy
+      ? updateGroup(ENERGY_SOURCE_KEYS, current.energy, changes.energy)
+      : { ...current.energy },
+    investment: changes.investment
+      ? updateGroup(INVESTMENT_KEYS, current.investment, changes.investment)
+      : { ...current.investment },
+  };
+}
+
+function normalizeGroup<K extends string>(
+  keys: readonly K[],
+  values: Partial<Record<K, number>> | undefined,
+  fallback: Readonly<Record<K, number>>,
+): Record<K, number> {
+  const clean = Object.fromEntries(
+    keys.map((key) => [key, Math.max(0, Number.isFinite(values?.[key]) ? values![key]! : 0)]),
+  ) as Record<K, number>;
+  const total = keys.reduce((sum, key) => sum + clean[key], 0);
+  if (!(total > 0)) return { ...fallback };
+  for (const key of keys) clean[key] = (clean[key] * 100) / total;
+  return clean;
+}
+
+function updateGroup<K extends string>(
+  keys: readonly K[],
+  current: Record<K, number>,
+  changes: Partial<Record<K, number>>,
+): Record<K, number> {
+  const changed = keys.filter((key) => changes[key] !== undefined && Number.isFinite(changes[key]));
+  if (changed.length === 0) return normalizeGroup(keys, current, current);
+  const next = { ...current };
+  let fixed = 0;
+  for (const key of changed) {
+    next[key] = Math.max(0, changes[key]!);
+    fixed += next[key];
+  }
+  if (fixed >= 100) {
+    for (const key of keys) next[key] = changed.includes(key) ? (next[key] * 100) / fixed : 0;
+    return next;
+  }
+  const others = keys.filter((key) => !changed.includes(key));
+  const oldOthers = others.reduce((sum, key) => sum + Math.max(0, current[key]), 0);
+  for (const key of others) {
+    next[key] =
+      oldOthers > 0
+        ? (Math.max(0, current[key]) * (100 - fixed)) / oldOthers
+        : (100 - fixed) / others.length;
+  }
+  return normalizeGroup(keys, next, current);
+}
 
 /** People per km² in a cell whose food is fully used. */
 export const PEOPLE_PER_KM2 = 80;
