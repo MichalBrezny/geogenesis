@@ -40,6 +40,7 @@ export class SimHost {
             width: request.width,
             height: request.height,
             start: request.start,
+            continentalFraction: request.continentalFraction,
             planetParams: request.planetParams,
           });
           this.sendFrame();
@@ -169,6 +170,7 @@ export class SimHost {
       water: planet.globals.water,
       year: planet.globals.year,
       meanTemperature: planet.globals.meanTemperature,
+      runawayMargin: planet.globals.runawayMargin,
       solarInput: planet.globals.solarInput,
       co2: planet.globals.atmosphere.co2,
       surfacePressure: planet.globals.surfacePressure,

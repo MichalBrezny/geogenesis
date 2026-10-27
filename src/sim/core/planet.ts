@@ -120,6 +120,10 @@ export interface GlobalState {
   escapedWater: number;
   /** Whether the planet has crossed the moist/runaway-greenhouse threshold. */
   runawayGreenhouse: boolean;
+  /** Wet radiation-limit headroom: positive values are safer, in W/m2. */
+  runawayMargin: number;
+  /** Whether a new near-runaway warning may be recorded. */
+  runawayWarningArmed: boolean;
   /** Present dipole shielding strength, 0 (none) to 1 (modern Earth). */
   magneticField: number;
   /** Current tectonic style; ocean loss can irreversibly stop mobile-lid tectonics. */
@@ -480,6 +484,8 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
       initialWater: 2700,
       escapedWater: 0,
       runawayGreenhouse: false,
+      runawayMargin: 0,
+      runawayWarningArmed: true,
       magneticField: planetParams.dynamoStrength > 0 ? 1 : 0,
       tectonicRegime: planetParams.tectonicRegime,
       crustalCarbon: Math.max(

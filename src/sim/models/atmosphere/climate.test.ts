@@ -14,6 +14,7 @@ import {
   thinInsolationContrastScale,
   thinSeasonalAmplitudeScale,
   tidallyLockedInsolation,
+  updateRunawayState,
   WET_OLR_LIMIT,
 } from './climate';
 import { REFERENCE_SURFACE_PRESSURE } from './atmosphere';
@@ -58,6 +59,27 @@ describe('star', () => {
 });
 
 describe('climate', () => {
+  it('releases the runaway latch only beyond its hysteresis', () => {
+    const planet = oceanPlanet();
+    planet.globals.runawayGreenhouse = true;
+    updateRunawayState(planet, WET_OLR_LIMIT - 7, true);
+    expect(planet.globals.runawayGreenhouse).toBe(true);
+    updateRunawayState(planet, WET_OLR_LIMIT - 8, true);
+    expect(planet.globals.runawayGreenhouse).toBe(false);
+    expect(planet.events.filter((event) => event.key === 'runawayEnded')).toHaveLength(1);
+  });
+
+  it('warns once near the runaway limit and re-arms after recovery', () => {
+    const planet = oceanPlanet();
+    const approachLimit = () => updateRunawayState(planet, WET_OLR_LIMIT - 14, true);
+    approachLimit();
+    approachLimit();
+    expect(planet.events.filter((event) => event.key === 'runawayWarning')).toHaveLength(1);
+    updateRunawayState(planet, WET_OLR_LIMIT - 26, true);
+    approachLimit();
+    expect(planet.events.filter((event) => event.key === 'runawayWarning')).toHaveLength(2);
+  });
+
   it('saturates wet outgoing radiation but leaves a dry planet radiative', () => {
     expect(outgoingLongwaveRadiation(15, true)).toBeCloseTo(203.3 + 2.09 * 15, 8);
     expect(outgoingLongwaveRadiation(200, true)).toBeLessThanOrEqual(WET_OLR_LIMIT);

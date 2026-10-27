@@ -33,7 +33,7 @@ describe('random-world starts', () => {
     expect(world.planet.globals.year).toBe(PLANET_START_AGES.young);
     expect(world.planet.biota.appeared.every((year) => year === null)).toBe(true);
     expect(world.planet.globals.solarInput).toBeLessThan(0.8);
-    expect(areaWeightedMean(world.planet.grid, world.planet.fields.crustType)).toBeLessThan(0.12);
+    expect(areaWeightedMean(world.planet.grid, world.planet.fields.crustType)).toBeLessThan(0.18);
     expect(world.settings?.start).toBe('young');
   });
 
@@ -58,10 +58,12 @@ describe('random-world starts', () => {
 
 describe('continental growth target', () => {
   it('grows from small cratons at 0.5 Gyr to nearly modern cover by 2.5–3 Gyr', () => {
-    expect(continentalCrustTarget(0.5e9)).toBeGreaterThan(0.05);
-    expect(continentalCrustTarget(0.5e9)).toBeLessThan(0.1);
-    expect(continentalCrustTarget(2.5e9)).toBeGreaterThan(0.28);
-    expect(continentalCrustTarget(3e9)).toBeLessThanOrEqual(0.3);
+    expect(continentalCrustTarget(0.5e9)).toBeGreaterThan(0.1);
+    expect(continentalCrustTarget(0.5e9)).toBeLessThan(0.14);
+    expect(continentalCrustTarget(2.5e9)).toBeGreaterThan(0.3);
+    expect(continentalCrustTarget(10e9)).toBeCloseTo(0.31, 3);
+    expect(continentalCrustTarget(10e9, 0.14)).toBeCloseTo(0.155, 3);
+    expect(continentalCrustTarget(10e9, 0)).toBe(0);
   });
 });
 

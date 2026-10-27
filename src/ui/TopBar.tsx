@@ -29,6 +29,7 @@ interface Props {
     resolutionIndex: number,
     start: PlanetStart,
     planetParams?: Partial<PlanetParameters>,
+    continentalFraction?: number,
   ) => void;
   onSave: () => void;
   onLoad: (file: File) => void;
@@ -102,7 +103,7 @@ function Vitals({ frame }: { frame: Frame }) {
   // Geological time reads best in Gyr; once steps are years long, the calendar year does.
   const age =
     frame.stepYears >= 1e5 ? formatGyr(frame.year) : Math.round(frame.year).toLocaleString('en');
-  const items: [MessageKey, MessageKey, string][] = [
+  const items: [MessageKey, MessageKey, string, boolean?][] = [
     ...(frame.era
       ? [
           ['stat.era', 'stat.eraHint', t(`eraName.${frame.era}`)] as [
@@ -127,6 +128,12 @@ function Vitals({ frame }: { frame: Frame }) {
     ['stat.seaLevel', 'stat.seaLevelHint', `${frame.seaLevel.toFixed(0)} m`],
     ['stat.sun', 'stat.sunHint', `${(frame.solarInput * 100).toFixed(1)}%`],
     [
+      'stat.runawayMargin',
+      'stat.runawayMarginHint',
+      `${frame.runawayMargin.toFixed(0)} W/m2`,
+      frame.runawayMargin < 15,
+    ],
+    [
       'stat.energy',
       'stat.energyHint',
       frame.unlimitedEnergy ? '∞' : Math.floor(frame.energy).toLocaleString('en'),
@@ -134,8 +141,8 @@ function Vitals({ frame }: { frame: Frame }) {
   ];
   return (
     <dl className="vitals">
-      {items.map(([label, hint, value]) => (
-        <div key={label} title={t(hint)}>
+      {items.map(([label, hint, value, warning]) => (
+        <div key={label} title={t(hint)} className={warning ? 'warning' : undefined}>
           <dt>{t(label)}</dt>
           <dd>{value}</dd>
         </div>
@@ -166,6 +173,7 @@ function NewPlanetMenu({
   const [rotationHours, setRotationHours] = useState(24);
   const [hasMoon, setHasMoon] = useState(true);
   const [initialWater, setInitialWater] = useState('');
+  const [landTargetPercent, setLandTargetPercent] = useState(28);
   const anchor = useRef<HTMLDivElement>(null);
 
   // A press anywhere outside the menu closes it.
@@ -203,7 +211,13 @@ function NewPlanetMenu({
                     ...(initialWater === '' ? {} : { initialWaterGel: Number(initialWater) }),
                   }
                 : undefined;
-            onCreate(scenario, resolution, start, planetParams);
+            onCreate(
+              scenario,
+              resolution,
+              start,
+              planetParams,
+              scenario === 'random' ? landTargetPercent / 100 : undefined,
+            );
             setOpen(false);
           }}
           onKeyDown={(event) => {
@@ -317,6 +331,18 @@ function NewPlanetMenu({
                   placeholder="auto"
                   onChange={(event) => setInitialWater(event.target.value)}
                   title={t('planet.waterHint')}
+                />
+              </label>
+              <label title={t('planet.landTargetHint')}>
+                {t('planet.landTarget')} (%)
+                <input
+                  type="number"
+                  min="0"
+                  max="60"
+                  step="1"
+                  value={landTargetPercent}
+                  onChange={(event) => setLandTargetPercent(Number(event.target.value))}
+                  title={t('planet.landTargetHint')}
                 />
               </label>
             </fieldset>

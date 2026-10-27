@@ -31,8 +31,8 @@ export interface DriftOptions {
   /** Uplift rate at the most active convergent boundaries, in m/yr. */
   maxUpliftRate?: number;
   /**
-   * Area fraction of continental crust the planet tends towards. When collisions
-   * have consumed crust below this, continental shelves grow back faster.
+   * Mature ice-free land fraction. The model derives a larger continental-crust
+   * target because part of every continent remains below sea level as shelf.
    */
   continentalFraction?: number;
 }
@@ -80,13 +80,15 @@ const OVERLAP_HYSTERESIS = 1000;
 const MAX_STABLE_PLATE_SHARE = 0.28;
 
 /**
- * Continental crust grows from small Hadean/Archean nuclei to the modern target.
- * With the default 30% ceiling this is 5.8% at 0.5 Gyr and 29.3% at 2.5 Gyr.
+ * Continental crust grows from Archean nuclei to the amount needed to expose the
+ * requested mature land share. The default 28% land target needs about 31% crust;
+ * the early curve gives it about 13% continental crust at 0.5 Gyr and 30% at 2 Gyr.
  */
-export function continentalCrustTarget(ageYears: number, maximum = 0.3): number {
-  if (maximum <= 0) return 0;
-  const primordial = Math.min(maximum, 0.02);
-  const growth = 1 - Math.exp(-Math.pow(Math.max(0, ageYears) / 1.3e9, 2));
+export function continentalCrustTarget(ageYears: number, matureLandFraction = 0.28): number {
+  if (matureLandFraction <= 0) return 0;
+  const maximum = Math.min(0.85, matureLandFraction * (31 / 28));
+  const primordial = Math.min(maximum, matureLandFraction * 0.25);
+  const growth = 1 - Math.exp(-Math.pow(Math.max(0, ageYears) / 1.1e9, 1.6));
   return primordial + (maximum - primordial) * growth;
 }
 
@@ -112,7 +114,7 @@ export function createPlateDrift(options: DriftOptions = {}): SimComponent {
   const speedFactor = options.speedFactor ?? 1;
   const reorganizationInterval = options.reorganizationInterval ?? 300e6;
   const maxUpliftRate = options.maxUpliftRate ?? DEFAULT_MAX_UPLIFT_RATE;
-  const continentalFraction = options.continentalFraction ?? 0.3;
+  const continentalFraction = options.continentalFraction ?? 0.28;
 
   return {
     name: 'plateDrift',
@@ -612,7 +614,8 @@ function splitOversizedPlate(state: PlanetState, rng: Rng): boolean {
     const cells: number[] = [];
     for (let cell = 0; cell < ids.length; cell++) if (ids[cell] === smallestId) cells.push(cell);
     const receiverId = surroundingPlate(grid, ids, cells, smallestId);
-    if (receiverId < 0 || !transferCrust(state, plates[smallestId]!, plates[receiverId]!)) return false;
+    if (receiverId < 0 || !transferCrust(state, plates[smallestId]!, plates[receiverId]!))
+      return false;
     hasSlot = true;
   }
   if (!hasSlot && plates.length >= capacity) return false;

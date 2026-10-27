@@ -8,6 +8,7 @@ import { isOcean } from './models/geosphere/seaLevel';
 export const HISTORY_SERIES = [
   'year',
   'meanTemperature',
+  'runawayMargin',
   'co2',
   'co2Ice',
   'surfacePressure',
@@ -60,6 +61,7 @@ export const recordHistory: SimComponent = {
     const sample: Record<HistorySeries, number> = {
       year: globals.year,
       meanTemperature: globals.meanTemperature,
+      runawayMargin: globals.runawayMargin,
       co2: globals.atmosphere.co2,
       co2Ice: globals.co2Ice,
       surfacePressure: globals.surfacePressure,

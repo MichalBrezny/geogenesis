@@ -33,6 +33,12 @@ const OLR_A = 203.3;
 const OLR_B = 2.09;
 /** Wet-atmosphere Simpson-Nakajima radiation limit, W/m2. */
 export const WET_OLR_LIMIT = 294;
+/** A latched steam climate rains out only this far below the wet radiation limit. */
+export const RUNAWAY_RELEASE_HYSTERESIS = 8;
+/** Headroom at which the player receives a one-time near-runaway warning. */
+export const RUNAWAY_WARNING_MARGIN = 15;
+/** Headroom required before the near-runaway warning is armed again. */
+export const RUNAWAY_WARNING_RESET_MARGIN = 25;
 /** Temperature where the OLR bends smoothly away from the linear Earth regime. */
 export const WET_OLR_TRANSITION = 40;
 const WET_TRANSITION_OLR = OLR_A + OLR_B * WET_OLR_TRANSITION;
@@ -136,13 +142,51 @@ export function greenhouseForcing(atmosphere: Atmosphere): number {
   // CO2 self-broadening up to ~1 bar is already in the fit's quadratic term, so
   // only CO2 beyond 1 bar adds here; otherwise a CO2-rich young planet feeds on
   // itself, while a Venus-like atmosphere still broadens its bands.
-  const broadeningCo2 = REFERENCE_CO2 + Math.max(0, atmosphere.co2 - 1e6);
+  // Fade self-broadening in over 1--2 bar. The high-pressure physics remains,
+  // without making 1 bar a derivative cliff in the young-planet thermostat.
+  const broadeningRamp = smoothstep(1e6, 2e6, atmosphere.co2);
+  const broadeningCo2 = REFERENCE_CO2 + Math.max(0, atmosphere.co2 - 1e6) * broadeningRamp;
   const broadening = Math.sqrt(
     surfacePressureOf({ ...atmosphere, co2: broadeningCo2 }) / REFERENCE_SURFACE_PRESSURE,
   );
   // The methane formula uses ppb.
   const ch4 = 0.036 * (Math.sqrt(atmosphere.ch4 * 1000) - Math.sqrt(REFERENCE_CH4 * 1000));
   return broadening * (co2 + water) + ch4;
+}
+
+/** Cubic 0..1 transition with zero slope at both ends. */
+function smoothstep(low: number, high: number, value: number): number {
+  const x = Math.max(0, Math.min(1, (value - low) / (high - low)));
+  return x * x * (3 - 2 * x);
+}
+
+/**
+ * Updates the runaway latch and warning hysteresis from the required wet OLR.
+ * Exported so the thresholds can be unit-tested without running the full EBM.
+ */
+export function updateRunawayState(
+  state: Parameters<SimComponent['runOneStep']>[0],
+  requiredOlr: number,
+  hasWater: boolean,
+): void {
+  const { globals } = state;
+  globals.runawayMargin = WET_OLR_LIMIT - requiredOlr;
+  if (!hasWater) return;
+
+  if (globals.runawayGreenhouse && requiredOlr <= WET_OLR_LIMIT - RUNAWAY_RELEASE_HYSTERESIS) {
+    globals.runawayGreenhouse = false;
+    recordEvent(state, 'runawayEnded');
+  } else if (!globals.runawayGreenhouse && requiredOlr >= WET_OLR_LIMIT) {
+    globals.runawayGreenhouse = true;
+    recordEvent(state, 'runawayGreenhouse');
+  }
+
+  if (globals.runawayMargin > RUNAWAY_WARNING_RESET_MARGIN) {
+    globals.runawayWarningArmed = true;
+  } else if (globals.runawayMargin < RUNAWAY_WARNING_MARGIN && globals.runawayWarningArmed) {
+    globals.runawayWarningArmed = false;
+    recordEvent(state, 'runawayWarning');
+  }
 }
 
 /**
@@ -336,12 +380,14 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
             )
           : 0;
       }
-      const forcing =
-        greenhouseForcing(globals.atmosphere) * state.controls.greenhouse -
-        thinAtmosphereCooling(globals.surfacePressure) -
+      const nonGreenhouseForcing =
+        -thinAtmosphereCooling(globals.surfacePressure) -
         globals.volcanicAerosol -
         dustForcing(globals.dust) +
         globals.impactHeating;
+      let forcing =
+        greenhouseForcing(globals.atmosphere) * state.controls.greenhouse + nonGreenhouseForcing;
+      let climateSurfacePressure = globals.surfacePressure;
       const hazeAlbedo = sulfurCloudAlbedo(globals.atmosphere, hasWater);
       const albedoScale = state.controls.surfaceAlbedo;
       const scaledSurface = (i: number) =>
@@ -349,7 +395,9 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
           ? surfaceAlbedo[i]!
           : Math.min(0.9, Math.max(0.03, surfaceAlbedo[i]! * albedoScale));
       const lapseDatum = lapseRateDatum(grid, elevation, globals.seaLevel);
-      let crossedRunawayLimit = false;
+      const wasRunaway = globals.runawayGreenhouse;
+      let runawayReleased = false;
+      let requiredOlr = -Infinity;
 
       // Start from last step's albedo where it exists, so the ice state persists (hysteresis).
       for (let i = 0; i < grid.cellCount; i++) {
@@ -363,20 +411,64 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
         }
       }
 
-      for (let iteration = 0; iteration < 12; iteration++) {
-        crossedRunawayLimit =
-          solveCoarse(
-            climate,
-            grid,
-            albedo,
-            globals.solarInput,
-            state.controls.obliquity,
+      if (hasWater && wasRunaway) {
+        // Test the branch the planet would occupy after fast steam rain-out. The
+        // ice-free surface albedos already include typical cloud cover; using the
+        // hot steam state's cloud/albedo fields here causes a two-step flip-flop.
+        const cooledAlbedo = new Float32Array(grid.cellCount);
+        for (let i = 0; i < grid.cellCount; i++) cooledAlbedo[i] = scaledSurface(i);
+        const cooledAtmosphere = {
+          ...globals.atmosphere,
+          waterVapor: Math.min(globals.atmosphere.waterVapor, REFERENCE_WATER_VAPOR),
+        };
+        const cooledPressure = surfacePressureOf(cooledAtmosphere);
+        const cooledForcing =
+          greenhouseForcing(cooledAtmosphere) * state.controls.greenhouse -
+          thinAtmosphereCooling(cooledPressure) -
+          globals.volcanicAerosol -
+          dustForcing(globals.dust) +
+          globals.impactHeating;
+        const recoveryRequiredOlr = requiredOlrFor(
+          climate,
+          grid,
+          cooledAlbedo,
+          globals.solarInput,
+          state.controls.obliquity,
+          state.planetParams.tidallyLocked,
+          cooledForcing,
+          cooledPressure,
+        );
+        updateRunawayState(state, recoveryRequiredOlr, true);
+        runawayReleased = !globals.runawayGreenhouse;
+        if (runawayReleased) {
+          // Rain-out is much faster than a geological step. The water component
+          // moves the conserved vapour column back to the ocean later this step.
+          albedo.set(cooledAlbedo);
+          forcing = cooledForcing;
+          climateSurfacePressure = cooledPressure;
+          climate.transportScale = heatTransportScale(
+            cooledPressure,
+            state.planetParams.rotationPeriodHours,
             state.planetParams.tidallyLocked,
-            forcing,
-            hasWater,
-            hasWater && (globals.runawayGreenhouse || globals.meanTemperature >= 50),
-            globals.surfacePressure,
-          ) || crossedRunawayLimit;
+          );
+        }
+      }
+
+      for (let iteration = 0; iteration < 12; iteration++) {
+        const solution = solveCoarse(
+          climate,
+          grid,
+          albedo,
+          globals.solarInput,
+          state.controls.obliquity,
+          state.planetParams.tidallyLocked,
+          forcing,
+          hasWater,
+          hasWater &&
+            (globals.runawayGreenhouse || (!runawayReleased && globals.meanTemperature >= 50)),
+          climateSurfacePressure,
+        );
+        requiredOlr = solution.requiredOlr;
         interpolateToFine(
           climate,
           grid,
@@ -441,11 +533,9 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
         }
         if (maxChange < 1e-3) break;
       }
-      // Only a planet with water can cross the moist runaway limit; a dry Venus is hot, not runaway.
-      if (crossedRunawayLimit && hasWater && !globals.runawayGreenhouse) {
-        globals.runawayGreenhouse = true;
-        recordEvent(state, 'runawayGreenhouse');
-      }
+      // A still-latched steam climate was already evaluated on the cooled branch;
+      // all other climates use the converged branch's margin and thresholds.
+      if (!wasRunaway || runawayReleased) updateRunawayState(state, requiredOlr, hasWater);
       if (previous) {
         for (let i = 0; i < grid.cellCount; i++) {
           airTemperature[i] = airTemperature[i]! + (previous[i]! - airTemperature[i]!) * lag;
@@ -697,7 +787,12 @@ class MinHeap {
   }
 }
 
-function solveCoarse(
+interface CoarseSolution {
+  runaway: boolean;
+  requiredOlr: number;
+}
+
+function requiredOlrFor(
   climate: ClimateGrid,
   grid: Grid,
   albedo: Float32Array,
@@ -705,10 +800,8 @@ function solveCoarse(
   obliquity: number,
   tidallyLocked: boolean,
   forcing: number,
-  hasWater: boolean,
-  forcedRunaway: boolean,
   surfacePressure: number,
-): boolean {
+): number {
   const { coarse, factor, coarseAlbedo, rhs, rowArea } = climate;
 
   // Area-weighted mean albedo of the fine cells in each coarse cell.
@@ -737,17 +830,42 @@ function solveCoarse(
       const rawInsolation = tidallyLocked
         ? tidallyLockedInsolation(coarse, c, solarInput)
         : zonalInsolation;
-      const insolation = tidallyLocked || insolationContrast === 1
-        ? rawInsolation
-        : Math.max(0, meanInsolation + (rawInsolation - meanInsolation) * insolationContrast);
+      const insolation =
+        tidallyLocked || insolationContrast === 1
+          ? rawInsolation
+          : Math.max(0, meanInsolation + (rawInsolation - meanInsolation) * insolationContrast);
       const absorbed = insolation * (1 - coarseAlbedo[c]!);
       rhs[c] = rowArea[y]! * (absorbed - (OLR_A - forcing));
       absorbedSum += rowArea[y]! * absorbed;
       areaSum += rowArea[y]!;
     }
   }
+  return absorbedSum / areaSum + forcing;
+}
+
+function solveCoarse(
+  climate: ClimateGrid,
+  grid: Grid,
+  albedo: Float32Array,
+  solarInput: number,
+  obliquity: number,
+  tidallyLocked: boolean,
+  forcing: number,
+  hasWater: boolean,
+  forcedRunaway: boolean,
+  surfacePressure: number,
+): CoarseSolution {
+  const requiredOlr = requiredOlrFor(
+    climate,
+    grid,
+    albedo,
+    solarInput,
+    obliquity,
+    tidallyLocked,
+    forcing,
+    surfacePressure,
+  );
   conjugateGradient(climate);
-  const requiredOlr = absorbedSum / areaSum + forcing;
   const runaway = hasWater && (forcedRunaway || requiredOlr >= WET_OLR_LIMIT);
   if (runaway) {
     // Above the radiation limit no wet steady state exists. Represent the hot
@@ -769,7 +887,7 @@ function solveCoarse(
         Math.log(remaining / (WET_OLR_LIMIT - WET_TRANSITION_OLR));
     shiftCoarseMean(climate, wetTarget);
   }
-  return runaway;
+  return { runaway, requiredOlr };
 }
 
 function shiftCoarseMean(climate: ClimateGrid, target: number): void {
