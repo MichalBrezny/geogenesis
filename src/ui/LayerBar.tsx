@@ -59,7 +59,7 @@ export function LayerBar(props: Props) {
             aria-pressed={overlays.includes(id)}
             className={overlays.includes(id) ? 'selected' : undefined}
             onClick={() => onToggleOverlay(id)}
-            title={`${t(`overlayHelp.${id}` as MessageKey)} (${id === 'wind' ? 'W' : id === 'currents' ? 'C' : id === 'isobars' ? 'P' : 'I'})`}
+            title={`${t(`overlayHelp.${id}` as MessageKey)} (${overlayKey(id)})`}
           >
             {OVERLAY_ICONS[id]}
             {t(`overlay.${id}` as MessageKey)}
@@ -83,4 +83,10 @@ export function LayerBar(props: Props) {
       </div>
     </div>
   );
+}
+
+function overlayKey(id: Overlay): string {
+  return { wind: 'W', currents: 'C', isobars: 'P', mantle: 'T', names: 'N', icons: 'I', events: 'V' }[
+    id
+  ];
 }

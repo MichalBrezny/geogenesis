@@ -8,6 +8,7 @@ import { LakeType } from '../sim/models/geosphere/flowRouting';
 import type { Frame } from '../worker/protocol';
 import type { MonthlyClimate } from '../sim/models/atmosphere/climateDiagram';
 import { ClimateDiagram } from './ClimateDiagram';
+import { geographicNameAtCell, plateNameAtCell } from '../render/mapLabels';
 
 /** Cell under the pointer and where to draw the readout (page coordinates). */
 export interface HoveredCell {
@@ -50,6 +51,10 @@ export function CellInspector({
     ['inspect.biome', t(`biome.${BIOMES[f.biome[i] as Biome].key}` as MessageKey)],
     ['inspect.life', t(`lifeTier.${tier === 0 ? 'none' : LIFE_TIERS[tier - 1]!}` as MessageKey)],
   ];
+  const plateName = plateNameAtCell(frame, i);
+  const geographicName = geographicNameAtCell(frame, i);
+  if (geographicName) rows.splice(1, 0, [ocean ? 'inspect.ocean' : 'inspect.landmass', geographicName]);
+  if (plateName) rows.splice(1, 0, ['inspect.plate', plateName]);
   if (f.co2Ice[i]! > 0) {
     rows.splice(5, 0, ['inspect.co2Ice', `${(f.co2Ice[i]! * 1000).toFixed(2)} mbar`]);
   }

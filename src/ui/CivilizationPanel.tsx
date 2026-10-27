@@ -63,7 +63,7 @@ export function EventLog({
               <span className="event-entry">
                 <EventIcon eventKey={event.key} />
                 <span>
-                  <span className="muted">{formatYear(event.year)}</span> {describe(event)}
+                  <span className="muted">{formatYear(event.year)}</span> {describeEvent(event)}
                 </span>
               </span>
             ) : (
@@ -75,7 +75,7 @@ export function EventLog({
               >
                 <EventIcon eventKey={event.key} />
                 <span>
-                  <span className="muted">{formatYear(event.year)}</span> {describe(event)}
+                  <span className="muted">{formatYear(event.year)}</span> {describeEvent(event)}
                 </span>
               </button>
             )}
@@ -86,7 +86,7 @@ export function EventLog({
   );
 }
 
-function describe(event: Frame['events'][number]): string {
+export function describeEvent(event: Frame['events'][number]): string {
   const subject = event.subject ?? '';
   const name =
     event.key === 'largeEruption' ||

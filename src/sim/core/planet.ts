@@ -1,5 +1,6 @@
 import { createFields, type Fields } from './fields';
 import type { PlanetEvent } from '../events';
+import { createMapNamingState, type MapNamingState } from '../mapNames';
 import { createHistory, type History } from '../history';
 import { LIFE_CLASS_COUNT } from '../data/lifeClasses';
 import { createGrid, type Grid } from './grid';
@@ -461,6 +462,8 @@ export interface PlanetState {
   civPolicy: CivilizationPolicy;
   /** Notable moments, most recent last (see events.ts). */
   events: PlanetEvent[];
+  /** Saved deterministic names and compact overlap samples for map features. */
+  mapNaming: MapNamingState;
   controls: ModelControls;
   disasters: DisasterSettings;
   /** Scenario objective and evaluator memory; sandbox worlds have no goal. */
@@ -612,6 +615,7 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
       investment: { ...DEFAULT_CIV_POLICY.investment },
     },
     events: [],
+    mapNaming: createMapNamingState(),
     controls: { ...DEFAULT_CONTROLS },
     disasters: { ...DEFAULT_DISASTERS },
     goal: null,

@@ -12,6 +12,7 @@ import type { RandomWorldSettings } from './world';
 import { surfacePressureOf } from './models/atmosphere/atmosphere';
 import { atmosphericWaterGel, basinWaterGel, landIceWaterGel } from './models/geosphere/seaLevel';
 import { updateLifeMapFields } from './models/biosphere/life';
+import { createMapNamingState } from './mapNames';
 
 /**
  * Binary save format:
@@ -138,6 +139,11 @@ function hydrateAddedState(planet: PlanetState): void {
   planet.fields.lakeType ??= new Int32Array(planet.grid.cellCount);
   planet.fields.volcanicActivity ??= new Float32Array(planet.grid.cellCount);
   planet.fields.hazard ??= new Float32Array(planet.grid.cellCount);
+  planet.mapNaming ??= createMapNamingState();
+  planet.mapNaming.nextFeatureId ??= 1;
+  planet.mapNaming.nextNameOrdinal ??= 0;
+  planet.mapNaming.updatedYear ??= -1;
+  planet.mapNaming.features ??= [];
   planet.globals.atmosphere.n2 ??= 0.78084;
   planet.globals.atmosphere.inert ??= 0.00934;
   planet.globals.atmosphere.waterVapor ??= 0.0025;

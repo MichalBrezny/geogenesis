@@ -326,12 +326,14 @@ export function drawEventMarkers(
   width: number,
   height: number,
   project: Projection,
+  options: { limit?: number; fade?: boolean } = {},
 ): void {
-  const located = events.filter((event) => event.cell !== undefined).slice(-30);
+  const all = events.filter((event) => event.cell !== undefined);
+  const located = options.limit === undefined ? all.slice(-30) : all.slice(-options.limit);
   located.forEach((event, index) => {
     const point = cellPoint(event.cell!, width, height, project);
     if (!point) return;
-    const alpha = 0.3 + (0.7 * (index + 1)) / located.length;
+    const alpha = options.fade === false ? 1 : 0.3 + (0.7 * (index + 1)) / located.length;
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.beginPath();

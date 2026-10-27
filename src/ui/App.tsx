@@ -85,6 +85,7 @@ const SCENARIO_VIEW: Record<
     ],
     layers: [
       'terrain',
+      'seafloor',
       'plates',
       'volcanism',
       'airTemperature',
@@ -132,6 +133,7 @@ const SCENARIO_VIEW: Record<
     layers: [
       'life',
       'terrain',
+      'seafloor',
       'plates',
       'volcanism',
       'airTemperature',
@@ -163,6 +165,7 @@ const SCENARIO_VIEW: Record<
     ],
     layers: [
       'terrain',
+      'seafloor',
       'airTemperature',
       'pressure',
       'wind',
@@ -174,12 +177,12 @@ const SCENARIO_VIEW: Record<
   },
   venus: {
     charts: ['meanTemperature', 'co2', 'surfacePressure', 'water', 'solarInput'],
-    layers: ['airTemperature', 'pressure', 'clouds', 'wind', 'terrain', 'volcanism'],
+    layers: ['airTemperature', 'pressure', 'clouds', 'wind', 'terrain', 'seafloor', 'volcanism'],
     layer: 'clouds',
   },
   terraformMars: {
     charts: ['meanTemperature', 'surfacePressure', 'co2', 'o2', 'water', 'iceFraction'],
-    layers: ['terrain', 'airTemperature', 'biomes', 'life', 'clouds', 'precipitation'],
+    layers: ['terrain', 'seafloor', 'airTemperature', 'biomes', 'life', 'clouds', 'precipitation'],
     layer: 'terrain',
   },
   stoneAge: {
@@ -194,13 +197,31 @@ const SCENARIO_VIEW: Record<
       'iceFraction',
       'seaLevel',
     ],
-    layers: ['civilization', 'hazard', 'terrain', 'life', 'biomes', 'airTemperature', 'diversity'],
+    layers: [
+      'civilization',
+      'hazard',
+      'terrain',
+      'seafloor',
+      'life',
+      'biomes',
+      'airTemperature',
+      'diversity',
+    ],
     layer: 'civilization',
   },
   cambrian: {
     overlays: ['icons'],
     charts: ['livingClasses', 'biodiversity', 'o2', 'meanTemperature', 'co2', 'iceFraction'],
-    layers: ['life', 'diversity', 'hazard', 'terrain', 'biomes', 'airTemperature', 'nutrients'],
+    layers: [
+      'life',
+      'diversity',
+      'hazard',
+      'terrain',
+      'seafloor',
+      'biomes',
+      'airTemperature',
+      'nutrients',
+    ],
     layer: 'life',
   },
   brighteningSun: {
@@ -218,6 +239,7 @@ const SCENARIO_VIEW: Record<
     layers: [
       'life',
       'terrain',
+      'seafloor',
       'airTemperature',
       'clouds',
       'biomes',
@@ -238,7 +260,16 @@ const SCENARIO_VIEW: Record<
       'seaLevel',
       'solarInput',
     ],
-    layers: ['airTemperature', 'terrain', 'clouds', 'precipitation', 'biomes', 'life', 'hazard'],
+    layers: [
+      'airTemperature',
+      'terrain',
+      'seafloor',
+      'clouds',
+      'precipitation',
+      'biomes',
+      'life',
+      'hazard',
+    ],
     layer: 'airTemperature',
   },
   cradle: {
@@ -252,7 +283,16 @@ const SCENARIO_VIEW: Record<
       'iceFraction',
       'solarInput',
     ],
-    layers: ['life', 'diversity', 'biomes', 'terrain', 'airTemperature', 'civilization', 'hazard'],
+    layers: [
+      'life',
+      'diversity',
+      'biomes',
+      'terrain',
+      'seafloor',
+      'airTemperature',
+      'civilization',
+      'hazard',
+    ],
     layer: 'life',
   },
 };
@@ -263,7 +303,7 @@ const SHORTCUT_HELP = [
   ['S', 'help.keyStep'],
   ['1–9 / 0', 'help.keyLayer'],
   ['G', 'help.keyView'],
-  ['W / C / P / I', 'help.keyOverlay'],
+  ['W / C / P / T / N / I / V', 'help.keyOverlay'],
   ['E / A / B / D', 'help.keyWindows'],
   ['+ / −', 'help.keyZoom'],
   ['M', 'help.keyMinimap'],
@@ -498,7 +538,10 @@ export function App() {
     w: () => toggleOverlay('wind'),
     c: () => toggleOverlay('currents'),
     p: () => toggleOverlay('isobars'),
+    t: () => toggleOverlay('mantle'),
+    n: () => toggleOverlay('names'),
     i: () => toggleOverlay('icons'),
+    v: () => toggleOverlay('events'),
     e: () => toggleWindow('geosphere'),
     a: () => toggleWindow('atmosphere'),
     b: () => toggleWindow('biosphere'),
@@ -671,6 +714,7 @@ export function App() {
                 <MapLegend
                   layer={shownLayer}
                   iconsOn={overlays.includes('icons')}
+                  mantleOn={overlays.includes('mantle')}
                   visibleIcons={visibleMapIcons}
                 />
               </figure>

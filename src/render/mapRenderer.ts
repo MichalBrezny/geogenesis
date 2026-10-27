@@ -5,6 +5,7 @@ import { LakeType } from '../sim/models/geosphere/flowRouting';
 import { co2FrostCover } from '../sim/models/atmosphere/co2Frost';
 import {
   clathratePalette,
+  bathymetricReliefPalette,
   diversityPalette,
   elevationPalette,
   hazardPalette,
@@ -63,6 +64,7 @@ export interface MapSource {
 /** Map layers the player can switch between. */
 export const MAP_LAYERS = [
   'terrain',
+  'seafloor',
   'plates',
   'volcanism',
   'airTemperature',
@@ -141,6 +143,10 @@ const layerColors: Record<MapLayer, CellColor> = {
     if (ice > 0) color = mix(color, ocean ? SEA_ICE_COLOR : LAND_ICE_COLOR, 0.2 + 0.8 * ice);
     const frost = co2FrostCover(co2Ice[i]!);
     return frost > 0 ? mix(color, CO2_FROST_COLOR, 0.25 + 0.75 * frost) : color;
+  },
+  seafloor(state, i) {
+    const relative = state.fields.elevation[i]! - state.seaLevel;
+    return relative < 0 ? bathymetricReliefPalette(relative) : elevationPalette(relative);
   },
   plates(state, i) {
     const base = PLATE_PALETTE[state.fields.plateId[i]! % PLATE_PALETTE.length]!;
@@ -259,6 +265,7 @@ export function layerPixels(
   const { cellCount } = state.grid;
   const pixels = new Uint8ClampedArray(cellCount * 4);
   if (layer === 'plates') return platePixels(state, pixels);
+  if (layer === 'seafloor') return seafloorPixels(state, pixels);
   const color = layerColors[layer];
   for (let i = 0; i < cellCount; i++) {
     const [r, g, b] = color(state, i, temperatureMonth);
@@ -267,6 +274,49 @@ export function layerPixels(
     pixels[p + 1] = g;
     pixels[p + 2] = b;
     pixels[p + 3] = 255;
+  }
+  return pixels;
+}
+
+/** Bathymetry with a northwest hillshade and a one-cell coastline at the live sea level. */
+function seafloorPixels(
+  state: MapSource,
+  pixels: Uint8ClampedArray<ArrayBuffer>,
+): Uint8ClampedArray<ArrayBuffer> {
+  const { width, height } = state.grid;
+  const elevation = state.fields.elevation;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = y * width + x;
+      const relative = elevation[i]! - state.seaLevel;
+      const east = y * width + ((x + 1) % width);
+      const west = y * width + ((x + width - 1) % width);
+      const north = y > 0 ? i - width : i;
+      const south = y + 1 < height ? i + width : i;
+      const coast =
+        (relative < 0) !== (elevation[east]! < state.seaLevel) ||
+        (relative < 0) !== (elevation[west]! < state.seaLevel) ||
+        (relative < 0) !== (elevation[north]! < state.seaLevel) ||
+        (relative < 0) !== (elevation[south]! < state.seaLevel);
+      let color: Rgb =
+        relative < 0 ? bathymetricReliefPalette(relative) : elevationPalette(relative);
+      if (coast) color = mix(color, [24, 25, 27], 0.72);
+      else {
+        const northwest = (elevation[west]! + elevation[north]!) * 0.5;
+        const southeast = (elevation[east]! + elevation[south]!) * 0.5;
+        const shade = Math.max(0.62, Math.min(1.28, 0.95 + (northwest - southeast) / 5000));
+        color = [
+          Math.round(Math.min(255, color[0] * shade)),
+          Math.round(Math.min(255, color[1] * shade)),
+          Math.round(Math.min(255, color[2] * shade)),
+        ];
+      }
+      const p = i * 4;
+      pixels[p] = color[0];
+      pixels[p + 1] = color[1];
+      pixels[p + 2] = color[2];
+      pixels[p + 3] = 255;
+    }
   }
   return pixels;
 }
