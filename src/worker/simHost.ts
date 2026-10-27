@@ -73,7 +73,11 @@ export class SimHost {
           if (!this.world) break;
           this.world.planet.civPolicy = clampGoalCivilizationPolicy(
             this.world.planet,
-            updateCivilizationPolicy(this.world.planet.civPolicy, request.policy),
+            updateCivilizationPolicy(
+              this.world.planet.civPolicy,
+              request.policy,
+              this.world.planet.civilization.age,
+            ),
           );
           this.sendFrame();
           break;

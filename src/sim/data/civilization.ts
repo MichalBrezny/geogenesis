@@ -216,14 +216,21 @@ export interface CivilizationPolicyChanges {
   investment?: Partial<CivilizationPolicy['investment']>;
 }
 
-/** Applies slider changes while preserving the changed values and proportionally scaling the rest. */
+/**
+ * Applies slider changes while preserving the changed values and proportionally scaling the rest.
+ * With a tech `age`, energy changes are percentages of the unlocked sources' combined share
+ * (what the sliders show), and sources still locked keep their planned share.
+ */
 export function updateCivilizationPolicy(
   current: CivilizationPolicy,
   changes: CivilizationPolicyChanges,
+  age?: number,
 ): CivilizationPolicy {
   return {
     energy: changes.energy
-      ? updateGroup(ENERGY_SOURCE_KEYS, current.energy, changes.energy)
+      ? age === undefined
+        ? updateGroup(ENERGY_SOURCE_KEYS, current.energy, changes.energy)
+        : updateUnlockedEnergy(current.energy, changes.energy, age)
       : { ...current.energy },
     investment: changes.investment
       ? updateGroup(INVESTMENT_KEYS, current.investment, changes.investment)
@@ -271,6 +278,35 @@ function updateGroup<K extends string>(
         : (100 - fixed) / others.length;
   }
   return normalizeGroup(keys, next, current);
+}
+
+/** Share (0..100) of the requested energy mix held by the sources unlocked in `age`. */
+export function unlockedEnergyShare(energy: CivilizationPolicy['energy'], age: number): number {
+  return ENERGY_SOURCE_KEYS.reduce(
+    (sum, key) => sum + (energySourceUnlocked(key, age) ? Math.max(0, energy[key]) : 0),
+    0,
+  );
+}
+
+function updateUnlockedEnergy(
+  current: CivilizationPolicy['energy'],
+  changes: Partial<CivilizationPolicy['energy']>,
+  age: number,
+): CivilizationPolicy['energy'] {
+  const unlocked = ENERGY_SOURCE_KEYS.filter((key) => energySourceUnlocked(key, age));
+  const budget = unlockedEnergyShare(current, age);
+  // Nothing left for the unlocked sources: fall back to rebalancing the whole mix.
+  if (!(budget > 0)) return updateGroup(ENERGY_SOURCE_KEYS, current, changes);
+  const shares = Object.fromEntries(
+    unlocked.map((key) => [key, (Math.max(0, current[key]) * 100) / budget]),
+  ) as Record<EnergySourceKey, number>;
+  const unlockedChanges = Object.fromEntries(
+    unlocked.filter((key) => changes[key] !== undefined).map((key) => [key, changes[key]]),
+  ) as Partial<Record<EnergySourceKey, number>>;
+  const updated = updateGroup(unlocked, shares, unlockedChanges);
+  const next = { ...current };
+  for (const key of unlocked) next[key] = (updated[key] * budget) / 100;
+  return next;
 }
 
 /** People per km² in a cell whose food is fully used. */

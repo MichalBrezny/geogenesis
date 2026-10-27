@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createPlanet, type PlanetState } from '../../core/planet';
+import { createPlanet, DEFAULT_CIV_POLICY, type PlanetState } from '../../core/planet';
 import { createRng } from '../../core/rng';
 import { SENTIENCE_POTENTIAL, TECH_AGES } from '../../data/civilization';
 import { LIFE_CLASS_COUNT, lifeClassIndex } from '../../data/lifeClasses';
@@ -165,6 +165,20 @@ describe('civilization', () => {
       hydroGeothermal: 0,
     };
     expect(civilizationProduction(planet).energySupply).not.toBeCloseTo(scarce);
+  });
+
+  it('keeps the planned share of locked energy sources while unlocked ones are rebalanced', () => {
+    const stoneAge = { biomass: 20, fossil: 50, nuclear: 10, solarWind: 10, hydroGeothermal: 10 };
+    const changed = updateCivilizationPolicy(
+      { energy: stoneAge, investment: DEFAULT_CIV_POLICY.investment },
+      { energy: { biomass: 100 } },
+      0,
+    );
+    expect(changed.energy.fossil).toBeCloseTo(50);
+    expect(changed.energy.nuclear).toBeCloseTo(10);
+    expect(changed.energy.solarWind).toBeCloseTo(10);
+    expect(changed.energy.biomass).toBeCloseTo(30);
+    expect(changed.energy.hydroGeothermal).toBeCloseTo(0);
   });
 
   it('decays pollution exactly independent of step length', () => {

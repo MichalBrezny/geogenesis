@@ -1,6 +1,10 @@
 import { t, type MessageKey } from '../i18n/i18n';
 import { ENERGY_SOURCE_KEYS, INVESTMENT_KEYS, type CivilizationPolicy } from '../sim/core/planet';
-import { energySourceUnlocked, type CivilizationPolicyChanges } from '../sim/data/civilization';
+import {
+  energySourceUnlocked,
+  unlockedEnergyShare,
+  type CivilizationPolicyChanges,
+} from '../sim/data/civilization';
 
 export function CivilizationControlsPanel(props: {
   policy: CivilizationPolicy;
@@ -11,6 +15,8 @@ export function CivilizationControlsPanel(props: {
   pollution: number;
   onChange: (changes: CivilizationPolicyChanges) => void;
 }) {
+  // Unlocked sources show their share of what is in use; locked ones keep their planned share.
+  const budget = unlockedEnergyShare(props.policy.energy, props.age);
   return (
     <div className="civilization-controls">
       <dl className="civ-stats">
@@ -32,7 +38,11 @@ export function CivilizationControlsPanel(props: {
               id={`energy-${key}`}
               name={t(`civ.energy.${key}` as MessageKey)}
               hint={t(`civ.energyHelp.${key}` as MessageKey)}
-              value={props.policy.energy[key]}
+              value={
+                unlocked && budget > 0
+                  ? (props.policy.energy[key] * 100) / budget
+                  : props.policy.energy[key]
+              }
               disabled={!unlocked}
               onChange={(value) => props.onChange({ energy: { [key]: value } })}
             />
