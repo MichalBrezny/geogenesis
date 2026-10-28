@@ -7,7 +7,7 @@ import type { LifeClassKey } from '../sim/data/lifeClasses';
 import type { CellLife } from '../sim/models/biosphere/diversity';
 import type { MonthlyClimate } from '../sim/models/atmosphere/climateDiagram';
 import type { ToolId } from '../sim/tools/tools';
-import { HistoryCharts, type ChartSeries } from './charts/HistoryCharts';
+import { ALL_CHART_SERIES, HistoryCharts, type ChartSeries } from './charts/HistoryCharts';
 import { CivilizationPanel, EventLog } from './CivilizationPanel';
 import { CONTROL_GROUPS, ControlsPanel, type ControlGroupId } from './ControlsPanel';
 import { FloatingWindow } from './FloatingWindow';
@@ -36,6 +36,8 @@ import { loadAutoPauseSettings, saveAutoPauseSettings } from './autoPauseSetting
 import { CurrentTaskPanel } from './CurrentTaskPanel';
 import { ToastStack } from './ToastStack';
 import { eventSignature, eventsAfter, mergeToastEvents, type EventToast } from './toastQueue';
+import { FirstGameTour } from './FirstGameTour';
+import { rememberTourComplete, shouldStartTour, TOUR_ANCHORS, type GuidePageId } from './guide';
 
 /** How long a tool notice stays on screen, ms. */
 const NOTICE_DURATION = 3000;
@@ -357,6 +359,16 @@ export function App() {
   const [cellClimate, setCellClimate] = useState<MonthlyClimate | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [helpPage, setHelpPage] = useState<GuidePageId | undefined>();
+  const [tourOpen, setTourOpen] = useState(() => {
+    try {
+      return shouldStartTour(window.localStorage);
+    } catch {
+      return true;
+    }
+  });
+  const [selectedSideTab, setSelectedSideTab] = useState<string | undefined>();
+  const [focusedChart, setFocusedChart] = useState<ChartSeries | null>(null);
   const [windowOpen, setWindowOpen] = useState<WindowOpenState>(loadWindowOpenState);
   const [activeWindow, setActiveWindow] = useState<FloatingWindowId | null>(
     () => [...FLOATING_WINDOWS].reverse().find((id) => loadWindowOpenState()[id]) ?? null,
@@ -570,6 +582,19 @@ export function App() {
     setFocusedWindow(opening ? id : null);
   };
 
+  const openHelp = (page?: GuidePageId) => {
+    setHelpPage(page);
+    setHelpOpen(true);
+  };
+  const finishTour = () => {
+    try {
+      rememberTourComplete(window.localStorage);
+    } catch {
+      /* The guide can still be skipped for this session. */
+    }
+    setTourOpen(false);
+  };
+
   const shortcuts: Shortcuts = {
     ' ': toggleRunning,
     s: step,
@@ -597,7 +622,10 @@ export function App() {
       setTool(null);
       setHelpOpen(false);
     },
-    '?': () => setHelpOpen(!helpOpen),
+    '?': () => {
+      setHelpPage(undefined);
+      setHelpOpen(!helpOpen);
+    },
   };
   scenarioView.layers.forEach((id, index) => {
     shortcuts[index === 9 ? '0' : String(index + 1)] = () => chooseLayer(id);
@@ -618,11 +646,12 @@ export function App() {
       label: 'panel.charts',
       content: (
         <HistoryCharts
-          key={frame.scenario}
+          key={`${frame.scenario}:${focusedChart ?? ''}`}
           history={frame.history}
           series={scenarioView.charts}
           scenario={frame.scenario}
           events={frame.events}
+          focusSeries={focusedChart}
         />
       ),
     });
@@ -660,14 +689,17 @@ export function App() {
         onNewPlanet={newPlanet}
         onSave={(fileName) => send({ type: 'save', fileName })}
         onLoad={(file) => void load(file)}
-        onShowHelp={() => setHelpOpen(true)}
+        onShowHelp={() => openHelp()}
         error={error}
         newPlanetRequest={newPlanetRequest}
       />
       {frame && (
         <aside className="sidebar left">
-          <CurrentTaskPanel frame={frame} />
+          <CurrentTaskPanel frame={frame} onHelp={openHelp} />
           <Collapsible
+            helpPage="goals"
+            onHelp={openHelp}
+            tourAnchor={TOUR_ANCHORS.tool}
             title={
               <>
                 {t('tools.title')}{' '}
@@ -688,13 +720,13 @@ export function App() {
               onUnlimitedEnergyChange={(enabled) => send({ type: 'unlimitedEnergy', enabled })}
             />
           </Collapsible>
-          <Collapsible title={t('disasters.title')}>
+          <Collapsible title={t('disasters.title')} helpPage="disasters" onHelp={openHelp}>
             <DisasterPanel
               disasters={frame.disasters}
               onChange={(disasters) => send({ type: 'disasters', disasters })}
             />
           </Collapsible>
-          <Collapsible title={t('autoPause.title')} open={false}>
+          <Collapsible title={t('autoPause.title')} open={false} helpPage="goals" onHelp={openHelp}>
             <AutoPausePanel
               settings={autoPauseSettings}
               onChange={(settings) => {
@@ -704,7 +736,11 @@ export function App() {
               }}
             />
           </Collapsible>
-          <nav className="window-launchers" aria-label={t('window.launchers')}>
+          <nav
+            className="window-launchers"
+            aria-label={t('window.launchers')}
+            data-tour={TOUR_ANCHORS.windows}
+          >
             {FLOATING_WINDOWS.map((id) => {
               const disabled = id === 'civilization' && frame.civilization.species === null;
               const pressed = windowOpen[id] && (!narrowWindows || activeWindow === id);
@@ -793,6 +829,9 @@ export function App() {
             key={`${frame.scenario}:${frame.goal?.startYear ?? 'sandbox'}`}
             tabs={tabs}
             label="panel.label"
+            selectedId={selectedSideTab}
+            onSelect={setSelectedSideTab}
+            onHelp={openHelp}
           />
         </aside>
       )}
@@ -832,6 +871,18 @@ export function App() {
               stageRef={stageRef}
               onActivate={activate}
               onClose={() => closeWindow(id)}
+              helpPage={
+                (
+                  {
+                    geosphere: 'geosphere',
+                    atmosphere: 'atmosphereWater',
+                    biosphere: 'life',
+                    civilization: 'civilization',
+                    planet: 'geosphere',
+                  } as const
+                )[id]
+              }
+              onHelp={openHelp}
               footer={
                 resetAll && (
                   <button
@@ -873,7 +924,28 @@ export function App() {
             </FloatingWindow>
           );
         })}
-      {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
+      {helpOpen && (
+        <HelpDialog
+          onClose={() => setHelpOpen(false)}
+          onRestartTour={() => {
+            setHelpOpen(false);
+            setTourOpen(true);
+          }}
+          initialPage={helpPage}
+          availableLayers={scenarioView.layers}
+          availableCharts={ALL_CHART_SERIES}
+          onLayer={(next) => {
+            chooseLayer(next);
+            setHelpOpen(false);
+          }}
+          onChart={(chart) => {
+            setSelectedSideTab('charts');
+            setFocusedChart(chart);
+            setHelpOpen(false);
+          }}
+        />
+      )}
+      {frame && tourOpen && <FirstGameTour onFinish={finishTour} />}
       {frame?.goal &&
         frame.goal.status !== 'active' &&
         dismissedOutcome !== outcomeKey(frame.goal) && (

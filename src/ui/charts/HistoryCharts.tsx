@@ -283,6 +283,11 @@ const CHARTS: readonly ChartSpec[] = [
 ];
 
 export type ChartSeries = ChartSpec['series'];
+export const ALL_CHART_SERIES: readonly ChartSeries[] = CHARTS.map((chart) => chart.series);
+export function chartMessageKey(series: ChartSeries, part: 'title' | 'hint'): MessageKey {
+  const chart = CHARTS.find((candidate) => candidate.series === series)!;
+  return chart[part];
+}
 const AVAILABLE_CHARTS = new Set(CHARTS.map((chart) => chart.series));
 const CURSOR_SYNC_KEY = 'planet-history';
 const ERA_LABELS: Record<Era, MessageKey> = {
@@ -309,13 +314,25 @@ interface Props {
   series: readonly ChartSeries[];
   scenario: ScenarioId;
   events: readonly PlanetEvent[];
+  focusSeries?: ChartSeries | null;
 }
 
 /** Small multiples with one measure per chart and a shared, synchronized time cursor. */
-export function HistoryCharts({ history, series, scenario, events }: Props) {
-  const [selected, setSelected] = useState<ChartSeries[]>(() =>
-    loadChartSelection(chartStorage(), scenario, series, AVAILABLE_CHARTS),
-  );
+export function HistoryCharts({ history, series, scenario, events, focusSeries }: Props) {
+  const [selected, setSelected] = useState<ChartSeries[]>(() => {
+    const stored = loadChartSelection(chartStorage(), scenario, series, AVAILABLE_CHARTS);
+    return focusSeries && !stored.includes(focusSeries) ? [...stored, focusSeries] : stored;
+  });
+  useEffect(() => {
+    if (!focusSeries || !AVAILABLE_CHARTS.has(focusSeries)) return;
+    window.setTimeout(
+      () =>
+        document
+          .getElementById(`history-chart-${focusSeries}`)
+          ?.scrollIntoView({ block: 'nearest' }),
+      0,
+    );
+  }, [focusSeries]);
   const update = (next: ChartSeries[]) => {
     setSelected(next);
     saveChartSelection(chartStorage(), scenario, next);
@@ -417,7 +434,7 @@ function ChartShell({
   children: ReactNode;
 }) {
   return (
-    <figure className={`chart chart-${spec.family}`}>
+    <figure className={`chart chart-${spec.family}`} id={`history-chart-${spec.series}`}>
       <figcaption title={t(spec.hint)}>
         <span className="chart-heading">
           <span className="chart-title-icon">{CHART_ICONS[spec.series]}</span>

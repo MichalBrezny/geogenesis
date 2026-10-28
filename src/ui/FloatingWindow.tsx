@@ -8,6 +8,8 @@ import {
   type RefObject,
 } from 'react';
 import { t } from '../i18n/i18n';
+import type { GuidePageId } from './guide';
+import { ContextHelpButton } from './ContextHelpButton';
 
 interface Position {
   x: number;
@@ -39,6 +41,8 @@ export function FloatingWindow(props: {
   onActivate: () => void;
   children: ReactNode;
   footer?: ReactNode;
+  helpPage?: GuidePageId;
+  onHelp?: (page: GuidePageId) => void;
 }) {
   const windowRef = useRef<HTMLElement>(null);
   const positionKey = `geogenesis.floatingWindow.${props.id}.position`;
@@ -149,6 +153,7 @@ export function FloatingWindow(props: {
       >
         <h2 id={titleId}>{props.title}</h2>
         <div className="floating-window-actions">
+          {props.helpPage && <ContextHelpButton page={props.helpPage} onHelp={props.onHelp} />}
           <button type="button" title={t('window.centreHint')} onClick={centre}>
             <span aria-hidden="true">⊙</span>
             <span className="visually-hidden">{t('window.centre')}</span>

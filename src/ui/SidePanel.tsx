@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { t, type MessageKey } from '../i18n/i18n';
+import type { GuidePageId } from './guide';
+import { ContextHelpButton } from './ContextHelpButton';
 
 export interface Tab {
   id: string;
@@ -8,8 +10,21 @@ export interface Tab {
 }
 
 /** A sidebar with tabs; only the selected tab's content is mounted. */
-export function TabbedPanel({ tabs, label }: { tabs: readonly Tab[]; label: MessageKey }) {
-  const [selected, setSelected] = useState(tabs[0]?.id);
+export function TabbedPanel({
+  tabs,
+  label,
+  selectedId,
+  onSelect,
+  onHelp,
+}: {
+  tabs: readonly Tab[];
+  label: MessageKey;
+  selectedId?: string;
+  onSelect?: (id: string) => void;
+  onHelp?: (page: GuidePageId) => void;
+}) {
+  const [internalSelected, setInternalSelected] = useState(tabs[0]?.id);
+  const selected = selectedId ?? internalSelected;
   const current = tabs.find((tab) => tab.id === selected) ?? tabs[0];
   return (
     <section className="tabbed" aria-label={t(label)}>
@@ -22,7 +37,10 @@ export function TabbedPanel({ tabs, label }: { tabs: readonly Tab[]; label: Mess
               aria-selected={tab === current}
               className={tab === current ? 'selected' : undefined}
               title={t(tab.label)}
-              onClick={() => setSelected(tab.id)}
+              onClick={() => {
+                setInternalSelected(tab.id);
+                onSelect?.(tab.id);
+              }}
             >
               {t(tab.label)}
             </button>
@@ -30,6 +48,22 @@ export function TabbedPanel({ tabs, label }: { tabs: readonly Tab[]; label: Mess
         </div>
       )}
       <div className="tab-content" role="tabpanel">
+        {current && (
+          <div className="panel-context-help">
+            <ContextHelpButton
+              page={
+                current.id === 'goal'
+                  ? 'goals'
+                  : current.id === 'civilization'
+                    ? 'civilization'
+                    : current.id === 'life'
+                      ? 'life'
+                      : 'climate'
+              }
+              onHelp={onHelp}
+            />
+          </div>
+        )}
         {current?.content}
       </div>
     </section>
@@ -37,10 +71,20 @@ export function TabbedPanel({ tabs, label }: { tabs: readonly Tab[]; label: Mess
 }
 
 /** A panel that can be folded away to its title. */
-export function Collapsible(props: { title: ReactNode; children: ReactNode; open?: boolean }) {
+export function Collapsible(props: {
+  title: ReactNode;
+  children: ReactNode;
+  open?: boolean;
+  helpPage?: GuidePageId;
+  onHelp?: (page: GuidePageId) => void;
+  tourAnchor?: string;
+}) {
   return (
-    <details className="panel" open={props.open ?? true}>
-      <summary>{props.title}</summary>
+    <details className="panel" open={props.open ?? true} data-tour={props.tourAnchor}>
+      <summary>
+        <span>{props.title}</span>
+        {props.helpPage && <ContextHelpButton page={props.helpPage} onHelp={props.onHelp} />}
+      </summary>
       {props.children}
     </details>
   );
