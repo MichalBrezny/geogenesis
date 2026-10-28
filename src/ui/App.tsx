@@ -29,6 +29,11 @@ import { GoalOutcome, GoalPanel } from './GoalPanel';
 import type { VisibleMapIcons } from '../render/mapIcons';
 import { DisasterPanel } from './DisasterPanel';
 import { CivilizationControlsPanel } from './CivilizationControlsPanel';
+import { AutoPausePanel } from './AutoPausePanel';
+import { loadAutoPauseSettings, saveAutoPauseSettings } from './autoPauseSettings';
+import { CurrentTaskPanel } from './CurrentTaskPanel';
+import { ToastStack } from './ToastStack';
+import { eventSignature, eventsAfter, mergeToastEvents, type EventToast } from './toastQueue';
 
 /** How long a tool notice stays on screen, ms. */
 const NOTICE_DURATION = 3000;
@@ -372,6 +377,7 @@ export function App() {
   const [obliquityDefault, setObliquityDefault] = useState(DEFAULT_CONTROLS.obliquity);
   const [narrowWindows, setNarrowWindows] = useState(() => window.innerWidth < 700);
   const noticeTimer = useRef<number | undefined>(undefined);
+  const toolEffectTimer = useRef<number | undefined>(undefined);
   const lastGoalStatus = useRef<string | null>(null);
   const lastScenario = useRef<ScenarioId | null>(null);
   const [dismissedOutcome, setDismissedOutcome] = useState<string | null>(null);
@@ -381,6 +387,16 @@ export function App() {
     lifeClasses: [],
     cityAge: null,
   });
+  const [autoPauseSettings, setAutoPauseSettings] = useState(loadAutoPauseSettings);
+  const initialAutoPauseSettings = useRef(autoPauseSettings);
+  const [toasts, setToasts] = useState<EventToast[]>([]);
+  const toastWorldRevision = useRef<number | null>(null);
+  const lastToastEvent = useRef<string | undefined>(undefined);
+  const [toolEffect, setToolEffect] = useState<{
+    tool: ToolId;
+    cell: number;
+    serial: number;
+  } | null>(null);
   const visibleIconsChanged = useCallback((next: VisibleMapIcons) => {
     setVisibleMapIcons((current) =>
       current.cityAge === next.cityAge &&
@@ -392,6 +408,10 @@ export function App() {
   }, []);
 
   const send = useCallback((request: WorkerRequest) => workerRef.current?.postMessage(request), []);
+  const dismissToast = useCallback(
+    (id: number) => setToasts((current) => current.filter((toast) => toast.id !== id)),
+    [],
+  );
 
   const inspectCell = useCallback((cell: number) => send({ type: 'inspect', cell }), [send]);
 
@@ -443,6 +463,21 @@ export function App() {
       const message = event.data;
       if (message.type === 'frame') {
         setFrame(message.frame);
+        setRunning(message.frame.running);
+        if (toastWorldRevision.current !== message.frame.worldRevision) {
+          toastWorldRevision.current = message.frame.worldRevision;
+          lastToastEvent.current = message.frame.events.at(-1)
+            ? eventSignature(message.frame.events.at(-1)!)
+            : '__empty__';
+          setToasts([]);
+        } else {
+          const added = eventsAfter(message.frame.events, lastToastEvent.current);
+          lastToastEvent.current = message.frame.events.at(-1)
+            ? eventSignature(message.frame.events.at(-1)!)
+            : '__empty__';
+          if (added.length > 0)
+            setToasts((current) => mergeToastEvents(current, added, performance.now()));
+        }
         if (lastScenario.current !== message.frame.scenario) {
           lastScenario.current = message.frame.scenario;
           setOverlays(SCENARIO_VIEW[message.frame.scenario].overlays ?? []);
@@ -465,15 +500,30 @@ export function App() {
         setCellClimate(message.climate ?? null);
       } else if (message.type === 'error') setError(message.message);
       else if (message.type === 'saved') download(message.bytes, message.fileName);
-      else {
+      else if (message.type === 'toolApplied') {
+        setToolEffect((current) => ({
+          tool: message.tool,
+          cell: message.cell,
+          serial: (current?.serial ?? 0) + 1,
+        }));
+        window.clearTimeout(toolEffectTimer.current);
+        toolEffectTimer.current = window.setTimeout(() => setToolEffect(null), 1_200);
+      } else {
         setNotice(t(message.reason === 'energy' ? 'tools.noEnergy' : 'tools.notAllowed'));
         window.clearTimeout(noticeTimer.current);
         noticeTimer.current = window.setTimeout(() => setNotice(null), NOTICE_DURATION);
       }
     };
     workerRef.current = worker;
+    worker.postMessage({
+      type: 'autoPause',
+      settings: initialAutoPauseSettings.current,
+    } satisfies WorkerRequest);
     createPlanet('random', 1);
-    return () => worker.terminate();
+    return () => {
+      window.clearTimeout(toolEffectTimer.current);
+      worker.terminate();
+    };
   }, [createPlanet]);
 
   const scenarioView = SCENARIO_VIEW[frame?.scenario ?? 'random'];
@@ -629,6 +679,7 @@ export function App() {
       />
       {frame && (
         <aside className="sidebar left">
+          <CurrentTaskPanel frame={frame} />
           <Collapsible
             title={
               <>
@@ -654,6 +705,16 @@ export function App() {
             <DisasterPanel
               disasters={frame.disasters}
               onChange={(disasters) => send({ type: 'disasters', disasters })}
+            />
+          </Collapsible>
+          <Collapsible title={t('autoPause.title')} open={false}>
+            <AutoPausePanel
+              settings={autoPauseSettings}
+              onChange={(settings) => {
+                setAutoPauseSettings(settings);
+                saveAutoPauseSettings(settings);
+                send({ type: 'autoPause', settings });
+              }}
             />
           </Collapsible>
           <nav className="window-launchers" aria-label={t('window.launchers')}>
@@ -707,6 +768,7 @@ export function App() {
                   cellClimate={cellClimate}
                   onInspect={inspectCell}
                   centreRequest={centreRequest}
+                  toolEffect={toolEffect}
                   onVisibleIconsChange={visibleIconsChanged}
                   onCellClick={(x, y, direction) => {
                     if (tool)
@@ -747,6 +809,13 @@ export function App() {
           />
         </aside>
       )}
+      <ToastStack
+        toasts={toasts}
+        onDismiss={dismissToast}
+        onCentre={(cell) =>
+          setCentreRequest((current) => ({ cell, serial: (current?.serial ?? 0) + 1 }))
+        }
+      />
       {frame &&
         FLOATING_WINDOWS.map((id, index) => {
           if (!windowOpen[id]) return null;

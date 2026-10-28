@@ -1,5 +1,6 @@
 import { createFields, type Fields } from './fields';
 import type { PlanetEvent } from '../events';
+import { createAlertDiagnostics, type AlertDiagnostics } from '../trendAlerts';
 import { createMapNamingState, type MapNamingState } from '../mapNames';
 import { createHistory, type History } from '../history';
 import { LIFE_CLASS_COUNT } from '../data/lifeClasses';
@@ -524,6 +525,8 @@ export interface PlanetState {
   civPolicy: CivilizationPolicy;
   /** Notable moments, most recent last (see events.ts). */
   events: PlanetEvent[];
+  /** Saved, read-only trend/milestone diagnostic memory. */
+  alertDiagnostics: AlertDiagnostics;
   /** Saved deterministic names and compact overlap samples for map features. */
   mapNaming: MapNamingState;
   controls: ModelControls;
@@ -679,6 +682,7 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
       investment: { ...DEFAULT_CIV_POLICY.investment },
     },
     events: [],
+    alertDiagnostics: createAlertDiagnostics(),
     mapNaming: createMapNamingState(),
     controls: { ...DEFAULT_CONTROLS },
     disasters: { ...DEFAULT_DISASTERS },

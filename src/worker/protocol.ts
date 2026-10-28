@@ -24,6 +24,8 @@ import type { MonthlyClimate } from '../sim/models/atmosphere/climateDiagram';
 import type { NamedMapFeature } from '../sim/mapNames';
 import type { HotspotMarker, PlateMotion } from '../render/mantleFlow';
 import type { GaiaDiagnostic } from '../sim/diagnostics';
+import type { AutoPauseSettings } from '../sim/autoPause';
+import type { ToolId } from '../sim/tools/tools';
 
 export interface FrameGoal extends GoalState {
   conditions: GoalCondition[];
@@ -50,6 +52,7 @@ export type WorkerRequest =
   | { type: 'controls'; controls: Partial<ModelControls> }
   | { type: 'civPolicy'; policy: CivilizationPolicyChanges }
   | { type: 'disasters'; disasters: Partial<DisasterSettings> }
+  | { type: 'autoPause'; settings: AutoPauseSettings }
   | { type: 'unlimitedEnergy'; enabled: boolean }
   | { type: 'save' }
   /** Ask for the life and monthly climate in one cell; answered with one `cellLife` response. */
@@ -61,6 +64,10 @@ export type WorkerRequest =
 
 /** A copy of what the UI needs to draw one frame; field arrays are transferred, not shared. */
 export interface Frame extends MapSource {
+  /** Changes whenever a planet is created or loaded, even for the same scenario. */
+  worldRevision: number;
+  /** Authoritative worker run state (auto-pause may change it). */
+  running: boolean;
   scenario: ScenarioId;
   year: number;
   meanTemperature: number;
@@ -127,4 +134,5 @@ export type WorkerResponse =
   | { type: 'error'; message: string }
   /** A tool could not be used; the UI explains why. */
   | { type: 'toolRefused'; reason: 'energy' | 'notAllowed' }
+  | { type: 'toolApplied'; tool: ToolId; cell: number }
   | { type: 'saved'; bytes: ArrayBuffer; fileName: string };

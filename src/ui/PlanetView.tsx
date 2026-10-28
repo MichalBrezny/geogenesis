@@ -58,11 +58,7 @@ import type { CellLife } from '../sim/models/biosphere/diversity';
 import type { ToolId } from '../sim/tools/tools';
 import type { MonthlyClimate } from '../sim/models/atmosphere/climateDiagram';
 import { EventMapPanel } from './EventMapPanel';
-import {
-  EVENT_CATEGORIES,
-  filterMapEvents,
-  type EventCategory,
-} from './eventMap';
+import { EVENT_CATEGORIES, filterMapEvents, type EventCategory } from './eventMap';
 import type { PlanetEvent } from '../sim/events';
 
 /** Ways to look at the planet. */
@@ -80,7 +76,15 @@ const WHEEL_ZOOM = 0.002;
 const MINIMAP_KEY = 'geogenesis.minimap';
 
 /** Vector fields that can be drawn over any layer: animated particles, or arrows for reduced motion. */
-export const OVERLAYS = ['wind', 'currents', 'isobars', 'mantle', 'names', 'icons', 'events'] as const;
+export const OVERLAYS = [
+  'wind',
+  'currents',
+  'isobars',
+  'mantle',
+  'names',
+  'icons',
+  'events',
+] as const;
 export type Overlay = (typeof OVERLAYS)[number];
 type FlowOverlay = 'wind' | 'currents';
 
@@ -173,6 +177,8 @@ interface Props {
   cellClimate?: MonthlyClimate | null;
   /** A log entry can request that both projections face this cell. */
   centreRequest?: { cell: number; serial: number } | null;
+  /** Last successfully applied tool, projected identically on the map and globe. */
+  toolEffect?: { tool: ToolId; cell: number; serial: number } | null;
   /** Reports the life/city symbols actually represented by the current lattice. */
   onVisibleIconsChange?: (icons: VisibleMapIcons) => void;
 }
@@ -190,6 +196,7 @@ export function PlanetView({
   cellLife,
   cellClimate,
   centreRequest,
+  toolEffect,
   onVisibleIconsChange,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -507,6 +514,18 @@ export function PlanetView({
   };
 
   const zoomed = view === 'map' && mapView.zoom > 1;
+  const effectPoint = (() => {
+    if (!toolEffect || overlaySize.width <= 0) return null;
+    const x = toolEffect.cell % width;
+    const y = Math.floor(toolEffect.cell / width);
+    return projection(
+      overlaySize.width,
+      overlaySize.height,
+      view,
+      globeView,
+      mapView,
+    )(90 - ((y + 0.5) * 180) / height, ((x + 0.5) * 360) / width);
+  })();
 
   /**
    * Shows the inspector for the cell under the pointer; a pressed button turns the
@@ -581,10 +600,7 @@ export function PlanetView({
         const cell = mapEvent.cell!;
         const x = cell % width;
         const y = Math.floor(cell / width);
-        const point = project(
-          90 - ((y + 0.5) * 180) / height,
-          ((x + 0.5) * 360) / width,
-        );
+        const point = project(90 - ((y + 0.5) * 180) / height, ((x + 0.5) * 360) / width);
         if (point && Math.hypot(point[0] - pointerX, point[1] - pointerY) <= 14) {
           setSelectedEvent(mapEvent);
           return;
@@ -654,6 +670,17 @@ export function PlanetView({
               y2={directionArrow.y2}
               markerEnd="url(#direction-arrow-head)"
             />
+          </svg>
+        )}
+        {effectPoint && toolEffect && (
+          <svg
+            key={toolEffect.serial}
+            className="tool-effect"
+            viewBox={`0 0 ${overlaySize.width} ${overlaySize.height}`}
+            aria-hidden="true"
+          >
+            <circle className="tool-effect-area" cx={effectPoint[0]} cy={effectPoint[1]} r="25" />
+            <circle className="tool-effect-ring" cx={effectPoint[0]} cy={effectPoint[1]} r="11" />
           </svg>
         )}
         <canvas ref={overlayRef} className="overlay-arrows" aria-hidden="true" />

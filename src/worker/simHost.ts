@@ -14,6 +14,7 @@ import { monthlyClimate } from '../sim/models/atmosphere/climateDiagram';
 import { MAX_EVENTS } from '../sim/events';
 import { updateMapNames } from '../sim/mapNames';
 import { gaiaDiagnostic } from '../sim/diagnostics';
+import { autoPauseEvent, DEFAULT_AUTO_PAUSE, type AutoPauseSettings } from '../sim/autoPause';
 
 /** How many recent events each frame carries. */
 const EVENTS_IN_FRAME = MAX_EVENTS;
@@ -29,6 +30,8 @@ export class SimHost {
   private running = false;
   private scheduled = false;
   private delayMs = 0;
+  private autoPause: AutoPauseSettings = { ...DEFAULT_AUTO_PAUSE };
+  private worldRevision = 0;
 
   constructor(
     private readonly post: (message: WorkerResponse, transfer: Transferable[]) => void,
@@ -39,6 +42,8 @@ export class SimHost {
     try {
       switch (request.type) {
         case 'create':
+          this.running = false;
+          this.worldRevision++;
           this.scenario = request.scenario;
           this.world = createScenario(request.scenario, {
             seed: request.seed,
@@ -59,8 +64,25 @@ export class SimHost {
           break;
         case 'tool': {
           if (!this.world) break;
+          const events = this.world.planet.events;
+          const previousLastEvent = events.at(-1);
           const result = applyTool(this.world.planet, request.use);
           if (!result.ok) this.post({ type: 'toolRefused', reason: result.reason }, []);
+          else {
+            const previousIndex =
+              previousLastEvent === undefined ? -1 : events.indexOf(previousLastEvent);
+            if (this.running && autoPauseEvent(events.slice(previousIndex + 1), this.autoPause)) {
+              this.running = false;
+            }
+            this.post(
+              {
+                type: 'toolApplied',
+                tool: request.use.tool,
+                cell: request.use.y * this.world.planet.grid.width + request.use.x,
+              },
+              [],
+            );
+          }
           this.sendFrame();
           break;
         }
@@ -88,6 +110,9 @@ export class SimHost {
           if (!this.world) break;
           Object.assign(this.world.planet.disasters, request.disasters);
           this.sendFrame();
+          break;
+        case 'autoPause':
+          this.autoPause = { ...request.settings };
           break;
         case 'inspect':
           if (!this.world) break;
@@ -141,6 +166,8 @@ export class SimHost {
       const game = deserializeGame(await decompress(new Uint8Array(buffer)));
       if (!isScenarioId(game.scenario)) throw new Error(`Unknown scenario "${game.scenario}"`);
       this.scenario = game.scenario;
+      this.running = false;
+      this.worldRevision++;
       this.world = restoreScenario(game.scenario, game.planet, game.settings);
       if (this.world.planet.mapNaming.updatedYear < 0) updateMapNames(this.world.planet);
       this.sendFrame();
@@ -162,8 +189,13 @@ export class SimHost {
 
   private advance(): void {
     if (!this.world) return;
+    const events = this.world.planet.events;
+    const previousLastEvent = events.at(-1);
     const wasActive = this.world.planet.goal?.status === 'active';
     this.world.simulation.step(this.world.planet, this.world.stepYears(this.world.planet));
+    const previousIndex = previousLastEvent === undefined ? -1 : events.indexOf(previousLastEvent);
+    const newEvents = events.slice(previousIndex + 1);
+    if (this.running && autoPauseEvent(newEvents, this.autoPause)) this.running = false;
     if (wasActive && this.world.planet.goal?.status !== 'active') this.running = false;
     this.sendFrame();
   }
@@ -186,6 +218,8 @@ export class SimHost {
     }
     const { width, height, cellCount } = planet.grid;
     const frame: Frame = {
+      worldRevision: this.worldRevision,
+      running: this.running,
       scenario: this.scenario,
       grid: { width, height, cellCount },
       fields,

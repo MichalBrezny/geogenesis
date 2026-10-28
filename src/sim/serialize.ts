@@ -7,6 +7,7 @@ import {
   EARTH_PLANET_PARAMETERS,
   type PlanetState,
 } from './core/planet';
+import { createAlertDiagnostics } from './trendAlerts';
 import { normalizeCivilizationPolicy } from './data/civilization';
 import { HISTORY_SERIES } from './history';
 import { LIFE_CLASSES } from './data/lifeClasses';
@@ -254,6 +255,7 @@ function hydrateAddedState(planet: PlanetState): void {
   planet.disasterRngState ??= (planet.seed ^ 0x64697361) >>> 0;
   planet.goal ??= null;
   planet.devices ??= [];
+  planet.alertDiagnostics ??= createAlertDiagnostics();
   if (missingPlanetParams) planet.planetParams.initialWaterGel = planet.globals.initialWater;
   const samples = planet.history.year?.length ?? 0;
   for (const name of HISTORY_SERIES) planet.history[name] ??= Array(samples).fill(0);

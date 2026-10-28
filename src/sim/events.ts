@@ -49,7 +49,18 @@ export type EventKey =
   | 'earthquake'
   | 'tsunami'
   | 'cyclone'
-  | 'drought';
+  | 'drought'
+  | 'greatOxidation'
+  | 'snowballOnset'
+  | 'snowballEnded'
+  | 'trendRunaway'
+  | 'trendSnowball'
+  | 'trendCo2Starvation'
+  | 'trendOxygenLoss'
+  | 'trendBiodiversityLoss'
+  | 'trendFossilLow'
+  | 'trendPollution'
+  | 'disasterWarning';
 
 /** Only the most recent events are kept. */
 export const MAX_EVENTS = 100;

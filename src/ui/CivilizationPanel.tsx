@@ -94,18 +94,20 @@ export function describeEvent(event: Frame['events'][number]): string {
     event.key === 'impact' ||
     event.key === 'earthquake'
       ? subject
-      : event.key === 'deviceDestroyed'
-        ? t(`tool.${subject}` as MessageKey)
-        : event.key === 'goalWon' || event.key === 'goalLost'
-          ? t(`goal.reason.${subject}` as MessageKey)
-          : event.key === 'ageReached'
-            ? t(`age.${subject}` as MessageKey)
-            : event.key === 'eraReached'
-              ? t(`era.${subject}` as MessageKey)
-              : event.key === 'massExtinction'
-                ? t(`extinctionCause.${subject}` as MessageKey)
-                : subject
-                  ? t(`lifeClass.${subject}` as MessageKey)
-                  : '';
+      : event.key === 'disasterWarning'
+        ? t(`disasterWarning.${subject}` as MessageKey)
+        : event.key === 'deviceDestroyed'
+          ? t(`tool.${subject}` as MessageKey)
+          : event.key === 'goalWon' || event.key === 'goalLost'
+            ? t(`goal.reason.${subject}` as MessageKey)
+            : event.key === 'ageReached'
+              ? t(`age.${subject}` as MessageKey)
+              : event.key === 'eraReached'
+                ? t(`era.${subject}` as MessageKey)
+                : event.key === 'massExtinction'
+                  ? t(`extinctionCause.${subject}` as MessageKey)
+                  : subject
+                    ? t(`lifeClass.${subject}` as MessageKey)
+                    : '';
   return t(`event.${event.key}`, { name });
 }
