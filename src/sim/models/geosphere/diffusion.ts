@@ -50,7 +50,8 @@ export function createLinearDiffuser(options: DiffusionOptions = {}): SimCompone
       const seaLevel = state.globals.seaLevel;
       const elevation = state.fields.elevation;
       const oceanFraction = 1 - landSurfaceFraction(grid, elevation, seaLevel);
-      const D = baseDiffusivity * state.controls.erosion * hillslopeWetness(oceanFraction);
+      const D =
+        baseDiffusivity * state.effectiveControls.erosion * hillslopeWetness(oceanFraction);
       if (dtYears <= 0 || D <= 0) return;
       const { neighbors, rowNorthEdge, rowSouthEdge } = getTopology(grid);
       const { width, height, dy } = grid;

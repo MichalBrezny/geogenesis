@@ -20,7 +20,7 @@ const BRIGHTENING_STEP_YEARS = 500e3;
 const SEEDED_POPULATION = 0.6;
 const MODERN_OXYGEN = 0.21;
 /** Ω a terraforming project starts with: a first handful of devices. */
-const TERRAFORM_ENERGY = 3000;
+const TERRAFORM_ENERGY = 1800;
 /** Planet age of the Cambrian start: Earth's Cambrian began 539 Myr before 4.54 Gyr. */
 const CAMBRIAN_YEAR = 4.0e9;
 /** Oxygen (volume fraction) of the early Cambrian air, about two thirds of today's. */

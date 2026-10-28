@@ -96,7 +96,7 @@ export const precipitationModel: SimComponent = {
       state.globals.circulation,
       state.planetParams.surfaceGravity,
       state.planetParams.tidallyLocked,
-      state.controls.rainfall,
+      state.effectiveControls.rainfall,
     );
     const fine = fields.precipitation;
     if (atmosphere.coarse === grid) {

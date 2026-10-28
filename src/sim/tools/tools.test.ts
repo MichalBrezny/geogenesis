@@ -75,7 +75,7 @@ describe('tools', () => {
   it('keeps the base energy income without a civilization', () => {
     const state = planet();
     energyIncome.runOneStep(state, 1_000, createRng(1));
-    expect(state.globals.energy).toBeCloseTo(1000.01, 10);
+    expect(state.globals.energy).toBeCloseTo(1000.002, 10);
   });
 
   it('increases energy income with the civilization tech age', () => {

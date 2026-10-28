@@ -94,6 +94,6 @@ export const stellarEvolution: SimComponent = {
     const { starType, orbitalDistanceAu } = state.planetParams;
     state.globals.solarInput =
       (stellarLuminosity(state.globals.year, starType) / orbitalDistanceAu ** 2) *
-      state.controls.solarFactor;
+      state.effectiveControls.solarFactor;
   },
 };

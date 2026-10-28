@@ -8,6 +8,7 @@ import type {
   TectonicRegime,
   CarbonBudgetDiagnostic,
   EnergyBalanceDiagnostic,
+  Difficulty,
 } from '../sim/core/planet';
 import type { ToolUse } from '../sim/tools/tools';
 import type { PlanetEvent } from '../sim/events';
@@ -45,6 +46,8 @@ export type WorkerRequest =
       /** Desired mature ice-free land share, 0..1. */
       continentalFraction?: number;
       planetParams?: Partial<PlanetParameters>;
+      difficulty?: Difficulty;
+      adaptivePacing?: boolean;
     }
   | { type: 'run'; running: boolean }
   | { type: 'step' }
@@ -54,6 +57,7 @@ export type WorkerRequest =
   | { type: 'disasters'; disasters: Partial<DisasterSettings> }
   | { type: 'autoPause'; settings: AutoPauseSettings }
   | { type: 'unlimitedEnergy'; enabled: boolean }
+  | { type: 'pacing'; adaptive: boolean }
   | { type: 'save'; fileName?: string }
   /** Ask for the life and monthly climate in one cell; answered with one `cellLife` response. */
   | { type: 'inspect'; cell: number }
@@ -109,8 +113,12 @@ export interface Frame extends MapSource {
   /** The planet's era (sets the step length), or null for scenarios without eras. */
   era: Era | null;
   energy: number;
+  energyCap: number;
   unlimitedEnergy: boolean;
   controls: ModelControls;
+  effectiveControls: ModelControls;
+  difficulty: Difficulty;
+  adaptivePacing: boolean;
   disasters: DisasterSettings;
   /** Scenario goal state plus its live, presentation-ready checklist. */
   goal: FrameGoal | null;

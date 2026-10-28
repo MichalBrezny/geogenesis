@@ -10,27 +10,29 @@ import { applyImpactCrater } from '../models/geosphere/impacts';
 import { destroyDevicesNear, placeDevice, type DeviceKind } from './devices';
 import { addDustPulse, DUST_SOOT } from '../models/atmosphere/dust';
 import { damageCivilizationNear, strikeCyclone, strikeTsunami } from '../models/disasters';
+import { difficultyBalance } from '../balance';
+import { planetEra } from '../eras';
 
 /** Player interventions and their cost in Ω, after SimEarth's tool palette. */
 export const TOOLS = {
-  raise: { cost: 20 },
-  lower: { cost: 20 },
-  volcano: { cost: 100 },
-  meteor: { cost: 150 },
-  seedLife: { cost: 60 },
-  monolith: { cost: 500 },
-  addCo2: { cost: 50 },
-  removeCo2: { cost: 80 },
-  iceMeteor: { cost: 200 },
-  co2Generator: { cost: 300 },
-  n2Generator: { cost: 300 },
-  o2Generator: { cost: 300 },
-  co2Scrubber: { cost: 400 },
-  biomeFactory: { cost: 500 },
-  earthquake: { cost: 180 },
-  hurricane: { cost: 120 },
-  tidalWave: { cost: 140 },
-  fire: { cost: 80 },
+  raise: { cost: 35, intendedUse: 'local coastline or mountain correction' },
+  lower: { cost: 35, intendedUse: 'local basin or strait correction' },
+  volcano: { cost: 160, intendedUse: 'regional warming and island building' },
+  meteor: { cost: 260, intendedUse: 'rare destructive reset' },
+  seedLife: { cost: 90, intendedUse: 'move an evolved class into suitable habitat' },
+  monolith: { cost: 700, intendedUse: 'one major evolutionary or cultural leap' },
+  addCo2: { cost: 90, intendedUse: 'short-term warming correction' },
+  removeCo2: { cost: 140, intendedUse: 'short-term cooling correction' },
+  iceMeteor: { cost: 320, intendedUse: 'major terraforming water delivery' },
+  co2Generator: { cost: 380, intendedUse: 'persistent terraforming pressure and warming' },
+  n2Generator: { cost: 420, intendedUse: 'persistent terraforming bulk atmosphere' },
+  o2Generator: { cost: 420, intendedUse: 'persistent terraforming oxygen supply' },
+  co2Scrubber: { cost: 480, intendedUse: 'persistent late-stage climate control' },
+  biomeFactory: { cost: 600, intendedUse: 'capstone regional biosphere seeding' },
+  earthquake: { cost: 240, intendedUse: 'directed mountain building or disaster' },
+  hurricane: { cost: 150, intendedUse: 'regional civilization challenge' },
+  tidalWave: { cost: 180, intendedUse: 'coastal civilization challenge' },
+  fire: { cost: 100, intendedUse: 'local ecological reset' },
 } as const;
 export type ToolId = keyof typeof TOOLS;
 export const TOOL_IDS = Object.keys(TOOLS) as ToolId[];
@@ -49,10 +51,15 @@ export interface ToolUse {
 export type ToolResult = { ok: true } | { ok: false; reason: 'energy' | 'notAllowed' };
 
 /** Energy income per year of simulated time, Ω (≈ 10 Ω per million years). */
-const ENERGY_PER_YEAR = 1e-5;
+const GEOLOGICAL_ENERGY_PER_YEAR = 2e-6;
+const EVOLUTION_ENERGY_PER_YEAR = 8e-6;
 /** Energy cannot be stockpiled beyond this. */
-export const MAX_ENERGY = 5000;
-export const STARTING_ENERGY = 500;
+export const MAX_ENERGY = 2000;
+export const STARTING_ENERGY = 350;
+
+export function energyCap(state: PlanetState): number {
+  return MAX_ENERGY * difficultyBalance(state).energyCap;
+}
 
 /** Physical brush radius of terrain tools, in metres. */
 const BRUSH_RADIUS = 450_000;
@@ -311,10 +318,17 @@ export const energyIncome: SimComponent = {
   runOneStep(state, dtYears) {
     const { globals } = state;
     const age = Math.max(0, Math.min(TECH_AGES.length - 1, state.civilization.age));
-    // SimEarth's civilization ladder roughly doubles the Stone-age budget and reaches
-    // 8x at Nanotech. Applying that multiplier to the yearly rate (not once per short
-    // civilization step) keeps play-time income near the established evolution-era pace.
-    const multiplier = state.civilization.species === null ? 1 : 2 + age;
-    globals.energy = Math.min(MAX_ENERGY, globals.energy + ENERGY_PER_YEAR * multiplier * dtYears);
+    // Each technology age earns about 150 Ω at its expected duration. Earlier eras use
+    // a small continuous geological/evolutionary rate. All are rates integrated over dt.
+    const rate =
+      state.civilization.species !== null
+        ? 150 / TECH_AGES[age]!.duration
+        : planetEra(state) === 'evolution'
+          ? EVOLUTION_ENERGY_PER_YEAR
+          : GEOLOGICAL_ENERGY_PER_YEAR;
+    globals.energy = Math.min(
+      energyCap(state),
+      globals.energy + rate * difficultyBalance(state).energyIncome * dtYears,
+    );
   },
 };

@@ -18,6 +18,7 @@ interface Props {
   onStep: () => void;
   speed: Speed;
   onSpeedChange: (speed: Speed) => void;
+  onAdaptivePacingChange: (enabled: boolean) => void;
   onNewPlanet: (choice: NewPlanetChoice) => void;
   onSave: (fileName: string) => void;
   onLoad: (file: File) => void;
@@ -81,6 +82,16 @@ export function TopBar(props: Props) {
             ))}
           </div>
         </div>
+        {frame && (
+          <label className="compact-toggle" title={t('controls.adaptivePacingHint')}>
+            <input
+              type="checkbox"
+              checked={frame.adaptivePacing}
+              onChange={(event) => props.onAdaptivePacingChange(event.target.checked)}
+            />
+            {t('controls.adaptivePacing')}
+          </label>
+        )}
         {frame && <Vitals frame={frame} />}
         <div className="group menu" role="group" aria-label={t('controls.planet')}>
           <button onClick={() => setNewPlanetOpen(true)} title={t('controls.newPlanetHint')}>
@@ -175,7 +186,9 @@ function Vitals({ frame }: { frame: Frame }) {
     [
       'stat.energy',
       'stat.energyHint',
-      frame.unlimitedEnergy ? '∞' : Math.floor(frame.energy).toLocaleString('en'),
+      frame.unlimitedEnergy
+        ? '∞'
+        : `${Math.floor(frame.energy).toLocaleString('en')}/${Math.floor(frame.energyCap).toLocaleString('en')}`,
     ],
   ];
   return (

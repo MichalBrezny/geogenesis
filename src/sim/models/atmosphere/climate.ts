@@ -368,7 +368,10 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
       // dt = 0 and goes straight to equilibrium.
       const lag =
         dtYears > 0
-          ? Math.exp((-dtYears * Math.max(0, state.controls.airSeaHeat)) / OCEAN_RESPONSE_TIME)
+          ? Math.exp(
+              (-dtYears * Math.max(0, state.effectiveControls.airSeaHeat)) /
+                OCEAN_RESPONSE_TIME,
+            )
           : 0;
       const previous = lag > 1e-6 ? Float32Array.from(airTemperature) : null;
       const hasClouds = globals.cloudCover !== undefined;
@@ -379,7 +382,8 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
         state.planetParams.tidallyLocked,
       );
       const hasWater = globals.water > TRACE_WATER_GEL;
-      const hasSeasons = !state.planetParams.tidallyLocked && state.controls.obliquity > 1e-6;
+      const hasSeasons =
+        !state.planetParams.tidallyLocked && state.effectiveControls.obliquity > 1e-6;
       const continentality = hasSeasons
         ? continentalityField(grid, elevation, globals.seaLevel)
         : null;
@@ -395,7 +399,7 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
               firstAnnualInsolationHarmonic(
                 grid.rowLatitude[y]!,
                 globals.solarInput,
-                state.controls.obliquity,
+                state.effectiveControls.obliquity,
               ),
             )
           : 0;
@@ -406,10 +410,11 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
         dustForcing(globals.dust) +
         globals.impactHeating;
       let forcing =
-        greenhouseForcing(globals.atmosphere) * state.controls.greenhouse + nonGreenhouseForcing;
+        greenhouseForcing(globals.atmosphere) * state.effectiveControls.greenhouse +
+        nonGreenhouseForcing;
       let climateSurfacePressure = globals.surfacePressure;
       const hazeAlbedo = sulfurCloudAlbedo(globals.atmosphere, hasWater);
-      const albedoScale = state.controls.surfaceAlbedo;
+      const albedoScale = state.effectiveControls.surfaceAlbedo;
       const scaledSurface = (i: number) =>
         albedoScale === 1
           ? surfaceAlbedo[i]!
@@ -443,7 +448,7 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
         };
         const cooledPressure = surfacePressureOf(cooledAtmosphere);
         const cooledForcing =
-          greenhouseForcing(cooledAtmosphere) * state.controls.greenhouse -
+          greenhouseForcing(cooledAtmosphere) * state.effectiveControls.greenhouse -
           thinAtmosphereCooling(cooledPressure) -
           globals.volcanicAerosol -
           dustForcing(globals.dust) +
@@ -453,7 +458,7 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
           grid,
           cooledAlbedo,
           globals.solarInput,
-          state.controls.obliquity,
+          state.effectiveControls.obliquity,
           state.planetParams.tidallyLocked,
           cooledForcing,
           cooledPressure,
@@ -480,7 +485,7 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
           grid,
           albedo,
           globals.solarInput,
-          state.controls.obliquity,
+          state.effectiveControls.obliquity,
           state.planetParams.tidallyLocked,
           forcing,
           hasWater,
@@ -532,7 +537,7 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
           // Low cloud above the reference brightens the ice-free part (the last step's
           // clouds); planets without a cloud model keep the typical clouds of the albedos.
           const cloud = hasClouds
-            ? state.controls.cloudAlbedo *
+            ? state.effectiveControls.cloudAlbedo *
               LOW_CLOUD_ALBEDO *
               (fields.lowCloud[i]! - REFERENCE_LOW_CLOUD) *
               (1 - ice)
@@ -603,7 +608,7 @@ function writeEnergyBalance(
 ): void {
   const { globals } = state;
   const greenhouse = greenhouseForcingTerms(globals.atmosphere);
-  const greenhouseControl = state.controls.greenhouse;
+  const greenhouseControl = state.effectiveControls.greenhouse;
   const meanInsolation = (SOLAR_CONSTANT * globals.solarInput) / 4;
   const iceCooling =
     meanInsolation * Math.max(0, iceAlbedo - REFERENCE_PLANETARY_ALBEDO) * globals.iceFraction;
@@ -611,7 +616,7 @@ function writeEnergyBalance(
     meanInsolation *
     Math.max(
       0,
-      state.controls.cloudAlbedo *
+      state.effectiveControls.cloudAlbedo *
         LOW_CLOUD_ALBEDO *
         ((globals.lowCloudCover ?? REFERENCE_LOW_CLOUD) - REFERENCE_LOW_CLOUD),
     );

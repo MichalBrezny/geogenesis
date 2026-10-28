@@ -39,7 +39,9 @@ export function monthlyClimate(state: PlanetState, cell: number): MonthlyClimate
   );
 
   const annual = Math.max(0, fields.precipitation[cell]!);
-  const obliquity = state.planetParams.tidallyLocked ? 0 : Math.abs(state.controls.obliquity);
+  const obliquity = state.planetParams.tidallyLocked
+    ? 0
+    : Math.abs(state.effectiveControls.obliquity);
   const seasonalStrength = Math.min(1.5, obliquity / EARTH_OBLIQUITY);
   if (seasonalStrength <= 1e-9 || annual === 0) {
     return { temperature, precipitation: exactUniformTotal(annual) };

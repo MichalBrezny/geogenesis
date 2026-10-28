@@ -9,6 +9,7 @@ import { createDaisies } from '../models/biosphere/daisies';
 import { createSimulation } from '../simulation';
 import { energyIncome, STARTING_ENERGY } from '../tools/tools';
 import type { World } from '../world';
+import { modelControlLag } from '../controls';
 
 /** Albedo of Daisyworld's bare ground: brighter than Earth's land, as in the original model. */
 export const DAISYWORLD_GROUND_ALBEDO = 0.4;
@@ -31,6 +32,7 @@ export interface DaisyworldOptions extends PlanetOptions {
 export function createDaisyworld(options: DaisyworldOptions = {}): World {
   const planet = createPlanet(options);
   planet.controls.obliquity = DAISYWORLD_OBLIQUITY;
+  planet.effectiveControls.obliquity = DAISYWORLD_OBLIQUITY;
   planet.globals.year = options.startYear ?? 2.5e9;
   planet.globals.atmosphere.co2 = 280;
   planet.globals.water = 0;
@@ -55,6 +57,7 @@ export function createDaisyworld(options: DaisyworldOptions = {}): World {
 /** Builds the Daisyworld simulation around an existing planet (new or loaded). */
 export function daisyworldFromPlanet(planet: PlanetState, withDaisies = true): World {
   const components = [
+    modelControlLag,
     stellarEvolution,
     createSurfaceAlbedo({ landAlbedo: DAISYWORLD_GROUND_ALBEDO }),
     // Classic Daisyworld has no ice–albedo feedback: snow is as bright as the ground.

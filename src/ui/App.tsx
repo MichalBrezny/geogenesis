@@ -22,7 +22,7 @@ import { ToolPalette } from './ToolPalette';
 import { RESOLUTIONS, SPEEDS, TopBar, type Speed } from './TopBar';
 import type { PlanetStart } from '../sim/world';
 import type { PlanetParameters } from '../sim/core/planet';
-import { DEFAULT_CONTROLS } from '../sim/core/planet';
+import { DEFAULT_CONTROLS, type Difficulty } from '../sim/core/planet';
 import { PlanetPanel } from './PlanetPanel';
 import { AtmosphereDiagnostics, BiosphereDiagnostics } from './PlanetDiagnostics';
 import { GoalOutcome, GoalPanel } from './GoalPanel';
@@ -422,6 +422,8 @@ export function App() {
       start: PlanetStart = 'young',
       planetParams?: Partial<PlanetParameters>,
       continentalFraction?: number,
+      difficulty: Difficulty = 'normal',
+      adaptivePacing = true,
       seed = randomSeed(),
     ) => {
       const [width, height] = RESOLUTIONS[resolutionIndex]!;
@@ -436,16 +438,36 @@ export function App() {
         start,
         continentalFraction,
         planetParams,
+        difficulty,
+        adaptivePacing,
       });
     },
     [send],
   );
   const newPlanet = (choice: NewPlanetChoice) => {
-    const { scenario, resolutionIndex, start, planetParams, continentalFraction, seed } = choice;
+    const {
+      scenario,
+      resolutionIndex,
+      start,
+      planetParams,
+      continentalFraction,
+      difficulty,
+      adaptivePacing,
+      seed,
+    } = choice;
     send({ type: 'run', running: false });
     setRunning(false);
     setDismissedOutcome(null);
-    createPlanet(scenario, resolutionIndex, start, planetParams, continentalFraction, seed);
+    createPlanet(
+      scenario,
+      resolutionIndex,
+      start,
+      planetParams,
+      continentalFraction,
+      difficulty,
+      adaptivePacing,
+      seed,
+    );
     setLayer(SCENARIO_VIEW[scenario].layer);
     setOverlays(SCENARIO_VIEW[scenario].overlays ?? []);
     setError(null);
@@ -686,6 +708,7 @@ export function App() {
         onStep={step}
         speed={speed}
         onSpeedChange={changeSpeed}
+        onAdaptivePacingChange={(adaptive) => send({ type: 'pacing', adaptive })}
         onNewPlanet={newPlanet}
         onSave={(fileName) => send({ type: 'save', fileName })}
         onLoad={(file) => void load(file)}
@@ -912,6 +935,7 @@ export function App() {
                 <>
                   <ControlsPanel
                     controls={frame.controls}
+                    effectiveControls={frame.effectiveControls}
                     group={id as ControlGroupId}
                     defaults={{ ...DEFAULT_CONTROLS, obliquity: obliquityDefault }}
                     controlLimits={frame.goal?.controlLimits}

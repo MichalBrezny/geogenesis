@@ -6,6 +6,7 @@ import { recordEvent } from '../events';
 import { ALERT_THRESHOLDS } from '../trendAlerts';
 import { addDustSource, DUST_FINE } from './atmosphere/dust';
 import { aridityIndex } from './biosphere/biomes';
+import { difficultyBalance } from '../balance';
 
 /** Spatial hazards are refreshed this often; mortality is still integrated every step. */
 export const HAZARD_REFRESH_YEARS = 1_000;
@@ -343,10 +344,12 @@ export function applyDisasterMortality(
 ): void {
   const protection =
     PROTECTION[Math.max(0, Math.min(PROTECTION.length - 1, state.civilization.age))]!;
+  const difficultyRate = difficultyBalance(state).disasterRate;
   const density = state.fields.civilization;
   for (let i = 0; i < density.length; i++) {
     if (density[i]! <= 0 || annualRates[i]! <= 0) continue;
-    density[i] = density[i]! * Math.exp(-annualRates[i]! * (1 - protection) * dtYears);
+    density[i] =
+      density[i]! * Math.exp(-annualRates[i]! * difficultyRate * (1 - protection) * dtYears);
   }
 }
 
@@ -371,6 +374,7 @@ function weightedSettledCell(state: PlanetState, rates: ArrayLike<number>, rng: 
 
 function recordNotableEvents(state: PlanetState, cache: HazardCache, dt: number, rng: Rng): void {
   let remaining = 3;
+  const difficultyRate = difficultyBalance(state).disasterRate;
   const attempt = (
     enabled: boolean,
     rates: ArrayLike<number>,
@@ -380,7 +384,7 @@ function recordNotableEvents(state: PlanetState, cache: HazardCache, dt: number,
   ) => {
     if (!enabled || remaining <= 0) return;
     const cell = weightedSettledCell(state, rates, rng);
-    if (cell < 0 || rng.next() >= -Math.expm1(-dt / interval)) return;
+    if (cell < 0 || rng.next() >= -Math.expm1((-dt * difficultyRate) / interval)) return;
     recordEvent(state, key, subject?.(), state.globals.year + rng.next() * dt, cell);
     remaining--;
   };
@@ -398,7 +402,11 @@ function recordNotableEvents(state: PlanetState, cache: HazardCache, dt: number,
       population += density;
       exposed += density * cache.drought[i]!;
     }
-    if (population > 0 && exposed / population > 0.2 && rng.next() < -Math.expm1(-dt / 80)) {
+    if (
+      population > 0 &&
+      exposed / population > 0.2 &&
+      rng.next() < -Math.expm1((-dt * difficultyRate) / 80)
+    ) {
       const cell = weightedSettledCell(state, cache.drought, rng);
       if (cell >= 0)
         recordEvent(state, 'drought', undefined, state.globals.year + rng.next() * dt, cell);
@@ -497,7 +505,7 @@ export const disasterModel: SimComponent = {
       addDustSource(
         state,
         DUST_FINE,
-        cache.dustSource * DUST_INJECTION_RATE * dt,
+        cache.dustSource * DUST_INJECTION_RATE * difficultyBalance(state).disasterRate * dt,
         state.globals.year,
         state.globals.year + dt,
       );

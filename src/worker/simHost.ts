@@ -4,7 +4,7 @@ import { inspectCellLife, updateDiversity } from '../sim/models/biosphere/divers
 import { oxygenPartialPressure } from '../sim/models/atmosphere/atmosphere';
 import { createScenario, isScenarioId, restoreScenario, type ScenarioId } from '../sim/scenarios';
 import { compress, decompress, deserializeGame, serializeGame } from '../sim/serialize';
-import { applyTool } from '../sim/tools/tools';
+import { applyTool, energyCap } from '../sim/tools/tools';
 import type { World } from '../sim/world';
 import type { Frame, WorkerRequest, WorkerResponse } from './protocol';
 import { clampGoalCivilizationPolicy, clampGoalControls, GOALS } from '../sim/goals/goals';
@@ -14,6 +14,7 @@ import { monthlyClimate } from '../sim/models/atmosphere/climateDiagram';
 import { MAX_EVENTS } from '../sim/events';
 import { updateMapNames } from '../sim/mapNames';
 import { gaiaDiagnostic } from '../sim/diagnostics';
+import { modelControlChangeCost } from '../sim/controls';
 import { autoPauseEvent, DEFAULT_AUTO_PAUSE, type AutoPauseSettings } from '../sim/autoPause';
 
 /** How many recent events each frame carries. */
@@ -30,6 +31,7 @@ export class SimHost {
   private running = false;
   private scheduled = false;
   private delayMs = 0;
+  private quietTicks = 0;
   private autoPause: AutoPauseSettings = { ...DEFAULT_AUTO_PAUSE };
   private worldRevision = 0;
 
@@ -52,18 +54,25 @@ export class SimHost {
             start: request.start,
             continentalFraction: request.continentalFraction,
             planetParams: request.planetParams,
+            difficulty: request.difficulty,
+            adaptivePacing: request.adaptivePacing,
           });
           this.sendFrame();
           break;
         case 'run':
           this.running = request.running;
+          this.notePlayerInput();
           this.scheduleTick();
           break;
         case 'step':
-          if (!this.running) this.advance();
+          if (!this.running) {
+            this.notePlayerInput();
+            this.advance(false);
+          }
           break;
         case 'tool': {
           if (!this.world) break;
+          this.notePlayerInput();
           const events = this.world.planet.events;
           const previousLastEvent = events.at(-1);
           const result = applyTool(this.world.planet, request.use);
@@ -88,14 +97,23 @@ export class SimHost {
         }
         case 'controls':
           if (!this.world) break;
-          Object.assign(
-            this.world.planet.controls,
-            clampGoalControls(this.world.planet, request.controls),
-          );
+          this.notePlayerInput();
+          {
+            const changes = clampGoalControls(this.world.planet, request.controls);
+            const cost = modelControlChangeCost(this.world.planet, changes);
+            const globals = this.world.planet.globals;
+            if (!globals.unlimitedEnergy && globals.energy + 1e-9 < cost) {
+              this.post({ type: 'toolRefused', reason: 'energy' }, []);
+            } else {
+              if (!globals.unlimitedEnergy) globals.energy = Math.max(0, globals.energy - cost);
+              Object.assign(this.world.planet.controls, changes);
+            }
+          }
           this.sendFrame();
           break;
         case 'civPolicy':
           if (!this.world) break;
+          this.notePlayerInput();
           this.world.planet.civPolicy = clampGoalCivilizationPolicy(
             this.world.planet,
             updateCivilizationPolicy(
@@ -108,6 +126,7 @@ export class SimHost {
           break;
         case 'disasters':
           if (!this.world) break;
+          this.notePlayerInput();
           Object.assign(this.world.planet.disasters, request.disasters);
           this.sendFrame();
           break;
@@ -129,6 +148,7 @@ export class SimHost {
           break;
         case 'speed':
           this.delayMs = Math.max(0, request.delayMs);
+          this.notePlayerInput();
           break;
         case 'save':
           void this.save(request.fileName);
@@ -138,7 +158,14 @@ export class SimHost {
           break;
         case 'unlimitedEnergy':
           if (!this.world) break;
+          this.notePlayerInput();
           this.world.planet.globals.unlimitedEnergy = request.enabled;
+          this.sendFrame();
+          break;
+        case 'pacing':
+          if (!this.world) break;
+          this.notePlayerInput();
+          this.world.planet.pacing.adaptive = request.adaptive;
           this.sendFrame();
           break;
       }
@@ -182,22 +209,48 @@ export class SimHost {
     this.schedule(() => {
       this.scheduled = false;
       if (!this.running) return;
-      this.advance();
+      this.advance(true);
       this.scheduleTick();
     }, this.delayMs);
   }
 
-  private advance(): void {
+  private advance(allowBatch: boolean): void {
     if (!this.world) return;
-    const events = this.world.planet.events;
-    const previousLastEvent = events.at(-1);
-    const wasActive = this.world.planet.goal?.status === 'active';
-    this.world.simulation.step(this.world.planet, this.world.stepYears(this.world.planet));
-    const previousIndex = previousLastEvent === undefined ? -1 : events.indexOf(previousLastEvent);
-    const newEvents = events.slice(previousIndex + 1);
-    if (this.running && autoPauseEvent(newEvents, this.autoPause)) this.running = false;
-    if (wasActive && this.world.planet.goal?.status !== 'active') this.running = false;
+    const planet = this.world.planet;
+    const batches =
+      allowBatch && planet.pacing.adaptive && this.delayMs === 0
+        ? this.quietTicks >= 5
+          ? 8
+          : this.quietTicks >= 2
+            ? 4
+            : 1
+        : 1;
+    let quiet = true;
+    for (let step = 0; step < batches; step++) {
+      const beforeEvent = planet.events.at(-1);
+      const beforeEra = this.world.era(planet);
+      const wasActive = planet.goal?.status === 'active';
+      this.world.simulation.step(planet, this.world.stepYears(planet));
+      const previousIndex = beforeEvent === undefined ? -1 : planet.events.indexOf(beforeEvent);
+      const newEvents = planet.events.slice(previousIndex + 1);
+      if (newEvents.length > 0 || this.world.era(planet) !== beforeEra) quiet = false;
+      if (this.running && autoPauseEvent(newEvents, this.autoPause)) {
+        this.running = false;
+        break;
+      }
+      if (wasActive && planet.goal?.status !== 'active') {
+        this.running = false;
+        quiet = false;
+        break;
+      }
+      if (!quiet) break;
+    }
+    this.quietTicks = quiet ? this.quietTicks + 1 : 0;
     this.sendFrame();
+  }
+
+  private notePlayerInput(): void {
+    this.quietTicks = 0;
   }
 
   private sendFrame(): void {
@@ -271,8 +324,12 @@ export class SimHost {
       stepYears: this.world.stepYears(planet),
       era: this.world.era(planet),
       energy: planet.globals.energy,
+      energyCap: energyCap(planet),
       unlimitedEnergy: planet.globals.unlimitedEnergy,
       controls: { ...planet.controls },
+      effectiveControls: { ...planet.effectiveControls },
+      difficulty: planet.difficulty,
+      adaptivePacing: planet.pacing.adaptive,
       disasters: { ...planet.disasters },
       devices: planet.devices.map((device) => ({ ...device })),
       biosignature: biosignature(planet.globals.atmosphere),

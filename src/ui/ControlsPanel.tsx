@@ -48,6 +48,7 @@ export const CONTROL_GROUPS: Record<ControlGroupId, readonly (keyof ModelControl
 function SliderControl(props: {
   slider: Slider;
   value: number;
+  effectiveValue: number;
   defaultValue: number;
   limit?: [number, number];
   onChange: (value: number) => void;
@@ -58,6 +59,7 @@ function SliderControl(props: {
   const formattedValue = props.value.toFixed(digits);
   const [draft, setDraft] = useState<string | null>(null);
   const modified = props.value !== props.defaultValue;
+  const lagging = Math.abs(props.effectiveValue - props.value) > Math.max(step / 20, 1e-6);
   const name = t(`control.${key}` as MessageKey);
   const hint = t('controlsPanel.sliderHint', {
     description: t(`controlHelp.${key}` as MessageKey),
@@ -119,6 +121,16 @@ function SliderControl(props: {
         />
         {unit}
       </span>
+      {lagging && (
+        <span
+          className="control-effective"
+          title={t('controlsPanel.effectiveHint', {
+            value: props.effectiveValue.toFixed(digits),
+          })}
+        >
+          {t('controlsPanel.effective', { value: props.effectiveValue.toFixed(digits) })}
+        </span>
+      )}
       {modified && (
         <button
           type="button"
@@ -137,6 +149,7 @@ function SliderControl(props: {
 /** Model controls: multipliers on the planet's processes (1 = natural). */
 export function ControlsPanel(props: {
   controls: ModelControls;
+  effectiveControls: ModelControls;
   group: ControlGroupId;
   defaults: Readonly<ModelControls>;
   controlLimits?: Partial<Record<ControlKey, [number, number]>>;
@@ -153,6 +166,7 @@ export function ControlsPanel(props: {
           key={slider.key}
           slider={slider}
           value={props.controls[slider.key]}
+          effectiveValue={props.effectiveControls[slider.key]}
           defaultValue={props.defaults[slider.key]}
           limit={props.controlLimits?.[slider.key]}
           onChange={(value) => props.onChange({ [slider.key]: value })}

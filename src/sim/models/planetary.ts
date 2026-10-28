@@ -111,9 +111,12 @@ export const planetaryEvolution: SimComponent = {
         Math.sqrt(-2 * Math.log(Math.max(1e-12, local.next()))) *
         Math.cos(2 * Math.PI * local.next());
       const jump = local.next() < 0.02 ? (local.next() * 2 - 1) * 12 : 0;
-      state.controls.obliquity = reflectObliquity(
+      const obliquity = reflectObliquity(
         state.controls.obliquity + gaussian * OBLIQUITY_STEP_DEGREES + jump,
       );
+      // Natural axial wandering is not a player target change and therefore has no lag.
+      state.controls.obliquity = obliquity;
+      state.effectiveControls.obliquity = obliquity;
       geosphere.obliquityUpdateIndex++;
       geosphere.nextObliquityUpdateYear += OBLIQUITY_INTERVAL;
     }

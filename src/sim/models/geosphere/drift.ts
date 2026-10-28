@@ -125,7 +125,7 @@ export function createPlateDrift(options: DriftOptions = {}): SimComponent {
         state.fields.upliftRate.fill(0);
         return;
       }
-      const speed = speedFactor * state.controls.driftSpeed;
+      const speed = speedFactor * state.effectiveControls.driftSpeed;
       if (stepYears <= 0) return;
       const rng = createRng(state.geosphere.plateRngState);
       // Collisions stall plates only after they are detected, so long steps let

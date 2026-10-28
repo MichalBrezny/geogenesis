@@ -180,7 +180,57 @@ describe('SimHost', () => {
     expect(frame.controls.solarFactor).toBe(0.92);
     expect(frame.controls.cloudAlbedo).toBe(1.3);
     expect(frame.controls.driftSpeed).toBe(2);
+    expect(frame.effectiveControls.solarFactor).toBe(1);
+    expect(frame.energy).toBeLessThan(350);
     expect(frame.goal?.conditions.length).toBeGreaterThan(0);
+  });
+
+  it('charges model changes atomically and waives the price in experimental mode', () => {
+    const { host, messages } = createHost();
+    host.handle({
+      type: 'create',
+      scenario: 'random',
+      seed: 1,
+      width: 32,
+      height: 16,
+      start: 'young',
+    });
+    const before = lastFrame(messages);
+    host.handle({ type: 'controls', controls: { solarFactor: 0.8, cloudAlbedo: 2 } });
+    const refused = messages.at(-2);
+    expect(refused?.type).toBe('toolRefused');
+    expect(lastFrame(messages).controls).toEqual(before.controls);
+    expect(lastFrame(messages).energy).toBe(before.energy);
+
+    host.handle({ type: 'unlimitedEnergy', enabled: true });
+    host.handle({ type: 'controls', controls: { solarFactor: 0.8, cloudAlbedo: 2 } });
+    expect(lastFrame(messages).controls.solarFactor).toBe(0.8);
+    expect(lastFrame(messages).energy).toBe(before.energy);
+  });
+
+  it('batches only quiet Fast-speed ticks when adaptive pacing is enabled', () => {
+    const { host, messages, runQueued } = createHost();
+    host.handle({
+      type: 'create',
+      scenario: 'daisyworld',
+      seed: 1,
+      width: 32,
+      height: 16,
+      start: 'young',
+      adaptivePacing: true,
+    });
+    host.handle({ type: 'run', running: true });
+    const deltas: number[] = [];
+    for (let i = 0; i < 8; i++) {
+      const before = lastFrame(messages).year;
+      runQueued();
+      deltas.push(lastFrame(messages).year - before);
+    }
+    expect(Math.max(...deltas)).toBeGreaterThan(deltas[0]!);
+    host.handle({ type: 'pacing', adaptive: false });
+    const before = lastFrame(messages);
+    runQueued();
+    expect(lastFrame(messages).year - before.year).toBe(before.stepYears);
   });
 
   it('stops the run loop when a goal reaches an outcome', () => {

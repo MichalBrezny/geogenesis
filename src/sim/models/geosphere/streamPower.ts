@@ -97,7 +97,7 @@ export function createStreamPowerEroder(options: StreamPowerOptions = {}): SimCo
         const riverFactor =
           h > riverBase
             ? (riverErodibility *
-                state.controls.erosion *
+                state.effectiveControls.erosion *
                 Math.pow(Math.max(0, discharge[i]!) / REFERENCE_RUNOFF, areaExponent) *
                 dtYears) /
               distance
@@ -107,7 +107,11 @@ export function createStreamPowerEroder(options: StreamPowerOptions = {}): SimCo
         const sliding = slidingFraction(airTemperature[i]!);
         const glacialFactor =
           h > iceBase && iceThickness[i]! > 0 && sliding > 0
-            ? (glacialErodibility * state.controls.erosion * iceThickness[i]! * sliding * dtYears) /
+            ? (glacialErodibility *
+                state.effectiveControls.erosion *
+                iceThickness[i]! *
+                sliding *
+                dtYears) /
               distance
             : 0;
         if (riverFactor <= 0 && glacialFactor <= 0) continue;

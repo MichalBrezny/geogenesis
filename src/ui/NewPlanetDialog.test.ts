@@ -7,6 +7,8 @@ const form: NewPlanetForm = {
   seed: 42,
   resolutionIndex: 1,
   start: 'microbial',
+  difficulty: 'hard',
+  adaptivePacing: false,
   radiusKm: 7000,
   distanceAu: 0.9,
   starType: 'K',
@@ -23,6 +25,8 @@ describe('new planet choices', () => {
       seed: 42,
       resolutionIndex: 1,
       start: 'microbial',
+      difficulty: 'hard',
+      adaptivePacing: false,
       continentalFraction: 0.35,
       planetParams: {
         radius: 7_000_000,

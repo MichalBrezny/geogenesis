@@ -49,7 +49,7 @@ describe('terraforming scenarios', () => {
   it.each(['terraformMars'] as const)('opens %s with a budget and the tracker', (id) => {
     const world = createScenario(id, { seed: 2, width: 32, height: 16, start: 'quick' });
     expect(world.planet.goal?.id).toBe(id);
-    expect(world.planet.globals.energy).toBe(3000);
+    expect(world.planet.globals.energy).toBe(1800);
     expect(world.planet.devices).toEqual([]);
     expect(world.simulation.components.at(-1)?.name).toBe('goals');
   });
