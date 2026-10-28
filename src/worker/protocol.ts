@@ -28,6 +28,7 @@ import type { GaiaDiagnostic } from '../sim/diagnostics';
 import type { AutoPauseSettings } from '../sim/autoPause';
 import type { ToolId } from '../sim/tools/tools';
 import type { RenderedField } from '../render/mapRenderer';
+import type { RandomWorldSettings } from '../sim/world';
 
 export interface FrameGoal extends GoalState {
   conditions: GoalCondition[];
@@ -36,20 +37,21 @@ export interface FrameGoal extends GoalState {
 }
 
 /** Messages from the UI to the simulation worker. */
+export interface PlanetCreation {
+  scenario: ScenarioId;
+  seed: number;
+  width: number;
+  height: number;
+  start: PlanetStart;
+  /** Desired mature ice-free land share, 0..1. */
+  continentalFraction?: number;
+  planetParams?: Partial<PlanetParameters>;
+  difficulty?: Difficulty;
+  adaptivePacing?: boolean;
+}
+
 export type WorkerRequest =
-  | {
-      type: 'create';
-      scenario: ScenarioId;
-      seed: number;
-      width: number;
-      height: number;
-      start: PlanetStart;
-      /** Desired mature ice-free land share, 0..1. */
-      continentalFraction?: number;
-      planetParams?: Partial<PlanetParameters>;
-      difficulty?: Difficulty;
-      adaptivePacing?: boolean;
-    }
+  | ({ type: 'create' } & PlanetCreation)
   | { type: 'run'; running: boolean }
   | { type: 'step' }
   | { type: 'tool'; use: ToolUse }
@@ -78,6 +80,10 @@ export interface Frame extends MapSource {
   /** Authoritative worker run state (auto-pause may change it). */
   running: boolean;
   scenario: ScenarioId;
+  /** Immutable inputs that reproduce this planet's starting state. */
+  creation: PlanetCreation;
+  /** Scenario pipeline settings retained in saves. */
+  settings?: RandomWorldSettings;
   year: number;
   meanTemperature: number;
   /** Headroom below the wet outgoing-radiation limit, W/m2. */

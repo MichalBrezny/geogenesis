@@ -450,6 +450,33 @@ export const MAP_ICONS = {
   ),
 } satisfies Record<string, ReactNode>;
 
+/** Map capture and time-lapse actions. */
+export const EXPORT_ICONS = {
+  image: (
+    <Icon>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <circle cx="9" cy="10" r="2" />
+      <path d="m5 17 5-5 3 3 2-2 4 4" />
+    </Icon>
+  ),
+  record: (
+    <Icon>
+      <circle cx="12" cy="12" r="7" fill="currentColor" stroke="none" />
+    </Icon>
+  ),
+  stop: (
+    <Icon>
+      <rect x="6" y="6" width="12" height="12" fill="currentColor" stroke="none" />
+    </Icon>
+  ),
+  video: (
+    <Icon>
+      <rect x="3" y="6" width="13" height="12" rx="2" />
+      <path d="m16 10 5-3v10l-5-3" />
+    </Icon>
+  ),
+} satisfies Record<string, ReactNode>;
+
 export const DICE_ICON = (
   <Icon>
     <rect x="3" y="3" width="18" height="18" rx="3" />

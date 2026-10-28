@@ -6,7 +6,7 @@ import { createScenario, isScenarioId, restoreScenario, type ScenarioId } from '
 import { compress, decompress, deserializeGame, serializeGame } from '../sim/serialize';
 import { applyTool, energyCap } from '../sim/tools/tools';
 import type { World } from '../sim/world';
-import type { FrameUpdate, WorkerRequest, WorkerResponse } from './protocol';
+import type { FrameUpdate, PlanetCreation, WorkerRequest, WorkerResponse } from './protocol';
 import { clampGoalCivilizationPolicy, clampGoalControls, GOALS } from '../sim/goals/goals';
 import { biosignature } from '../sim/models/biosphere/biosignature';
 import { updateCivilizationPolicy } from '../sim/data/civilization';
@@ -28,6 +28,7 @@ const EVENTS_IN_FRAME = MAX_EVENTS;
 export class SimHost {
   private world: World | undefined;
   private scenario: ScenarioId = 'random';
+  private creation: PlanetCreation | undefined;
   private running = false;
   private scheduled = false;
   private delayMs = 0;
@@ -55,6 +56,21 @@ export class SimHost {
           this.frameOutstanding = false;
           this.framePending = false;
           this.scenario = request.scenario;
+          this.creation = {
+            scenario: request.scenario,
+            seed: request.seed,
+            width: request.width,
+            height: request.height,
+            start: request.start,
+            ...(request.continentalFraction === undefined
+              ? {}
+              : { continentalFraction: request.continentalFraction }),
+            ...(request.planetParams === undefined
+              ? {}
+              : { planetParams: { ...request.planetParams } }),
+            difficulty: request.difficulty,
+            adaptivePacing: request.adaptivePacing,
+          };
           this.world = createScenario(request.scenario, {
             seed: request.seed,
             width: request.width,
@@ -229,6 +245,19 @@ export class SimHost {
       this.frameOutstanding = false;
       this.framePending = false;
       this.world = restoreScenario(game.scenario, game.planet, game.settings);
+      this.creation = {
+        scenario: game.scenario,
+        seed: game.planet.seed,
+        width: game.planet.grid.width,
+        height: game.planet.grid.height,
+        start: game.settings?.start ?? 'quick',
+        ...(game.settings?.continentalFraction === undefined
+          ? {}
+          : { continentalFraction: game.settings.continentalFraction }),
+        planetParams: { ...game.planet.planetParams },
+        difficulty: game.planet.difficulty,
+        adaptivePacing: game.planet.pacing.adaptive,
+      };
       if (this.world.planet.mapNaming.updatedYear < 0) updateMapNames(this.world.planet);
       this.sendFrame();
     } catch (error) {
@@ -294,6 +323,18 @@ export class SimHost {
     }
     const frameStarted = performance.now();
     const { planet, simulation } = this.world;
+    const creation =
+      this.creation ??
+      ({
+        scenario: this.scenario,
+        seed: planet.seed,
+        width: planet.grid.width,
+        height: planet.grid.height,
+        start: this.world.settings?.start ?? 'quick',
+        planetParams: { ...planet.planetParams },
+        difficulty: planet.difficulty,
+        adaptivePacing: planet.pacing.adaptive,
+      } satisfies PlanetCreation);
     const fieldsToSend = this.fullFramePending ? RENDERED_FIELDS : [...this.requestedFields];
     if (fieldsToSend.includes('diversity')) updateDiversity(planet);
     const fields: FrameUpdate['fields'] = {};
@@ -316,6 +357,8 @@ export class SimHost {
       worldRevision: this.worldRevision,
       running: this.running,
       scenario: this.scenario,
+      creation,
+      settings: this.world.settings,
       grid: { width, height, cellCount },
       fields,
       seaLevel: planet.globals.seaLevel,

@@ -26,6 +26,7 @@ interface Props {
   onNewPlanet: (choice: NewPlanetChoice) => void;
   onSave: (fileName: string) => void;
   onLoad: (file: File) => void;
+  onCopyShareLink: () => void;
   onShowHelp: () => void;
   onShowSettings: () => void;
   settings: Settings;
@@ -178,6 +179,9 @@ export function TopBar(props: Props) {
           )}
           <button onClick={props.onShowSettings} title={t('settings.openHint')}>
             {t('settings.open')}
+          </button>
+          <button onClick={props.onCopyShareLink} disabled={!frame} title={t('share.copyHint')}>
+            {t('share.copy')}
           </button>
           <button
             onClick={props.onShowHelp}

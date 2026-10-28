@@ -7,6 +7,7 @@ import {
   type TemperatureMonth,
 } from '../render/mapRenderer';
 import type { Frame, WorkerRequest, WorkerResponse } from '../worker/protocol';
+import type { PlanetCreation } from '../worker/protocol';
 import type { ScenarioId } from '../sim/scenarios';
 import type { LifeClassKey } from '../sim/data/lifeClasses';
 import type { CellLife } from '../sim/models/biosphere/diversity';
@@ -57,6 +58,7 @@ import {
 } from './saveStore';
 import { AudioEngine } from '../audio/audioEngine';
 import { loadAudioSettings, saveAudioSettings, type AudioSettings } from '../audio/audioSettings';
+import { copyText, decodePlanetHash, encodePlanetHash } from './planetShare';
 
 /** How long a tool notice stays on screen, ms. */
 const NOTICE_DURATION = 3000;
@@ -389,6 +391,8 @@ export function App() {
   const stageRef = useRef<HTMLElement>(null);
   const captureObliquityDefault = useRef(true);
   const [frame, setFrame] = useState<Frame | null>(null);
+  const startupShare = useRef<PlanetCreation | null>(decodePlanetHash(window.location.hash));
+  const startupShareAccepted = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [layer, setLayer] = useState<MapLayer>('terrain');
   const [view, setView] = useState<View>('map');
@@ -585,6 +589,16 @@ export function App() {
     setError(null);
   };
 
+  const copyShareLink = useCallback(async () => {
+    if (!frame) return;
+    const url = new URL(window.location.href);
+    url.hash = encodePlanetHash(frame.creation);
+    const copied = await copyText(url.toString());
+    setNotice(t(copied ? 'share.copied' : 'share.copyFailed'));
+    window.clearTimeout(noticeTimer.current);
+    noticeTimer.current = window.setTimeout(() => setNotice(null), NOTICE_DURATION);
+  }, [frame]);
+
   useEffect(() => {
     const worker = new Worker(new URL('../worker/sim.worker.ts', import.meta.url), {
       type: 'module',
@@ -622,6 +636,10 @@ export function App() {
         if (lastScenario.current !== message.frame.scenario) {
           lastScenario.current = message.frame.scenario;
           setOverlays(SCENARIO_VIEW[message.frame.scenario].overlays ?? []);
+        }
+        if (startupShareAccepted.current) {
+          startupShareAccepted.current = false;
+          setLayer(SCENARIO_VIEW[message.frame.scenario].layer);
         }
         const status = message.frame.goal?.status ?? null;
         if (
@@ -664,15 +682,21 @@ export function App() {
       type: 'speed',
       delayMs: SPEEDS[initialSettings.current.speed],
     } satisfies WorkerRequest);
-    createPlanet(
-      'random',
-      initialSettings.current.resolutionIndex,
-      'young',
-      undefined,
-      undefined,
-      'normal',
-      initialSettings.current.adaptivePacing,
-    );
+    const shared = startupShare.current;
+    if (shared && window.confirm(t('share.openPrompt'))) {
+      startupShareAccepted.current = true;
+      worker.postMessage({ type: 'create', ...shared } satisfies WorkerRequest);
+    } else {
+      createPlanet(
+        'random',
+        initialSettings.current.resolutionIndex,
+        'young',
+        undefined,
+        undefined,
+        'normal',
+        initialSettings.current.adaptivePacing,
+      );
+    }
     void refreshBrowserSaves();
     return () => {
       window.clearTimeout(toolEffectTimer.current);
@@ -946,6 +970,7 @@ export function App() {
         onNewPlanet={newPlanet}
         onSave={(fileName) => send({ type: 'save', fileName })}
         onLoad={(file) => void load(file)}
+        onCopyShareLink={() => void copyShareLink()}
         onShowHelp={() => openHelp()}
         onShowSettings={() => setSettingsOpen(true)}
         settings={settings}
@@ -1178,7 +1203,7 @@ export function App() {
               }
             >
               {id === 'planet' ? (
-                <PlanetPanel frame={frame} />
+                <PlanetPanel frame={frame} onCopyShareLink={() => void copyShareLink()} />
               ) : id === 'civilization' ? (
                 <CivilizationControlsPanel
                   policy={frame.civPolicy}
