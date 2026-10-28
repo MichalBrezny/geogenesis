@@ -54,6 +54,8 @@ import {
   saveManualSlot,
   type StoredSave,
 } from './saveStore';
+import { AudioEngine } from '../audio/audioEngine';
+import { loadAudioSettings, saveAudioSettings, type AudioSettings } from '../audio/audioSettings';
 
 /** How long a tool notice stays on screen, ms. */
 const NOTICE_DURATION = 3000;
@@ -380,6 +382,9 @@ export function App() {
   );
   const nextSaveRequest = useRef(1);
   const lastHideSave = useRef(0);
+  const [soundSettings, setSoundSettings] = useState(loadAudioSettings);
+  const audioEngineRef = useRef<AudioEngine | null>(null);
+  if (audioEngineRef.current === null) audioEngineRef.current = new AudioEngine(soundSettings);
   const stageRef = useRef<HTMLElement>(null);
   const captureObliquityDefault = useRef(true);
   const [frame, setFrame] = useState<Frame | null>(null);
@@ -611,6 +616,7 @@ export function App() {
             : '__empty__';
           if (added.length > 0)
             setToasts((current) => mergeToastEvents(current, added, performance.now()));
+          audioEngineRef.current?.playEvents(added);
         }
         if (lastScenario.current !== message.frame.scenario) {
           lastScenario.current = message.frame.scenario;
@@ -672,6 +678,36 @@ export function App() {
       worker.terminate();
     };
   }, [createPlanet, persistBrowserSave, refreshBrowserSaves]);
+
+  useEffect(() => {
+    const engine = audioEngineRef.current;
+    if (!engine) return;
+    const startAudio = () => engine.start();
+    window.addEventListener('pointerdown', startAudio, { once: true });
+    window.addEventListener('keydown', startAudio, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', startAudio);
+      window.removeEventListener('keydown', startAudio);
+      engine.destroy();
+    };
+  }, []);
+
+  useEffect(() => {
+    saveAudioSettings(soundSettings);
+    audioEngineRef.current?.setSettings(soundSettings);
+  }, [soundSettings]);
+
+  useEffect(() => {
+    audioEngineRef.current?.setEra(frame?.era ?? null);
+    audioEngineRef.current?.setPaused(!running);
+  }, [frame?.era, running]);
+
+  useEffect(() => {
+    const updateVisibility = () => audioEngineRef.current?.setHidden(document.hidden);
+    updateVisibility();
+    document.addEventListener('visibilitychange', updateVisibility);
+    return () => document.removeEventListener('visibilitychange', updateVisibility);
+  }, []);
 
   const scenarioView = SCENARIO_VIEW[frame?.scenario ?? 'random'];
   // A loaded game may be another scenario than the layer was chosen for.
@@ -822,6 +858,7 @@ export function App() {
     a: () => toggleWindow('atmosphere'),
     b: () => toggleWindow('biosphere'),
     d: () => toggleWindow('planet'),
+    u: () => setSoundSettings((current) => ({ ...current, muted: !current.muted })),
     Escape: () => {
       if (helpOpen) {
         setHelpOpen(false);
@@ -923,6 +960,8 @@ export function App() {
         }}
         error={error}
         newPlanetRequest={newPlanetRequest}
+        soundSettings={soundSettings}
+        onSoundSettingsChange={(settings: AudioSettings) => setSoundSettings(settings)}
       />
       {frame && (
         <aside className="sidebar left">

@@ -14,6 +14,7 @@ export const SHORTCUT_DEFINITIONS: readonly { keys: string; label: MessageKey }[
   { keys: 'E / A / B / D', label: 'help.keyWindows' },
   { keys: '+ / −', label: 'help.keyZoom' },
   { keys: 'M', label: 'help.keyMinimap' },
+  { keys: 'U', label: 'help.keyMute' },
   { keys: 'Esc', label: 'help.keyEscape' },
   { keys: '?', label: 'help.keyHelp' },
   { keys: ',', label: 'help.keySettings' },
