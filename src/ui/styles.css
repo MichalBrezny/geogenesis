@@ -698,6 +698,42 @@ button.primary:hover:not(:disabled) {
   align-items: center;
 }
 
+.sound-popover {
+  width: min(280px, calc(100vw - 32px));
+}
+
+.sound-buttons button:last-child {
+  padding-inline: 6px;
+}
+
+.popover-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+
+.sound-settings {
+  display: grid;
+  gap: 10px;
+}
+
+.sound-settings h2 {
+  margin: 0;
+  padding-right: 28px;
+  font-size: 1rem;
+}
+
+.sound-settings label:not(:has(input[type='checkbox'])) span {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sound-settings input[type='range'] {
+  width: 100%;
+  accent-color: var(--series-1);
+}
+
 .planet-parameters {
   margin: 0;
 }

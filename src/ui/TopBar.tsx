@@ -6,6 +6,8 @@ import { GaiaFace } from './GaiaFace';
 import { NewPlanetDialog, type NewPlanetChoice } from './NewPlanetDialog';
 import { SaveLoadDialog, type FileDialogMode } from './SaveLoadDialog';
 import { TOUR_ANCHORS } from './guide';
+import type { AudioSettings } from '../audio/audioSettings';
+import { SoundSettingsSection } from './SoundSettingsSection';
 export { RESOLUTIONS } from './menuOptions';
 
 export const SPEEDS = { slow: 500, normal: 120, fast: 0 } as const;
@@ -25,6 +27,8 @@ interface Props {
   onShowHelp: () => void;
   error: string | null;
   newPlanetRequest: number;
+  soundSettings: AudioSettings;
+  onSoundSettingsChange: (settings: AudioSettings) => void;
 }
 
 /** Time controls, the planet's vital signs and the planet menu. */
@@ -33,6 +37,7 @@ export function TopBar(props: Props) {
   const [newPlanetOpen, setNewPlanetOpen] = useState(false);
   const [dismissedRequest, setDismissedRequest] = useState(0);
   const [fileDialog, setFileDialog] = useState<FileDialogMode | null>(null);
+  const [soundOpen, setSoundOpen] = useState(false);
   const requestedOpen = props.newPlanetRequest > dismissedRequest;
   const closeNewPlanet = () => {
     setNewPlanetOpen(false);
@@ -94,6 +99,52 @@ export function TopBar(props: Props) {
         )}
         {frame && <Vitals frame={frame} />}
         <div className="group menu" role="group" aria-label={t('controls.planet')}>
+          <div className="popover-anchor">
+            <div className="segmented sound-buttons">
+              <button
+                className={props.soundSettings.muted ? 'selected' : undefined}
+                onClick={() =>
+                  props.onSoundSettingsChange({
+                    ...props.soundSettings,
+                    muted: !props.soundSettings.muted,
+                  })
+                }
+                title={t(props.soundSettings.muted ? 'sound.unmuteHint' : 'sound.muteHint')}
+                aria-label={t(props.soundSettings.muted ? 'sound.unmute' : 'sound.mute')}
+              >
+                {props.soundSettings.muted ? '🔇' : '🔊'}
+              </button>
+              <button
+                onClick={() => setSoundOpen((open) => !open)}
+                title={t('sound.settingsHint')}
+                aria-label={t('sound.settings')}
+                aria-expanded={soundOpen}
+              >
+                ▾
+              </button>
+            </div>
+            {soundOpen && (
+              <div
+                className="popover sound-popover"
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') setSoundOpen(false);
+                }}
+              >
+                <button
+                  className="popover-close"
+                  onClick={() => setSoundOpen(false)}
+                  title={t('sound.closeHint')}
+                  aria-label={t('sound.close')}
+                >
+                  ×
+                </button>
+                <SoundSettingsSection
+                  settings={props.soundSettings}
+                  onChange={props.onSoundSettingsChange}
+                />
+              </div>
+            )}
+          </div>
           <button onClick={() => setNewPlanetOpen(true)} title={t('controls.newPlanetHint')}>
             {t('controls.newPlanet')}
           </button>

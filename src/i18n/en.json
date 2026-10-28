@@ -966,5 +966,22 @@
   "tour.title.era": "Let eras change",
   "tour.step.era": "Early geological steps cover millions of years. As complex life and civilization appear, eras change and each step becomes shorter.",
   "tour.title.goal": "Follow the checklist",
-  "tour.step.goal": "This card says what matters now. In goal scenarios, open the Goal tab for exact targets, progress, deadline and score. Meet all conditions to finish."
+  "tour.step.goal": "This card says what matters now. In goal scenarios, open the Goal tab for exact targets, progress, deadline and score. Meet all conditions to finish.",
+  "sound.title": "Sound",
+  "sound.description": "Procedural music follows the planet's era. Defaults: master 70%, music 25%, effects 65%.",
+  "sound.mute": "Mute all sound",
+  "sound.unmute": "Unmute sound",
+  "sound.muteHint": "Mute all sound (U)",
+  "sound.unmuteHint": "Restore sound (U)",
+  "sound.settings": "Sound settings",
+  "sound.settingsHint": "Open sound settings",
+  "sound.master": "Master",
+  "sound.masterHint": "Set the overall sound volume",
+  "sound.music": "Music",
+  "sound.musicHint": "Set the ambient music volume",
+  "sound.effects": "Effects",
+  "sound.effectsHint": "Set the event cue volume",
+  "sound.close": "Close sound settings",
+  "sound.closeHint": "Close sound settings",
+  "help.keyMute": "Mute or unmute sound"
 }
