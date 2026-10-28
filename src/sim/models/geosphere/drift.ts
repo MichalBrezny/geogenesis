@@ -223,20 +223,21 @@ function writeBackToPlates(state: PlanetState): void {
     return;
   }
 
-  const { refs, composed, deltaSum, deltaCount } = buffers;
-  const touched: number[] = [];
+  const { refs, composed, deltaSum, deltaCount, touched } = buffers;
+  let touchedCount = 0;
   for (let d = 0; d < n; d++) {
     const k = plateId[d]!;
     const r = refs[d * plates.length + k]!;
     const crust = plates[k]!.crust;
     if (!crust.owned[r]) continue;
     const slot = k * n + r;
-    if (deltaCount[slot] === 0) touched.push(slot);
+    if (deltaCount[slot] === 0) touched[touchedCount++] = slot;
     deltaSum[slot] = deltaSum[slot]! + (elevation[d]! - composed[d]!);
     deltaCount[slot] = deltaCount[slot]! + 1;
     if (crustType[d]) crust.type[r] = 1;
   }
-  for (const slot of touched) {
+  for (let index = 0; index < touchedCount; index++) {
+    const slot = touched[index]!;
     const crust = plates[Math.floor(slot / n)]!.crust;
     const r = slot % n;
     crust.elevation[r] = crust.elevation[r]! + deltaSum[slot]! / deltaCount[slot]!;
@@ -299,14 +300,14 @@ function composePlates(state: PlanetState, rng: Rng): Uint8Array {
   const { elevation, plateId, crustType } = state.fields;
   const n = grid.cellCount;
   const plateCount = plates.length;
-  const collided = new Uint8Array(plateCount);
   // refs[d * plateCount + k]: reference cell of plate k currently over planet cell d,
   // or -1 if the plate's bounding cap does not reach d.
   // visible[k * n + r]: plate k's reference cell r is on top somewhere. Several planet
   // cells can sample the same reference cell, so crust is only consumed if it is
   // hidden everywhere; otherwise plate edges would erode from resampling alone.
   const buffers = composeBuffers(grid, plateCount);
-  const { refs, visible, winners, thickening, composed, fresh, plateAreas } = buffers;
+  const { refs, visible, winners, thickening, composed, fresh, plateAreas, collided } = buffers;
+  collided.fill(0);
   visible.fill(0);
   thickening.fill(0);
   plateAreas.fill(0);
@@ -315,7 +316,9 @@ function composePlates(state: PlanetState, rng: Rng): Uint8Array {
     plateAreas[plateId[cell]!] = plateAreas[plateId[cell]!]! + grid.rowCellArea[row]!;
   }
   const totalArea = 4 * Math.PI * grid.radius * grid.radius;
-  const caps = plates.map((plate) => boundingCap(grid, plate));
+  const caps = plates.map((plate) =>
+    boundingCap(grid, plate, buffers.ownedCells, plate.id * n, buffers.ownedCounts),
+  );
   const pos = grid.cellPosition;
 
   for (let d = 0; d < n; d++) {
@@ -782,7 +785,8 @@ function spreadThickening(state: PlanetState, thickening: Float32Array): void {
   const { neighbors } = getTopology(state.grid);
   const { elevation, crustType } = state.fields;
   const blurPasses = Math.max(0, Math.round(1 / resolutionScale(state.grid)) - 1);
-  for (let pass = 0; pass < blurPasses; pass++) blurOnce(thickening, neighbors);
+  const blurSource = composeBuffers(state.grid, state.plates.length).blurSource;
+  for (let pass = 0; pass < blurPasses; pass++) blurOnce(thickening, neighbors, blurSource);
 
   for (let d = 0; d < thickening.length; d++) {
     const amount = thickening[d]!;
@@ -804,8 +808,8 @@ function spreadThickening(state: PlanetState, thickening: Float32Array): void {
 }
 
 /** One pass of a 4-neighbour blur that keeps the total (half stays, half is shared). */
-function blurOnce(values: Float32Array, neighbors: Int32Array): void {
-  const source = Float32Array.from(values);
+function blurOnce(values: Float32Array, neighbors: Int32Array, source: Float32Array): void {
+  source.set(values);
   values.fill(0);
   for (let i = 0; i < source.length; i++) {
     const v = source[i]!;
@@ -828,44 +832,54 @@ function blurOnce(values: Float32Array, neighbors: Int32Array): void {
 function fillPlateHoles(state: PlanetState): void {
   const { neighbors } = getTopology(state.grid);
   const n = state.grid.cellCount;
-  const { fresh } = composeBuffers(state.grid, state.plates.length);
+  const buffers = composeBuffers(state.grid, state.plates.length);
+  const { fresh, holeSeen: seen, holes, fills } = buffers;
   fresh.fill(0);
-  const seen = new Uint8Array(n);
-  const holes: number[] = [];
   for (const plate of state.plates) {
     const { owned, elevation, type } = plate.crust;
     // Only unowned cells next to the plate can be holes; find them from the owned side.
     seen.fill(0);
-    holes.length = 0;
+    let holeCount = 0;
     for (let i = 0; i < n; i++) {
       if (!owned[i]) continue;
       for (let d = 0; d < NEIGHBOR_COUNT; d += 2) {
         const nb = neighbors[i * NEIGHBOR_COUNT + d]!;
         if (nb >= 0 && !owned[nb] && !seen[nb]) {
           seen[nb] = 1;
-          holes.push(nb);
+          holes[holeCount++] = nb;
         }
       }
     }
     // Decide all fills against the unfilled raster first, so fills cannot cascade.
-    const fills: number[] = [];
-    for (const i of holes) {
+    let fillCount = 0;
+    for (let hole = 0; hole < holeCount; hole++) {
+      const i = holes[hole]!;
       // Sums and counts per crust type (index 0 = oceanic, 1 = continental).
-      const sums = [0, 0];
-      const counts = [0, 0];
+      let oceanSum = 0;
+      let continentSum = 0;
+      let oceanCount = 0;
+      let continentCount = 0;
       for (let d = 0; d < NEIGHBOR_COUNT; d += 2) {
         const nb = neighbors[i * NEIGHBOR_COUNT + d]!;
         if (nb < 0 || !owned[nb]) continue;
-        sums[type[nb]!]! += elevation[nb]!;
-        counts[type[nb]!]!++;
+        if (type[nb]) {
+          continentSum += elevation[nb]!;
+          continentCount++;
+        } else {
+          oceanSum += elevation[nb]!;
+          oceanCount++;
+        }
       }
-      if (counts[0]! + counts[1]! < 3) continue;
+      if (oceanCount + continentCount < 3) continue;
       // Take the majority crust type and average only neighbours of that type, so a
       // continental hole next to deep ocean does not become an inland sea.
-      const t = counts[1]! >= counts[0]! ? 1 : 0;
-      fills.push(i, sums[t]! / counts[t]!, t);
+      const t = continentCount >= oceanCount ? 1 : 0;
+      const offset = fillCount++ * 3;
+      fills[offset] = i;
+      fills[offset + 1] = t ? continentSum / continentCount : oceanSum / oceanCount;
+      fills[offset + 2] = t;
     }
-    for (let f = 0; f < fills.length; f += 3) {
+    for (let f = 0; f < fillCount * 3; f += 3) {
       const i = fills[f]!;
       owned[i] = 1;
       elevation[i] = fills[f + 1]!;
@@ -895,6 +909,16 @@ interface ComposeBuffers {
   gapQueue: Int32Array;
   /** Real visible area of each plate before the current composition. */
   plateAreas: Float64Array;
+  collided: Uint8Array;
+  /** Reference cells touched by write-back, and hole-fill work arrays. */
+  touched: Int32Array;
+  holeSeen: Uint8Array;
+  holes: Int32Array;
+  fills: Float64Array;
+  blurSource: Float32Array;
+  /** Sorted owned reference cells per plate, built while finding each cap. */
+  ownedCells: Int32Array;
+  ownedCounts: Int32Array;
 }
 
 const bufferCache = new WeakMap<Grid, ComposeBuffers>();
@@ -917,6 +941,14 @@ function composeBuffers(grid: Grid, plateCount: number): ComposeBuffers {
       gaps: new Uint8Array(n),
       gapQueue: new Int32Array(n),
       plateAreas: new Float64Array(plateCount),
+      collided: new Uint8Array(plateCount),
+      touched: new Int32Array(n * plateCount),
+      holeSeen: new Uint8Array(n),
+      holes: new Int32Array(n),
+      fills: new Float64Array(n * 3),
+      blurSource: new Float32Array(n),
+      ownedCells: new Int32Array(n * plateCount),
+      ownedCounts: new Int32Array(plateCount),
     };
     bufferCache.set(grid, buffers);
   }
@@ -928,31 +960,39 @@ function composeBuffers(grid: Grid, plateCount: number): ComposeBuffers {
  * [centre x, y, z, cosine of the angular radius], or undefined for an empty
  * plate. The radius is padded by two cells so sampling at the edge is never cut.
  */
-function boundingCap(grid: Grid, plate: Plate): [number, number, number, number] | undefined {
+function boundingCap(
+  grid: Grid,
+  plate: Plate,
+  ownedCells: Int32Array,
+  offset: number,
+  ownedCounts: Int32Array,
+): [number, number, number, number] | undefined {
   const pos = grid.cellPosition;
   const owned = plate.crust.owned;
   let cx = 0;
   let cy = 0;
   let cz = 0;
+  let count = 0;
   for (let i = 0; i < owned.length; i++) {
     if (!owned[i]) continue;
+    ownedCells[offset + count++] = i;
     cx += pos[i * 3]!;
     cy += pos[i * 3 + 1]!;
     cz += pos[i * 3 + 2]!;
   }
+  ownedCounts[plate.id] = count;
   const len = Math.hypot(cx, cy, cz);
   if (len === 0) {
     // Empty plate, or crust spread evenly around the globe: no useful cap.
-    return owned.some((v) => v === 1) ? [0, 0, 1, -2] : undefined;
+    return count > 0 ? [0, 0, 1, -2] : undefined;
   }
   cx /= len;
   cy /= len;
   cz /= len;
   let minDot = 1;
-  for (let i = 0; i < owned.length; i++) {
-    if (owned[i]) {
-      minDot = Math.min(minDot, cx * pos[i * 3]! + cy * pos[i * 3 + 1]! + cz * pos[i * 3 + 2]!);
-    }
+  for (let index = 0; index < count; index++) {
+    const i = ownedCells[offset + index]!;
+    minDot = Math.min(minDot, cx * pos[i * 3]! + cy * pos[i * 3 + 1]! + cz * pos[i * 3 + 2]!);
   }
   const radius = Math.acos(Math.max(-1, Math.min(1, minDot))) + (2 * Math.PI) / grid.height;
   const m = plate.rotation;

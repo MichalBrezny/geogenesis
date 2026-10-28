@@ -96,9 +96,9 @@ export function fillDepressions(
 ): Float64Array {
   const { neighbors } = getTopology(grid);
   const n = grid.cellCount;
-  const filled = new Float64Array(n);
-  const closed = new Uint8Array(n);
-  const queue = new CellPriorityQueue(n);
+  const { filled, closed, floodQueue: queue } = routingScratch(grid);
+  filled.fill(0);
+  closed.fill(0);
 
   // Ocean cells are outlets: they go first in the order, and only those touching
   // land need to seed the flood (keeps the heap small, as most cells are ocean).
@@ -214,14 +214,24 @@ function routeLakes(
   lakeDepth.fill(0);
   lakeType.fill(LakeType.None);
 
-  const componentOf = new Int32Array(grid.cellCount).fill(-1);
+  const scratch = routingScratch(grid);
+  const { componentOf } = scratch;
+  componentOf.fill(-1);
   const depressions = findDepressions(grid, elevation, filled, state.globals.seaLevel, componentOf);
-  const incomingByDepression = new Float64Array(depressions.length);
-  const localRunoffByDepression = new Float64Array(depressions.length);
-  const precipitationByDepression = new Float64Array(depressions.length);
-  const petByDepression = new Float64Array(depressions.length);
-  const upstreamPrecipitation = new Float64Array(grid.cellCount);
-  const upstreamPet = new Float64Array(grid.cellCount);
+  const {
+    incomingByDepression,
+    localRunoffByDepression,
+    precipitationByDepression,
+    petByDepression,
+    upstreamPrecipitation,
+    upstreamPet,
+  } = scratch;
+  incomingByDepression.fill(0, 0, depressions.length);
+  localRunoffByDepression.fill(0, 0, depressions.length);
+  precipitationByDepression.fill(0, 0, depressions.length);
+  petByDepression.fill(0, 0, depressions.length);
+  upstreamPrecipitation.fill(0);
+  upstreamPet.fill(0);
   for (let i = 0; i < grid.cellCount; i++) {
     if (!isOcean(elevation[i]!, state.globals.seaLevel)) {
       const area = grid.rowCellArea[Math.floor(i / grid.width)]!;
@@ -341,7 +351,7 @@ function findDepressions(
 ): Depression[] {
   const { neighbors } = getTopology(grid);
   const depressions: Depression[] = [];
-  const queue = new Int32Array(grid.cellCount);
+  const queue = routingScratch(grid).componentQueue;
   for (let seed = 0; seed < grid.cellCount; seed++) {
     if (
       componentOf[seed]! >= 0 ||
@@ -388,6 +398,45 @@ function findDepressions(
     }
   }
   return depressions;
+}
+
+interface RoutingScratch {
+  filled: Float64Array;
+  closed: Uint8Array;
+  floodQueue: CellPriorityQueue;
+  componentOf: Int32Array;
+  componentQueue: Int32Array;
+  incomingByDepression: Float64Array;
+  localRunoffByDepression: Float64Array;
+  precipitationByDepression: Float64Array;
+  petByDepression: Float64Array;
+  upstreamPrecipitation: Float64Array;
+  upstreamPet: Float64Array;
+}
+
+const routingScratchCache = new WeakMap<Grid, RoutingScratch>();
+
+/** Reusable priority-flood and lake-routing work arrays for one grid. */
+function routingScratch(grid: Grid): RoutingScratch {
+  let scratch = routingScratchCache.get(grid);
+  if (!scratch) {
+    const n = grid.cellCount;
+    scratch = {
+      filled: new Float64Array(n),
+      closed: new Uint8Array(n),
+      floodQueue: new CellPriorityQueue(n),
+      componentOf: new Int32Array(n),
+      componentQueue: new Int32Array(n),
+      incomingByDepression: new Float64Array(n),
+      localRunoffByDepression: new Float64Array(n),
+      precipitationByDepression: new Float64Array(n),
+      petByDepression: new Float64Array(n),
+      upstreamPrecipitation: new Float64Array(n),
+      upstreamPet: new Float64Array(n),
+    };
+    routingScratchCache.set(grid, scratch);
+  }
+  return scratch;
 }
 
 /** Accumulates an extensive quantity from donors into their receivers. */

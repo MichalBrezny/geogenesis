@@ -27,6 +27,7 @@ import type { HotspotMarker, PlateMotion } from '../render/mantleFlow';
 import type { GaiaDiagnostic } from '../sim/diagnostics';
 import type { AutoPauseSettings } from '../sim/autoPause';
 import type { ToolId } from '../sim/tools/tools';
+import type { RenderedField } from '../render/mapRenderer';
 
 export interface FrameGoal extends GoalState {
   conditions: GoalCondition[];
@@ -57,6 +58,10 @@ export type WorkerRequest =
   | { type: 'disasters'; disasters: Partial<DisasterSettings> }
   | { type: 'autoPause'; settings: AutoPauseSettings }
   | { type: 'unlimitedEnergy'; enabled: boolean }
+  /** Limit subsequent frame copies to fields used by the visible map and overlays. */
+  | { type: 'view'; fields: RenderedField[] }
+  /** UI consumed the latest frame; permits a pending newer frame to replace it. */
+  | { type: 'frameAck' }
   | { type: 'pacing'; adaptive: boolean }
   | { type: 'save'; fileName?: string }
   /** Ask for the life and monthly climate in one cell; answered with one `cellLife` response. */
@@ -133,11 +138,16 @@ export interface Frame extends MapSource {
   timings: Record<string, number>;
   /** The whole recorded history, one array per series. */
   history: Record<HistorySeries, Float64Array>;
+  /** Worker-side frame construction cost and transferable byte count. */
+  frameTiming: { buildMs: number; transferBytes: number };
 }
+
+/** A worker frame may omit unchanged/unneeded fields; App merges it with its last full frame. */
+export type FrameUpdate = Omit<Frame, 'fields'> & { fields: Partial<Frame['fields']> };
 
 /** Messages from the simulation worker to the UI. */
 export type WorkerResponse =
-  | { type: 'frame'; frame: Frame }
+  | { type: 'frame'; frame: FrameUpdate }
   | { type: 'cellLife'; life: CellLife; climate?: MonthlyClimate }
   | { type: 'error'; message: string }
   /** A tool could not be used; the UI explains why. */

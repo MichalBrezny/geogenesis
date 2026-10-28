@@ -757,7 +757,12 @@ export function PlanetView({
         )}
       </div>
       {hovered && (
-        <CellInspector frame={frame} cell={hovered} life={cellLife} climate={cellClimate} />
+        <CellInspector
+          frame={frame}
+          cell={hovered}
+          life={cellLife}
+          climate={cellClimate}
+        />
       )}
     </>
   );

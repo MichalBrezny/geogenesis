@@ -373,9 +373,9 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
                 OCEAN_RESPONSE_TIME,
             )
           : 0;
-      const previous = lag > 1e-6 ? Float32Array.from(airTemperature) : null;
       const hasClouds = globals.cloudCover !== undefined;
       const climate = getClimateGrid(grid, diffusivity);
+      const previous = lag > 1e-6 ? climatePrevious(climate, airTemperature) : null;
       climate.transportScale = heatTransportScale(
         globals.surfacePressure,
         state.planetParams.rotationPeriodHours,
@@ -384,10 +384,11 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
       const hasWater = globals.water > TRACE_WATER_GEL;
       const hasSeasons =
         !state.planetParams.tidallyLocked && state.effectiveControls.obliquity > 1e-6;
+      const oceanMask = updateOceanMask(climate, elevation, globals.seaLevel);
       const continentality = hasSeasons
-        ? continentalityField(grid, elevation, globals.seaLevel)
+        ? continentalityField(climate, grid, oceanMask)
         : null;
-      const seasonalForcing = new Float64Array(grid.height);
+      const seasonalForcing = climate.seasonalForcing;
       const seasonalAmplitudeScale = thinSeasonalAmplitudeScale(globals.surfacePressure);
       const hasCo2Frost = globals.co2Ice > 0;
       const co2FrostTemperatureC = hasCo2Frost
@@ -440,7 +441,7 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
         // Test the branch the planet would occupy after fast steam rain-out. The
         // ice-free surface albedos already include typical cloud cover; using the
         // hot steam state's cloud/albedo fields here causes a two-step flip-flop.
-        const cooledAlbedo = new Float32Array(grid.cellCount);
+        const cooledAlbedo = climate.cooledAlbedo;
         for (let i = 0; i < grid.cellCount; i++) cooledAlbedo[i] = scaledSurface(i);
         const cooledAtmosphere = {
           ...globals.atmosphere,
@@ -505,12 +506,14 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
         );
         let maxChange = 0;
         for (let i = 0; i < grid.cellCount; i++) {
+          const row = Math.floor(i / grid.width);
+          const ocean = oceanMask[i] === 1;
           seasonalAmplitude[i] =
             seasonalAmplitudeScale *
             seasonalAmplitudeFromHarmonic(
-              seasonalForcing[Math.floor(i / grid.width)]!,
+              seasonalForcing[row]!,
               albedo[i]!,
-              isOcean(elevation[i]!, globals.seaLevel),
+              ocean,
               continentality?.[i] ?? 0,
               iceCover[i]!,
             );
@@ -528,7 +531,7 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
             );
           }
           const ice = surfaceIceCover(
-            isOcean(elevation[i]!, globals.seaLevel),
+            ocean,
             airTemperature[i]!,
             precipitation[i]!,
             iceThickness[i]!,
@@ -578,7 +581,7 @@ export function createClimate(options: ClimateOptions = {}): SimComponent {
             );
           }
           iceCover[i] = surfaceIceCover(
-            isOcean(elevation[i]!, globals.seaLevel),
+            oceanMask[i] === 1,
             airTemperature[i]!,
             precipitation[i]!,
             iceThickness[i]!,
@@ -660,10 +663,35 @@ interface ClimateGrid {
   transportScale: number;
   /** Unit-sphere area of each coarse row. */
   rowArea: Float64Array;
+  /** Unit-sphere row area expanded once per coarse cell. */
+  cellRowArea: Float64Array;
   /** Coarse temperatures (°C), kept between steps as the solver's starting guess. */
   temperature: Float64Array;
   coarseAlbedo: Float64Array;
   rhs: Float64Array;
+  coarseWeight: Float64Array;
+  diagonal: Float64Array;
+  diagonalTransportScale: number;
+  /** transportScale × conductance, refreshed with the diagonal. */
+  scaledConductance: Float64Array;
+  residual: Float64Array;
+  preconditioned: Float64Array;
+  direction: Float64Array;
+  operatorResult: Float64Array;
+  seasonalForcing: Float64Array;
+  previous: Float32Array;
+  cooledAlbedo: Float32Array;
+  continentalDistance: Float64Array;
+  continentality: Float32Array;
+  oceanMask: Uint8Array;
+  fineToCoarse: Int32Array;
+  fineX0: Int32Array;
+  fineX1: Int32Array;
+  fineTx: Float64Array;
+  fineY0: Int32Array;
+  fineY1: Int32Array;
+  fineTy: Float64Array;
+  coastHeap: MinHeap;
 }
 
 const climateCache = new WeakMap<Grid, ClimateGrid>();
@@ -689,6 +717,7 @@ function buildClimateGrid(grid: Grid, diffusivity: number): ClimateGrid {
   const neighbors = new Int32Array(n * 4);
   const conductance = new Float64Array(n * 4);
   const rowArea = new Float64Array(height);
+  const cellRowArea = new Float64Array(n);
   for (let y = 0; y < height; y++) {
     rowArea[y] = coarse.rowCellArea[y]!;
     const lat = (coarse.rowLatitude[y]! * Math.PI) / 180;
@@ -700,6 +729,7 @@ function buildClimateGrid(grid: Grid, diffusivity: number): ClimateGrid {
     const south = (Math.cos(southEdge) * dLon) / dLat;
     for (let x = 0; x < width; x++) {
       const i = y * width + x;
+      cellRowArea[i] = rowArea[y]!;
       neighbors[i * 4] = y > 0 ? i - width : -1;
       neighbors[i * 4 + 1] = y * width + ((x + 1) % width);
       neighbors[i * 4 + 2] = y < height - 1 ? i + width : -1;
@@ -710,18 +740,77 @@ function buildClimateGrid(grid: Grid, diffusivity: number): ClimateGrid {
       conductance[i * 4 + 3] = diffusivity * ew;
     }
   }
+  const factor = grid.width / width;
+  const fineToCoarse = new Int32Array(grid.cellCount);
+  const fineX0 = new Int32Array(grid.width);
+  const fineX1 = new Int32Array(grid.width);
+  const fineTx = new Float64Array(grid.width);
+  const fineY0 = new Int32Array(grid.height);
+  const fineY1 = new Int32Array(grid.height);
+  const fineTy = new Float64Array(grid.height);
+  const coarseWeight = new Float64Array(n);
+  for (let x = 0; x < grid.width; x++) {
+    const cx = (x + 0.5) / factor - 0.5;
+    const xf = Math.floor(cx);
+    fineTx[x] = cx - xf;
+    fineX0[x] = (xf + width) % width;
+    fineX1[x] = (fineX0[x]! + 1) % width;
+  }
+  for (let y = 0; y < grid.height; y++) {
+    const cy = (y + 0.5) / factor - 0.5;
+    fineY0[y] = Math.max(0, Math.min(height - 1, Math.floor(cy)));
+    fineY1[y] = Math.min(height - 1, fineY0[y]! + 1);
+    fineTy[y] = Math.max(0, Math.min(1, cy - fineY0[y]!));
+    const coarseRow = Math.floor(y / factor) * width;
+    const fineRow = y * grid.width;
+    const area = grid.rowCellArea[y]!;
+    for (let x = 0; x < grid.width; x++) {
+      const fine = fineRow + x;
+      const cell = coarseRow + Math.floor(x / factor);
+      fineToCoarse[fine] = cell;
+      coarseWeight[cell] = coarseWeight[cell]! + area;
+    }
+  }
   return {
     coarse,
-    factor: grid.width / width,
+    factor,
     neighbors,
     conductance,
     diffusivity,
     transportScale: 1,
     rowArea,
+    cellRowArea,
     temperature: new Float64Array(n).fill(14),
     coarseAlbedo: new Float64Array(n),
     rhs: new Float64Array(n),
+    coarseWeight,
+    diagonal: new Float64Array(n),
+    diagonalTransportScale: Number.NaN,
+    scaledConductance: new Float64Array(n * 4),
+    residual: new Float64Array(n),
+    preconditioned: new Float64Array(n),
+    direction: new Float64Array(n),
+    operatorResult: new Float64Array(n),
+    seasonalForcing: new Float64Array(grid.height),
+    previous: new Float32Array(grid.cellCount),
+    cooledAlbedo: new Float32Array(grid.cellCount),
+    continentalDistance: new Float64Array(grid.cellCount),
+    continentality: new Float32Array(grid.cellCount),
+    oceanMask: new Uint8Array(grid.cellCount),
+    fineToCoarse,
+    fineX0,
+    fineX1,
+    fineTx,
+    fineY0,
+    fineY1,
+    fineTy,
+    coastHeap: new MinHeap(),
   };
+}
+
+function climatePrevious(climate: ClimateGrid, temperature: Float32Array): Float32Array {
+  climate.previous.set(temperature);
+  return climate.previous;
 }
 
 /**
@@ -757,24 +846,46 @@ function seasonalAmplitudeFromHarmonic(
   const forcing = firstHarmonic * (1 - Math.max(0, Math.min(1, albedo)));
   const ice = Math.max(0, Math.min(1, iceCover));
   if (ocean) {
-    return responseAmplitude(
-      forcing,
-      OCEAN_HEAT_CAPACITY * (1 - (1 - SEA_ICE_HEAT_CAPACITY_FACTOR) * ice),
-    );
+    const capacity = OCEAN_HEAT_CAPACITY * (1 - (1 - SEA_ICE_HEAT_CAPACITY_FACTOR) * ice);
+    return forcing / seasonalResponseDenominator(capacity, OCEAN_HEAT_CAPACITY);
   }
   // Maritime air carries the ocean's small cycle inland: mix the two responses, not the heat
   // capacities (a capacity mix lets a little nearby sea swamp a continent's cycle).
-  const land = responseAmplitude(
-    forcing,
-    LAND_HEAT_CAPACITY * (1 - (1 - LAND_ICE_HEAT_CAPACITY_FACTOR) * ice),
-  );
-  const sea = responseAmplitude(forcing, OCEAN_HEAT_CAPACITY);
+  const landCapacity = LAND_HEAT_CAPACITY * (1 - (1 - LAND_ICE_HEAT_CAPACITY_FACTOR) * ice);
+  const land = forcing / seasonalResponseDenominator(landCapacity, LAND_HEAT_CAPACITY);
+  const sea = forcing / OCEAN_SEASONAL_DENOMINATOR;
   const c = Math.max(0, Math.min(1, continentality));
   return sea + (land - sea) * c;
 }
 
-function responseAmplitude(forcing: number, capacity: number): number {
-  return forcing / Math.hypot(SEASONAL_DAMPING, capacity * 2 * Math.PI);
+const LAND_SEASONAL_DENOMINATOR = Math.hypot(
+  SEASONAL_DAMPING,
+  LAND_HEAT_CAPACITY * 2 * Math.PI,
+);
+const OCEAN_SEASONAL_DENOMINATOR = Math.hypot(
+  SEASONAL_DAMPING,
+  OCEAN_HEAT_CAPACITY * 2 * Math.PI,
+);
+const LAND_ICE_CAPACITY = LAND_HEAT_CAPACITY * LAND_ICE_HEAT_CAPACITY_FACTOR;
+const OCEAN_ICE_CAPACITY = OCEAN_HEAT_CAPACITY * SEA_ICE_HEAT_CAPACITY_FACTOR;
+const LAND_ICE_SEASONAL_DENOMINATOR = Math.hypot(
+  SEASONAL_DAMPING,
+  LAND_ICE_CAPACITY * 2 * Math.PI,
+);
+const OCEAN_ICE_SEASONAL_DENOMINATOR = Math.hypot(
+  SEASONAL_DAMPING,
+  OCEAN_ICE_CAPACITY * 2 * Math.PI,
+);
+
+function seasonalResponseDenominator(capacity: number, iceFreeCapacity: number): number {
+  if (capacity === iceFreeCapacity) {
+    return iceFreeCapacity === OCEAN_HEAT_CAPACITY
+      ? OCEAN_SEASONAL_DENOMINATOR
+      : LAND_SEASONAL_DENOMINATOR;
+  }
+  if (capacity === OCEAN_ICE_CAPACITY) return OCEAN_ICE_SEASONAL_DENOMINATOR;
+  if (capacity === LAND_ICE_CAPACITY) return LAND_ICE_SEASONAL_DENOMINATOR;
+  return Math.hypot(SEASONAL_DAMPING, capacity * 2 * Math.PI);
 }
 
 /**
@@ -783,19 +894,35 @@ function responseAmplitude(forcing: number, capacity: number): number {
  * Distances run through the 8-neighbour graph in metres (Dijkstra), so the scale does not
  * depend on the grid.
  */
-function continentalityField(grid: Grid, elevation: Float32Array, seaLevel: number): Float32Array {
+function continentalityField(
+  climate: ClimateGrid,
+  grid: Grid,
+  oceanMask: Uint8Array,
+): Float32Array {
   const { neighbors, rowDistance } = getTopology(grid);
   const n = grid.cellCount;
-  const distance = new Float64Array(n).fill(Infinity);
-  const heap = new MinHeap();
+  const distance = climate.continentalDistance;
+  const heap = climate.coastHeap;
+  const out = climate.continentality;
+  distance.fill(Infinity);
+  heap.clear();
   for (let i = 0; i < n; i++) {
-    if (isOcean(elevation[i]!, seaLevel)) {
+    if (oceanMask[i]) {
       distance[i] = 0;
-      heap.push(i, 0);
+      // Interior ocean can never be the first sea cell on a land-to-sea path.
+      // Seed only the coastline, while retaining zero distance for all sea cells.
+      for (let k = 0; k < NEIGHBOR_COUNT; k++) {
+        const neighbor = neighbors[i * NEIGHBOR_COUNT + k]!;
+        if (neighbor >= 0 && !oceanMask[neighbor]) {
+          heap.push(i, 0);
+          break;
+        }
+      }
     }
   }
   while (heap.size > 0) {
-    const [i, d] = heap.pop();
+    const i = heap.pop();
+    const d = heap.poppedKey;
     if (d > distance[i]!) continue;
     const row = Math.floor(i / grid.width);
     for (let k = 0; k < NEIGHBOR_COUNT; k++) {
@@ -808,7 +935,6 @@ function continentalityField(grid: Grid, elevation: Float32Array, seaLevel: numb
       }
     }
   }
-  const out = new Float32Array(n);
   // A planet with no sea at all is fully continental.
   for (let i = 0; i < n; i++) {
     out[i] = Number.isFinite(distance[i]!) ? 1 - Math.exp(-distance[i]! / MARITIME_LENGTH) : 1;
@@ -816,13 +942,29 @@ function continentalityField(grid: Grid, elevation: Float32Array, seaLevel: numb
   return out;
 }
 
+function updateOceanMask(
+  climate: ClimateGrid,
+  elevation: Float32Array,
+  seaLevel: number,
+): Uint8Array {
+  const { oceanMask } = climate;
+  for (let i = 0; i < elevation.length; i++) oceanMask[i] = elevation[i]! < seaLevel ? 1 : 0;
+  return oceanMask;
+}
+
 /** Binary min-heap of (cell, key) pairs for the coast-distance search. */
 class MinHeap {
   private cells: number[] = [];
   private keys: number[] = [];
+  poppedKey = 0;
 
   get size(): number {
     return this.cells.length;
+  }
+
+  clear(): void {
+    this.cells.length = 0;
+    this.keys.length = 0;
   }
 
   push(cell: number, key: number): void {
@@ -841,9 +983,10 @@ class MinHeap {
     keys[i] = key;
   }
 
-  pop(): [number, number] {
+  pop(): number {
     const { cells, keys } = this;
-    const top: [number, number] = [cells[0]!, keys[0]!];
+    const top = cells[0]!;
+    this.poppedKey = keys[0]!;
     const lastCell = cells.pop()!;
     const lastKey = keys.pop()!;
     const n = cells.length;
@@ -881,18 +1024,17 @@ function requiredOlrFor(
   forcing: number,
   surfacePressure: number,
 ): number {
-  const { coarse, factor, coarseAlbedo, rhs, rowArea } = climate;
+  const { coarse, coarseAlbedo, rhs, rowArea, fineToCoarse } = climate;
 
   // Area-weighted mean albedo of the fine cells in each coarse cell.
   coarseAlbedo.fill(0);
-  const weight = new Float64Array(coarse.cellCount);
+  const weight = climate.coarseWeight;
   for (let fy = 0; fy < grid.height; fy++) {
-    const cy = Math.floor(fy / factor);
     const area = grid.rowCellArea[fy]!;
     for (let fx = 0; fx < grid.width; fx++) {
-      const c = cy * coarse.width + Math.floor(fx / factor);
-      coarseAlbedo[c] = coarseAlbedo[c]! + albedo[fy * grid.width + fx]! * area;
-      weight[c] = weight[c]! + area;
+      const i = fy * grid.width + fx;
+      const c = fineToCoarse[i]!;
+      coarseAlbedo[c] = coarseAlbedo[c]! + albedo[i]! * area;
     }
   }
   let absorbedSum = 0;
@@ -970,11 +1112,11 @@ function solveCoarse(
 }
 
 function shiftCoarseMean(climate: ClimateGrid, target: number): void {
-  const { temperature, rowArea, coarse } = climate;
+  const { temperature, cellRowArea } = climate;
   let sum = 0;
   let area = 0;
   for (let i = 0; i < temperature.length; i++) {
-    const weight = rowArea[Math.floor(i / coarse.width)]!;
+    const weight = cellRowArea[i]!;
     sum += temperature[i]! * weight;
     area += weight;
   }
@@ -987,17 +1129,23 @@ function shiftCoarseMean(climate: ClimateGrid, target: number): void {
   }
 }
 
-/** (A·B + D·L) x, the energy balance operator; symmetric positive definite. */
-function applyOperator(climate: ClimateGrid, x: Float64Array, out: Float64Array): void {
-  const { neighbors, conductance, rowArea, coarse, transportScale } = climate;
+/**
+ * (A·B + D·L) x, the energy balance operator; symmetric positive definite.
+ * Returns x · out, accumulated in the same order as a separate dot product.
+ */
+function applyOperator(climate: ClimateGrid, x: Float64Array, out: Float64Array): number {
+  const { neighbors, scaledConductance, cellRowArea } = climate;
+  let dot = 0;
   for (let i = 0; i < x.length; i++) {
-    let value = rowArea[Math.floor(i / coarse.width)]! * OLR_B * x[i]!;
+    let value = cellRowArea[i]! * OLR_B * x[i]!;
     for (let d = 0; d < 4; d++) {
       const n = neighbors[i * 4 + d]!;
-      if (n >= 0) value += transportScale * conductance[i * 4 + d]! * (x[i]! - x[n]!);
+      if (n >= 0) value += scaledConductance[i * 4 + d]! * (x[i]! - x[n]!);
     }
     out[i] = value;
+    dot += x[i]! * value;
   }
+  return dot;
 }
 
 /** Jacobi-preconditioned conjugate gradients, warm-started from the previous solution. */
@@ -1007,48 +1155,55 @@ function conjugateGradient(climate: ClimateGrid): void {
     rhs: b,
     neighbors,
     conductance,
-    rowArea,
-    coarse,
+    cellRowArea,
     transportScale,
   } = climate;
   const n = x.length;
-  const diagonal = new Float64Array(n);
-  for (let i = 0; i < n; i++) {
-    let value = rowArea[Math.floor(i / coarse.width)]! * OLR_B;
-    for (let d = 0; d < 4; d++) {
-      if (neighbors[i * 4 + d]! >= 0) value += transportScale * conductance[i * 4 + d]!;
+  const { diagonal, scaledConductance } = climate;
+  if (climate.diagonalTransportScale !== transportScale) {
+    for (let k = 0; k < scaledConductance.length; k++) {
+      scaledConductance[k] = transportScale * conductance[k]!;
     }
-    diagonal[i] = value;
+    for (let i = 0; i < n; i++) {
+      let value = cellRowArea[i]! * OLR_B;
+      for (let d = 0; d < 4; d++) {
+        if (neighbors[i * 4 + d]! >= 0) value += transportScale * conductance[i * 4 + d]!;
+      }
+      diagonal[i] = value;
+    }
+    climate.diagonalTransportScale = transportScale;
   }
-  const r = new Float64Array(n);
-  const z = new Float64Array(n);
-  const p = new Float64Array(n);
-  const ap = new Float64Array(n);
+  const {
+    residual: r,
+    preconditioned: z,
+    direction: p,
+    operatorResult: ap,
+  } = climate;
   applyOperator(climate, x, ap);
   let bNorm = 0;
   let rz = 0;
+  let rNorm = 0;
   for (let i = 0; i < n; i++) {
     r[i] = b[i]! - ap[i]!;
     z[i] = r[i]! / diagonal[i]!;
     p[i] = z[i]!;
     rz += r[i]! * z[i]!;
     bNorm += b[i]! * b[i]!;
+    rNorm += r[i]! * r[i]!;
   }
   const tolerance = 1e-10 * Math.max(bNorm, 1e-30);
   for (let iteration = 0; iteration < 500; iteration++) {
-    let rNorm = 0;
-    for (let i = 0; i < n; i++) rNorm += r[i]! * r[i]!;
     if (rNorm <= tolerance) break;
-    applyOperator(climate, p, ap);
-    let pAp = 0;
-    for (let i = 0; i < n; i++) pAp += p[i]! * ap[i]!;
+    const pAp = applyOperator(climate, p, ap);
     const alpha = rz / pAp;
     let rzNext = 0;
+    rNorm = 0;
     for (let i = 0; i < n; i++) {
       x[i] = x[i]! + alpha * p[i]!;
       r[i] = r[i]! - alpha * ap[i]!;
       z[i] = r[i]! / diagonal[i]!;
       rzNext += r[i]! * z[i]!;
+      rNorm += r[i]! * r[i]!;
     }
     const beta = rzNext / rz;
     rz = rzNext;
@@ -1148,21 +1303,18 @@ function interpolateToFine(
   surfaceGravity: number,
   out: Float32Array,
 ): void {
-  const { coarse, factor, temperature } = climate;
+  const { coarse, temperature, fineX0, fineX1, fineTx, fineY0, fineY1, fineTy } = climate;
   const { seaLevel, seaWeight, meanSurface } = datum;
   const gravityRatio = surfaceGravity / EARTH_SURFACE_GRAVITY;
   const cw = coarse.width;
   for (let fy = 0; fy < grid.height; fy++) {
-    const cy = (fy + 0.5) / factor - 0.5;
-    const y0 = Math.max(0, Math.min(coarse.height - 1, Math.floor(cy)));
-    const y1 = Math.min(coarse.height - 1, y0 + 1);
-    const ty = Math.max(0, Math.min(1, cy - y0));
+    const y0 = fineY0[fy]!;
+    const y1 = fineY1[fy]!;
+    const ty = fineTy[fy]!;
     for (let fx = 0; fx < grid.width; fx++) {
-      const cx = (fx + 0.5) / factor - 0.5;
-      const xf = Math.floor(cx);
-      const tx = cx - xf;
-      const x0 = (xf + cw) % cw;
-      const x1 = (x0 + 1) % cw;
+      const tx = fineTx[fx]!;
+      const x0 = fineX0[fx]!;
+      const x1 = fineX1[fx]!;
       const top = temperature[y0 * cw + x0]! * (1 - tx) + temperature[y0 * cw + x1]! * tx;
       const bottom = temperature[y1 * cw + x0]! * (1 - tx) + temperature[y1 * cw + x1]! * tx;
       const i = fy * grid.width + fx;

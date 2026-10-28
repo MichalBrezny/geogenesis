@@ -56,6 +56,21 @@ export function seasonalSnowFractionAt(temperature: number, amplitude: number): 
 /** Albedo-relevant seasonal ice from the sunlit fraction of the year below the ice ramp. */
 function seasonalThermalIceCover(temperature: number, amplitude: number): number {
   if (amplitude <= 0) return iceFractionAt(temperature);
+  // Most cells are far outside the narrow ice-edge band. These bounds produce
+  // exactly the same all-zero/all-one quadrature result without three inverse
+  // cosine evaluations per cell in every climate iteration.
+  if (
+    temperature >= -5 &&
+    temperature - amplitude >= -10 + 5 * ICE_QUADRATURE_NODES[2]!
+  ) {
+    return 0;
+  }
+  if (
+    temperature <= -15 &&
+    temperature + amplitude <= -10 + 5 * ICE_QUADRATURE_NODES[0]!
+  ) {
+    return 1;
+  }
   let ice = 0;
   for (let sample = 0; sample < ICE_QUADRATURE_NODES.length; sample++) {
     const threshold = -10 + 5 * ICE_QUADRATURE_NODES[sample]!;

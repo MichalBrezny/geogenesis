@@ -51,7 +51,9 @@ export const oceanChemistry: SimComponent = {
   runOneStep(state, dtYears) {
     const { grid, fields, globals } = state;
     const { elevation, nutrients, oceanOxygen } = fields;
-    const sea = new Uint8Array(grid.cellCount);
+    const scratch = chemistryScratch(grid);
+    const { sea } = scratch;
+    sea.fill(0);
     let oceanWeight = 0;
     for (let y = 0; y < grid.height; y++) {
       const weight = grid.rowAreaWeight[y]!;
@@ -73,6 +75,7 @@ export const oceanChemistry: SimComponent = {
 
     const { pattern, coast } = nutrientPattern(
       grid,
+      scratch,
       sea,
       oceanWeight,
       elevation,
@@ -120,8 +123,88 @@ export const oceanChemistry: SimComponent = {
   },
 };
 
+interface MixingKernel {
+  radius: number;
+  weights: Float64Array;
+}
+
+interface ChemistryScratch {
+  sea: Uint8Array;
+  coast: Float64Array;
+  eastBoundary: Uint8Array;
+  raw: Float64Array;
+  riverSource: Float64Array;
+  upwellingSource: Float64Array;
+  horizontal: Float64Array;
+  horizontalUpwelling: Float64Array;
+  horizontalWeightSum: Float64Array;
+  verticalWeightSum: Float64Array;
+  river: Float64Array;
+  upwelling: Float64Array;
+  pattern: Float64Array;
+  horizontalKernels: MixingKernel[];
+  verticalRadius: number;
+  /** Kernel by offset, then source row; includes the source row's cell area. */
+  verticalWeights: Float64Array;
+}
+
+const chemistryScratchCache = new WeakMap<Grid, ChemistryScratch>();
+
+/** Grid-sized work arrays and physical Gaussian kernels, shared by chemistry steps. */
+function chemistryScratch(grid: Grid): ChemistryScratch {
+  let scratch = chemistryScratchCache.get(grid);
+  if (scratch) return scratch;
+  const n = grid.cellCount;
+  const cutoff = 3 * NUTRIENT_MIXING_LENGTH;
+  const horizontalKernels = Array.from({ length: grid.height }, (_, y) => {
+    const dx = grid.rowDx[y]!;
+    const radius = Math.min(Math.floor(grid.width / 2), Math.ceil(cutoff / dx));
+    const weights = new Float64Array(radius * 2 + 1);
+    for (let offset = -radius; offset <= radius; offset++) {
+      const distance = offset * dx;
+      weights[offset + radius] = Math.exp(
+        (-0.5 * distance * distance) / (NUTRIENT_MIXING_LENGTH * NUTRIENT_MIXING_LENGTH),
+      );
+    }
+    return { radius, weights };
+  });
+  const verticalRadius = Math.min(grid.height - 1, Math.ceil(cutoff / grid.dy));
+  const verticalWeights = new Float64Array((verticalRadius * 2 + 1) * grid.height);
+  for (let offset = -verticalRadius; offset <= verticalRadius; offset++) {
+    const distance = offset * grid.dy;
+    const gaussian = Math.exp(
+      (-0.5 * distance * distance) / (NUTRIENT_MIXING_LENGTH * NUTRIENT_MIXING_LENGTH),
+    );
+    const base = (offset + verticalRadius) * grid.height;
+    for (let sourceY = 0; sourceY < grid.height; sourceY++) {
+      verticalWeights[base + sourceY] = gaussian * grid.rowCellArea[sourceY]!;
+    }
+  }
+  scratch = {
+    sea: new Uint8Array(n),
+    coast: new Float64Array(n),
+    eastBoundary: new Uint8Array(n),
+    raw: new Float64Array(n),
+    riverSource: new Float64Array(n),
+    upwellingSource: new Float64Array(n),
+    horizontal: new Float64Array(n),
+    horizontalUpwelling: new Float64Array(n),
+    horizontalWeightSum: new Float64Array(n),
+    verticalWeightSum: new Float64Array(n),
+    river: new Float64Array(n),
+    upwelling: new Float64Array(n),
+    pattern: new Float64Array(n),
+    horizontalKernels,
+    verticalRadius,
+    verticalWeights,
+  };
+  chemistryScratchCache.set(grid, scratch);
+  return scratch;
+}
+
 function nutrientPattern(
   grid: Grid,
+  scratch: ChemistryScratch,
   sea: Uint8Array,
   oceanWeight: number,
   elevation: Float32Array,
@@ -129,12 +212,7 @@ function nutrientPattern(
   upwelling: Float32Array,
   seaLevel: number,
 ): { pattern: Float64Array; coast: Float64Array } {
-  const n = grid.cellCount;
-  const coast = new Float64Array(n);
-  const eastBoundary = new Uint8Array(n);
-  const raw = new Float64Array(n);
-  const riverSource = new Float64Array(n);
-  const upwellingSource = new Float64Array(n);
+  const { coast, eastBoundary, raw, riverSource, upwellingSource } = scratch;
   let rawSum = 0;
   let rawMaximum = 0;
   const { width, height, rowAreaWeight } = grid;
@@ -164,8 +242,9 @@ function nutrientPattern(
   // A physical mixing length avoids one-cell bands changing width with grid
   // resolution. Area weighting matters in the north-south pass because an
   // equirectangular cell represents progressively less sea towards the poles.
-  const river = smoothOceanField(grid, sea, riverSource, NUTRIENT_MIXING_LENGTH);
-  const up = smoothOceanField(grid, sea, upwellingSource, NUTRIENT_MIXING_LENGTH);
+  smoothOceanFields(grid, sea, riverSource, upwellingSource, scratch);
+  const river = scratch.river;
+  const up = scratch.upwelling;
   for (let y = 0; y < height; y++) {
     const row = y * width;
     const weight = rowAreaWeight[y]!;
@@ -185,65 +264,87 @@ function nutrientPattern(
     }
   }
   return {
-    pattern: normalizeOceanPattern(grid, sea, raw, oceanWeight, rawSum, rawMaximum),
+    pattern: normalizeOceanPattern(
+      grid,
+      sea,
+      raw,
+      oceanWeight,
+      rawSum,
+      rawMaximum,
+      scratch.pattern,
+    ),
     coast,
   };
 }
 
 /** Gaussian lateral mixing over sea cells, separable for a linear-time local stencil. */
-function smoothOceanField(
+function smoothOceanFields(
   grid: Grid,
   sea: Uint8Array,
-  source: Float64Array,
-  length: number,
-): Float64Array {
-  const { width, height, dy, rowDx, rowCellArea } = grid;
-  const cutoff = 3 * length;
-  const horizontal = new Float64Array(source.length);
+  riverSource: Float64Array,
+  upwellingSource: Float64Array,
+  scratch: ChemistryScratch,
+): void {
+  const { width, height } = grid;
+  const {
+    horizontal,
+    horizontalUpwelling,
+    horizontalKernels,
+    horizontalWeightSum,
+    verticalRadius,
+    verticalWeights,
+    verticalWeightSum,
+    river,
+    upwelling,
+  } = scratch;
   for (let y = 0; y < height; y++) {
     const row = y * width;
-    const dx = rowDx[y]!;
-    const radius = Math.min(Math.floor(width / 2), Math.ceil(cutoff / dx));
+    const { radius, weights } = horizontalKernels[y]!;
     for (let x = 0; x < width; x++) {
       const i = row + x;
       if (!sea[i]) continue;
-      let sum = 0;
+      let riverSum = 0;
+      let upwellingSum = 0;
       let weightSum = 0;
       for (let offset = -radius; offset <= radius; offset++) {
-        const j = row + ((x + offset + width) % width);
+        let sourceX = x + offset;
+        if (sourceX < 0) sourceX += width;
+        else if (sourceX >= width) sourceX -= width;
+        const j = row + sourceX;
         if (!sea[j]) continue;
-        const distance = offset * dx;
-        const weight = Math.exp((-0.5 * distance * distance) / (length * length));
-        sum += source[j]! * weight;
+        const weight = weights[offset + radius]!;
+        riverSum += riverSource[j]! * weight;
+        upwellingSum += upwellingSource[j]! * weight;
         weightSum += weight;
       }
-      horizontal[i] = weightSum > 0 ? sum / weightSum : source[i]!;
+      horizontalWeightSum[i] = weightSum;
+      horizontal[i] = weightSum > 0 ? riverSum / weightSum : riverSource[i]!;
+      horizontalUpwelling[i] =
+        weightSum > 0 ? upwellingSum / weightSum : upwellingSource[i]!;
     }
   }
-
-  const mixed = new Float64Array(source.length);
-  const rowRadius = Math.min(height - 1, Math.ceil(cutoff / dy));
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const i = y * width + x;
       if (!sea[i]) continue;
-      let sum = 0;
+      let riverSum = 0;
+      let upwellingSum = 0;
       let weightSum = 0;
-      for (let offset = -rowRadius; offset <= rowRadius; offset++) {
+      for (let offset = -verticalRadius; offset <= verticalRadius; offset++) {
         const sourceY = y + offset;
         if (sourceY < 0 || sourceY >= height) continue;
         const j = sourceY * width + x;
         if (!sea[j]) continue;
-        const distance = offset * dy;
-        const weight =
-          Math.exp((-0.5 * distance * distance) / (length * length)) * rowCellArea[sourceY]!;
-        sum += horizontal[j]! * weight;
+        const weight = verticalWeights[(offset + verticalRadius) * height + sourceY]!;
+        riverSum += horizontal[j]! * weight;
+        upwellingSum += horizontalUpwelling[j]! * weight;
         weightSum += weight;
       }
-      mixed[i] = weightSum > 0 ? sum / weightSum : horizontal[i]!;
+      verticalWeightSum[i] = weightSum;
+      river[i] = weightSum > 0 ? riverSum / weightSum : horizontal[i]!;
+      upwelling[i] = weightSum > 0 ? upwellingSum / weightSum : horizontalUpwelling[i]!;
     }
   }
-  return mixed;
 }
 
 /** Normalize to ocean mean one while retaining the documented 0..3 field bound. */
@@ -254,8 +355,8 @@ function normalizeOceanPattern(
   oceanWeight: number,
   rawSum: number,
   rawMaximum: number,
+  pattern: Float64Array,
 ): Float64Array {
-  const pattern = new Float64Array(raw.length);
   let scale = oceanWeight / rawSum;
   if (rawMaximum * scale > MAX_NUTRIENTS) {
     // Active-set water filling: capped plume cells contribute three, while one
