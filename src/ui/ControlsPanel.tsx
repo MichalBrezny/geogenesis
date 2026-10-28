@@ -10,12 +10,14 @@ interface Slider {
   step: number;
   unit?: string;
   digits?: number;
+  /** Below this target the slider shows its `controlWarning.<key>` string. */
+  warnBelow?: number;
 }
 
 const SLIDERS: readonly Slider[] = [
   { key: 'solarFactor', min: 0.8, max: 1.2, step: 0.01 },
   { key: 'obliquity', min: 0, max: 60, step: 0.1, unit: '°', digits: 1 },
-  { key: 'volcanism', min: 0, max: 3, step: 0.1 },
+  { key: 'volcanism', min: 0, max: 3, step: 0.1, warnBelow: 0.3 },
   { key: 'driftSpeed', min: 0, max: 3, step: 0.1 },
   { key: 'erosion', min: 0, max: 3, step: 0.1 },
   { key: 'mutationRate', min: 0, max: 5, step: 0.1 },
@@ -141,6 +143,11 @@ function SliderControl(props: {
           <span aria-hidden="true">&#8635;</span>
           <span className="visually-hidden">{t('controlsPanel.reset')}</span>
         </button>
+      )}
+      {props.slider.warnBelow !== undefined && props.value < props.slider.warnBelow && (
+        <p className="control-warning" role="status">
+          {t(`controlWarning.${key}` as MessageKey)}
+        </p>
       )}
     </div>
   );

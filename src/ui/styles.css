@@ -2091,6 +2091,13 @@ button.event-entry:hover:not(:disabled) {
 }
 
 /* M18a: show the lagged physical value beside the player's model set point. */
+.sliders > div > .control-warning {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--warning);
+  font-size: 0.78rem;
+}
+
 .control-effective {
   color: var(--text-secondary);
   font-size: 0.72rem;
