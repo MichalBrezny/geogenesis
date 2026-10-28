@@ -813,12 +813,18 @@ function evolve(
         const i = y * grid.width + x;
         const fit = suitability[c * n + i]!;
         if (fit === 0) continue;
-        potential += fit * weight;
         let ancestor = biota.populations[a * n + i]!;
+        let ancestorHabitat = suitability[a * n + i]! > 0;
         for (let d = 0; d < NEIGHBOR_COUNT; d += 2) {
           const nb = neighbors[i * NEIGHBOR_COUNT + d]!;
-          if (nb >= 0) ancestor = Math.max(ancestor, biota.populations[a * n + nb]!);
+          if (nb < 0) continue;
+          ancestor = Math.max(ancestor, biota.populations[a * n + nb]!);
+          if (suitability[a * n + nb]! > 0) ancestorHabitat = true;
         }
+        // Only the frontier the ancestor could reach counts (the coast for a move between
+        // sea and land), so the share does not shrink with the cell size.
+        if (!ancestorHabitat) continue;
+        potential += fit * weight;
         // Presence matters, not density: sparse land animals evolve as readily as dense plankton.
         const score = Math.min(1, ancestor / PRESENCE_POPULATION) * fit;
         overlap += score * weight;
