@@ -181,6 +181,8 @@ interface Props {
   toolEffect?: { tool: ToolId; cell: number; serial: number } | null;
   /** Reports the life/city symbols actually represented by the current lattice. */
   onVisibleIconsChange?: (icons: VisibleMapIcons) => void;
+  /** Multiplier for animated wind and current particle counts. */
+  particleDensity?: number;
 }
 
 /** The planet as a flat map or a globe, with the cell inspector under the pointer. */
@@ -198,6 +200,7 @@ export function PlanetView({
   centreRequest,
   toolEffect,
   onVisibleIconsChange,
+  particleDensity = 1,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
@@ -211,6 +214,7 @@ export function PlanetView({
     width: number;
     height: number;
   }>({ layers: new Map(), project: null, width: 0, height: 0 });
+  const previousParticleDensity = useRef(particleDensity);
   const [hovered, setHovered] = useState<HoveredCell | null>(null);
   const [eventCategories, setEventCategories] = useState<Set<EventCategory>>(
     () => new Set(EVENT_CATEGORIES),
@@ -223,7 +227,13 @@ export function PlanetView({
   }, [hoveredCell, frame, onInspect]);
   const [globeView, setGlobeView] = useState<GlobeView>({ longitude: 180, latitude: 20 });
   const [mapView, setMapView] = useState<MapViewport>(FULL_VIEW);
-  const [minimapOn, setMinimapOn] = useState(() => localStorage.getItem(MINIMAP_KEY) !== 'false');
+  const [minimapOn, setMinimapOn] = useState(() => {
+    try {
+      return localStorage.getItem(MINIMAP_KEY) !== 'false';
+    } catch {
+      return true;
+    }
+  });
   const drag = useRef<{
     x: number;
     y: number;
@@ -243,7 +253,11 @@ export function PlanetView({
   const mapSource = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
-    localStorage.setItem(MINIMAP_KEY, String(minimapOn));
+    try {
+      localStorage.setItem(MINIMAP_KEY, String(minimapOn));
+    } catch {
+      // The minimap still works for this session when storage is unavailable.
+    }
   }, [minimapOn]);
 
   useEffect(() => {
@@ -361,6 +375,10 @@ export function PlanetView({
   // Keep a particle layer per shown overlay, flowing along the newest fields.
   useEffect(() => {
     const { layers } = flow.current;
+    if (previousParticleDensity.current !== particleDensity) {
+      layers.clear();
+      previousParticleDensity.current = particleDensity;
+    }
     const shown = overlays.filter(isFlowOverlay);
     for (const kind of [...layers.keys()]) if (!shown.includes(kind)) layers.delete(kind);
     const area = overlaySize.width * overlaySize.height * (view === 'globe' ? 0.785 : 1);
@@ -369,13 +387,17 @@ export function PlanetView({
       const layer = layers.get(kind);
       if (layer) layer.field = field;
       else if (area > 0) {
-        const created = createFlowLayer(field, FLOW_STYLES[kind], area);
+        const created = createFlowLayer(
+          field,
+          { ...FLOW_STYLES[kind], density: FLOW_STYLES[kind].density * particleDensity },
+          area,
+        );
         const { region, speed } = flowRegion(view, mapView);
         if (region) setFlowRegion(created, region, speed);
         layers.set(kind, created);
       }
     }
-  }, [frame, overlays, overlaySize, view, mapView]);
+  }, [frame, overlays, overlaySize, view, mapView, particleDensity]);
 
   // Zooming or panning moves the particles into the new view and wipes the old trails.
   useEffect(() => {
@@ -757,12 +779,7 @@ export function PlanetView({
         )}
       </div>
       {hovered && (
-        <CellInspector
-          frame={frame}
-          cell={hovered}
-          life={cellLife}
-          climate={cellClimate}
-        />
+        <CellInspector frame={frame} cell={hovered} life={cellLife} climate={cellClimate} />
       )}
     </>
   );

@@ -43,6 +43,17 @@ import { ToastStack } from './ToastStack';
 import { eventSignature, eventsAfter, mergeToastEvents, type EventToast } from './toastQueue';
 import { FirstGameTour } from './FirstGameTour';
 import { rememberTourComplete, shouldStartTour, TOUR_ANCHORS, type GuidePageId } from './guide';
+import { SettingsDialog } from './SettingsDialog';
+import { loadSettings, saveSettings, type Settings } from './settings';
+import {
+  addAutosave,
+  createBrowserSaveStore,
+  latestAutosave,
+  listSaves,
+  renameSave,
+  saveManualSlot,
+  type StoredSave,
+} from './saveStore';
 
 /** How long a tool notice stays on screen, ms. */
 const NOTICE_DURATION = 3000;
@@ -352,6 +363,23 @@ function randomSeed(): number {
 
 export function App() {
   const workerRef = useRef<Worker | null>(null);
+  const saveStore = useRef(createBrowserSaveStore());
+  const pendingBrowserSaves = useRef(
+    new Map<
+      number,
+      {
+        kind: 'manual' | 'autosave';
+        id: string;
+        name: string;
+        scenario: ScenarioId;
+        planetAge: number;
+        era: Frame['era'];
+        savedAt: number;
+      }
+    >(),
+  );
+  const nextSaveRequest = useRef(1);
+  const lastHideSave = useRef(0);
   const stageRef = useRef<HTMLElement>(null);
   const captureObliquityDefault = useRef(true);
   const [frame, setFrame] = useState<Frame | null>(null);
@@ -379,7 +407,12 @@ export function App() {
       setOverlays((current) => (current.includes(overlay) ? current : [...current, overlay]));
   };
   const [running, setRunning] = useState(false);
-  const [speed, setSpeed] = useState<Speed>('fast');
+  const [settings, setSettings] = useState(loadSettings);
+  const initialSettings = useRef(settings);
+  const [speed, setSpeed] = useState<Speed>(settings.speed);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [browserSaves, setBrowserSaves] = useState<StoredSave[]>([]);
+  const [continueSave, setContinueSave] = useState<StoredSave | null>(null);
   const [tool, setTool] = useState<ToolId | null>(null);
   const [lifeClass, setLifeClass] = useState<LifeClassKey>('prokaryotes');
   const [cellLife, setCellLife] = useState<CellLife | null>(null);
@@ -435,6 +468,52 @@ export function App() {
   }, []);
 
   const send = useCallback((request: WorkerRequest) => workerRef.current?.postMessage(request), []);
+  const frameRef = useRef(frame);
+  useEffect(() => {
+    frameRef.current = frame;
+  }, [frame]);
+  const refreshBrowserSaves = useCallback(async () => {
+    const saves = await listSaves(saveStore.current);
+    setBrowserSaves(saves);
+    setContinueSave(await latestAutosave(saveStore.current));
+  }, []);
+  const requestBrowserSave = useCallback(
+    (kind: 'manual' | 'autosave', name: string, overwriteId?: string) => {
+      const current = frameRef.current;
+      if (!current) return;
+      const requestId = nextSaveRequest.current++;
+      pendingBrowserSaves.current.set(requestId, {
+        kind,
+        id: overwriteId ?? `${kind}-${Date.now()}-${requestId}`,
+        name,
+        scenario: current.scenario,
+        planetAge: current.year,
+        era: current.era,
+        savedAt: Date.now(),
+      });
+      send({ type: 'save', requestId });
+    },
+    [send],
+  );
+  const persistBrowserSave = useCallback(
+    async (message: Extract<WorkerResponse, { type: 'saved' }>) => {
+      if (message.requestId === undefined) {
+        download(message.bytes, message.fileName);
+        return;
+      }
+      const pending = pendingBrowserSaves.current.get(message.requestId);
+      pendingBrowserSaves.current.delete(message.requestId);
+      if (!pending) return;
+      const save = { ...pending, bytes: message.bytes };
+      const stored =
+        pending.kind === 'autosave'
+          ? await addAutosave(saveStore.current, save)
+          : await saveManualSlot(saveStore.current, save);
+      if (!stored) setNotice(t('saves.unavailable'));
+      await refreshBrowserSaves();
+    },
+    [refreshBrowserSaves],
+  );
   const dismissToast = useCallback(
     (id: number) => setToasts((current) => current.filter((toast) => toast.id !== id)),
     [],
@@ -515,7 +594,9 @@ export function App() {
                 fields: { ...current.fields, ...message.frame.fields },
               } as Frame),
         );
-        requestAnimationFrame(() => worker.postMessage({ type: 'frameAck' } satisfies WorkerRequest));
+        requestAnimationFrame(() =>
+          worker.postMessage({ type: 'frameAck' } satisfies WorkerRequest),
+        );
         setRunning(message.frame.running);
         if (toastWorldRevision.current !== message.frame.worldRevision) {
           toastWorldRevision.current = message.frame.worldRevision;
@@ -552,7 +633,7 @@ export function App() {
         setCellLife(message.life);
         setCellClimate(message.climate ?? null);
       } else if (message.type === 'error') setError(message.message);
-      else if (message.type === 'saved') download(message.bytes, message.fileName);
+      else if (message.type === 'saved') void persistBrowserSave(message);
       else if (message.type === 'toolApplied') {
         setToolEffect((current) => ({
           tool: message.tool,
@@ -572,12 +653,25 @@ export function App() {
       type: 'autoPause',
       settings: initialAutoPauseSettings.current,
     } satisfies WorkerRequest);
-    createPlanet('random', 1);
+    worker.postMessage({
+      type: 'speed',
+      delayMs: SPEEDS[initialSettings.current.speed],
+    } satisfies WorkerRequest);
+    createPlanet(
+      'random',
+      initialSettings.current.resolutionIndex,
+      'young',
+      undefined,
+      undefined,
+      'normal',
+      initialSettings.current.adaptivePacing,
+    );
+    void refreshBrowserSaves();
     return () => {
       window.clearTimeout(toolEffectTimer.current);
       worker.terminate();
     };
-  }, [createPlanet]);
+  }, [createPlanet, persistBrowserSave, refreshBrowserSaves]);
 
   const scenarioView = SCENARIO_VIEW[frame?.scenario ?? 'random'];
   // A loaded game may be another scenario than the layer was chosen for.
@@ -621,6 +715,49 @@ export function App() {
     const bytes = await file.arrayBuffer();
     workerRef.current?.postMessage({ type: 'load', bytes } satisfies WorkerRequest, [bytes]);
   };
+  const loadStoredSave = (save: StoredSave) => {
+    setError(null);
+    send({ type: 'run', running: false });
+    setRunning(false);
+    captureObliquityDefault.current = true;
+    const bytes = save.bytes.slice(0);
+    workerRef.current?.postMessage({ type: 'load', bytes } satisfies WorkerRequest, [bytes]);
+    setContinueSave(null);
+  };
+  const applySettings = (next: Settings) => {
+    setSettings(next);
+    saveSettings(next);
+    changeSpeed(next.speed);
+    send({ type: 'pacing', adaptive: next.adaptivePacing });
+  };
+
+  useEffect(() => {
+    if (settings.autosaveInterval === 0) return;
+    const timer = window.setInterval(
+      () => requestBrowserSave('autosave', t('saves.autosaveName')),
+      settings.autosaveInterval * 60_000,
+    );
+    return () => window.clearInterval(timer);
+  }, [requestBrowserSave, settings.autosaveInterval]);
+
+  useEffect(() => {
+    const requestHideSave = () => {
+      const now = Date.now();
+      if (settings.autosaveInterval !== 0 && now - lastHideSave.current > 1_000) {
+        lastHideSave.current = now;
+        requestBrowserSave('autosave', t('saves.autosaveName'));
+      }
+    };
+    const saveWhenHidden = () => {
+      if (document.visibilityState === 'hidden') requestHideSave();
+    };
+    document.addEventListener('visibilitychange', saveWhenHidden);
+    window.addEventListener('pagehide', requestHideSave);
+    return () => {
+      document.removeEventListener('visibilitychange', saveWhenHidden);
+      window.removeEventListener('pagehide', requestHideSave);
+    };
+  }, [requestBrowserSave, settings.autosaveInterval]);
 
   useEffect(() => {
     for (const id of FLOATING_WINDOWS) {
@@ -701,6 +838,7 @@ export function App() {
       setHelpPage(undefined);
       setHelpOpen(!helpOpen);
     },
+    ',': () => setSettingsOpen(true),
   };
   scenarioView.layers.forEach((id, index) => {
     shortcuts[index === 9 ? '0' : String(index + 1)] = () => chooseLayer(id);
@@ -761,11 +899,28 @@ export function App() {
         onStep={step}
         speed={speed}
         onSpeedChange={changeSpeed}
-        onAdaptivePacingChange={(adaptive) => send({ type: 'pacing', adaptive })}
+        onAdaptivePacingChange={(adaptivePacing) => {
+          const next = { ...settings, adaptivePacing };
+          setSettings(next);
+          saveSettings(next);
+          send({ type: 'pacing', adaptive: adaptivePacing });
+        }}
         onNewPlanet={newPlanet}
         onSave={(fileName) => send({ type: 'save', fileName })}
         onLoad={(file) => void load(file)}
         onShowHelp={() => openHelp()}
+        onShowSettings={() => setSettingsOpen(true)}
+        settings={settings}
+        saves={browserSaves}
+        latestAutosave={continueSave}
+        onSaveSlot={(name, overwriteId) => requestBrowserSave('manual', name, overwriteId)}
+        onLoadSlot={loadStoredSave}
+        onRenameSlot={(id, name) => {
+          void renameSave(saveStore.current, id, name).then(refreshBrowserSaves);
+        }}
+        onDeleteSlot={(id) => {
+          void saveStore.current.delete(id).then(refreshBrowserSaves);
+        }}
         error={error}
         newPlanetRequest={newPlanetRequest}
       />
@@ -869,6 +1024,7 @@ export function App() {
                   centreRequest={centreRequest}
                   toolEffect={toolEffect}
                   onVisibleIconsChange={visibleIconsChanged}
+                  particleDensity={settings.particleDensity}
                   onCellClick={(x, y, direction) => {
                     if (tool)
                       send({
@@ -918,6 +1074,13 @@ export function App() {
           setCentreRequest((current) => ({ cell, serial: (current?.serial ?? 0) + 1 }))
         }
       />
+      {settingsOpen && (
+        <SettingsDialog
+          settings={settings}
+          onClose={() => setSettingsOpen(false)}
+          onSave={applySettings}
+        />
+      )}
       {frame &&
         FLOATING_WINDOWS.map((id, index) => {
           if (!windowOpen[id]) return null;

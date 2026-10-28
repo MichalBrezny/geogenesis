@@ -159,7 +159,7 @@ export class SimHost {
           this.notePlayerInput();
           break;
         case 'save':
-          void this.save(request.fileName);
+          void this.save(request.fileName, request.requestId);
           break;
         case 'load':
           void this.load(request.bytes);
@@ -196,7 +196,7 @@ export class SimHost {
     }
   }
 
-  private async save(requestedFileName?: string): Promise<void> {
+  private async save(requestedFileName?: string, requestId?: number): Promise<void> {
     if (!this.world) return;
     const { planet } = this.world;
     try {
@@ -204,7 +204,15 @@ export class SimHost {
         serializeGame({ scenario: this.scenario, settings: this.world.settings, planet }),
       );
       const fileName = requestedFileName ?? `planet-${Math.round(planet.globals.year)}.geogenesis`;
-      this.post({ type: 'saved', bytes: bytes.buffer as ArrayBuffer, fileName }, [bytes.buffer]);
+      this.post(
+        {
+          type: 'saved',
+          bytes: bytes.buffer as ArrayBuffer,
+          fileName,
+          ...(requestId === undefined ? {} : { requestId }),
+        },
+        [bytes.buffer],
+      );
     } catch (error) {
       this.post({ type: 'error', message: String(error) }, []);
     }
