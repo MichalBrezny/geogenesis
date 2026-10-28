@@ -883,7 +883,7 @@ kbd {
 .dialog-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 40;
+  z-index: 1000; /* above floating windows, whose z-index grows from 40 */
   display: grid;
   place-items: center;
   padding: var(--dialog-space);
@@ -1617,7 +1617,7 @@ button.event-entry:hover:not(:disabled) {
 
 .toast-stack {
   position: fixed;
-  z-index: 30;
+  z-index: 900;
   top: 58px;
   right: 14px;
   display: flex;
