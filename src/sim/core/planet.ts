@@ -15,6 +15,12 @@ export const EARTH_ROTATION_PERIOD_HOURS = 24;
 
 export type StarType = 'F' | 'G' | 'K' | 'M';
 export type TectonicRegime = 'mobile' | 'stagnant';
+export type Difficulty = 'easy' | 'normal' | 'hard';
+
+export interface PacingSettings {
+  /** Batch quiet simulation steps into one rendered frame at Fast speed. */
+  adaptive: boolean;
+}
 
 /** Fixed physical parameters and initial volatile/carbon inventories. */
 export interface PlanetParameters {
@@ -530,6 +536,12 @@ export interface PlanetState {
   /** Saved deterministic names and compact overlap samples for map features. */
   mapNaming: MapNamingState;
   controls: ModelControls;
+  /** Set points shown in controls are above; physics reads these lagged values. */
+  effectiveControls: ModelControls;
+  /** Saved balance preset. */
+  difficulty: Difficulty;
+  /** Saved real-time pacing preference; it never changes simulated step lengths. */
+  pacing: PacingSettings;
   disasters: DisasterSettings;
   /** Scenario objective and evaluator memory; sandbox worlds have no goal. */
   goal: GoalState | null;
@@ -549,6 +561,8 @@ export interface PlanetOptions {
   seed?: number;
   /** Physical parameters; omitted values inherit the Earth calibration. */
   planetParams?: Partial<PlanetParameters>;
+  difficulty?: Difficulty;
+  adaptivePacing?: boolean;
 }
 
 export const DEFAULT_GRID_WIDTH = 128;
@@ -685,6 +699,9 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
     alertDiagnostics: createAlertDiagnostics(),
     mapNaming: createMapNamingState(),
     controls: { ...DEFAULT_CONTROLS },
+    effectiveControls: { ...DEFAULT_CONTROLS },
+    difficulty: options.difficulty ?? 'normal',
+    pacing: { adaptive: options.adaptivePacing ?? true },
     disasters: { ...DEFAULT_DISASTERS },
     goal: null,
     devices: [],

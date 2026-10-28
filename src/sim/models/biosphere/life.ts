@@ -472,7 +472,7 @@ function attemptAbiogenesis(state: PlanetState, dtYears: number, memory: Evoluti
   }
   if (candidates.length === 0) return;
   const rate = suitableArea / (ABIOGENESIS_REFERENCE_OCEAN * ABIOGENESIS_TIME);
-  const effectiveRate = rate * state.controls.advanceRate;
+  const effectiveRate = rate * state.effectiveControls.advanceRate;
   const progressBefore = memory.abiogenesisProgress;
   memory.abiogenesisProgress += effectiveRate * availableYears;
   if (memory.abiogenesisProgress < memory.abiogenesisThreshold) return;
@@ -666,7 +666,7 @@ export function classSuitability(
       : airTemperature[i]!;
     const d =
       (temperature - lifeClass.optimumTemperature) /
-      (lifeClass.temperatureTolerance * Math.max(0.05, state.controls.thermalTolerance));
+      (lifeClass.temperatureTolerance * Math.max(0.05, state.effectiveControls.thermalTolerance));
     let value = Math.max(0, 1 - d * d);
     // Life under sea ice survives at low density; land ice is uninhabitable.
     value *= ocean ? 1 - 0.8 * iceCover[i]! : 1 - iceCover[i]!;
@@ -723,7 +723,7 @@ function growAndSpread(
 ): void {
   const { grid, biota } = state;
   const n = grid.cellCount;
-  const reproduction = Math.max(0, state.controls.reproduction);
+  const reproduction = Math.max(0, state.effectiveControls.reproduction);
   const speed = reproduction * recovery;
   const growth = 1 - Math.exp((-dtYears * speed) / POPULATION_RESPONSE_TIME);
   const decline = 1 - Math.exp((-dtYears * reproduction) / POPULATION_DECLINE_TIME);
@@ -815,8 +815,8 @@ function evolve(
     );
     const rate =
       (mutationRate *
-        state.controls.mutationRate *
-        state.controls.advanceRate *
+        state.effectiveControls.mutationRate *
+        state.effectiveControls.advanceRate *
         share *
         scenarioFactor *
         evolutionBoost(state, lifeClass, dtYears)) /

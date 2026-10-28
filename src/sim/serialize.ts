@@ -240,6 +240,14 @@ function hydrateAddedState(planet: PlanetState): void {
   planet.controls.advanceRate ??= DEFAULT_CONTROLS.advanceRate;
   planet.controls.reproduction ??= DEFAULT_CONTROLS.reproduction;
   planet.controls.thermalTolerance ??= DEFAULT_CONTROLS.thermalTolerance;
+  planet.effectiveControls ??= { ...planet.controls };
+  for (const key of Object.keys(DEFAULT_CONTROLS) as (keyof typeof DEFAULT_CONTROLS)[]) {
+    planet.controls[key] ??= DEFAULT_CONTROLS[key];
+    planet.effectiveControls[key] ??= planet.controls[key];
+  }
+  planet.difficulty ??= 'normal';
+  planet.pacing ??= { adaptive: true };
+  planet.pacing.adaptive ??= true;
   planet.civPolicy = normalizeCivilizationPolicy(
     planet.civPolicy ?? {
       energy: { ...DEFAULT_CIV_POLICY.energy },

@@ -11,6 +11,7 @@ import { isOcean, liquidWaterGel } from '../geosphere/seaLevel';
 import { MODERN_PHOTOSYNTHESIS, photosynthesis } from './biogeochemistry';
 import { updateSurfacePressure } from './atmosphere';
 import { greenhouseForcing } from './climate';
+import { difficultyBalance } from '../../balance';
 
 export interface CarbonCycleOptions {
   /** Multiplier on volcanic CO₂ outgassing (a future player control). */
@@ -161,7 +162,9 @@ export function createCarbonCycle(options: CarbonCycleOptions = {}): SimComponen
     runOneStep(state, dtYears) {
       const activity = spatialVolcanicActivity(state);
       const outgassing =
-        volcanism * state.controls.volcanism * (activity + state.globals.lipOutgassing);
+        volcanism *
+        state.effectiveControls.volcanism *
+        (activity + state.globals.lipOutgassing);
       const atmosphere = state.globals.atmosphere;
       // Industry runs before the carbon cycle. Put its finite-reserve pulse into the
       // exchangeable atmosphere here, so weathering and greenhouse-predicted warming
@@ -197,7 +200,7 @@ export function createCarbonCycle(options: CarbonCycleOptions = {}): SimComponen
         (greenhouseForcing({ ...atmosphere, co2 }) - forcingBefore);
       const weathering = (co2: number) => {
         const warming = warmingAt(co2);
-        return (
+        return difficultyBalance(state).weatheringGain * (
           ((1 - SEAFLOOR_SHARE) *
             (current *
               Math.exp(WEATHERING_TEMPERATURE_SENSITIVITY * warming) *

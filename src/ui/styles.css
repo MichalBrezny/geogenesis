@@ -1919,9 +1919,16 @@ button.event-entry:hover:not(:disabled) {
 
 .sliders > div {
   display: grid;
-  grid-template-columns: minmax(7.5rem, auto) minmax(7rem, 1fr) 4.5rem 1.75rem;
+  grid-template-columns: minmax(7.5rem, auto) minmax(7rem, 1fr) 4.5rem 5.5rem 1.75rem;
   align-items: center;
   gap: 8px;
+}
+
+/* M18a: show the lagged physical value beside the player's model set point. */
+.control-effective {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  white-space: nowrap;
 }
 
 .sliders input[type='range'] {
@@ -2115,13 +2122,13 @@ button.event-entry:hover:not(:disabled) {
   }
 
   .sliders > div {
-    grid-template-columns: minmax(6.5rem, auto) minmax(5rem, 1fr) 4rem 1.75rem;
+    grid-template-columns: minmax(6.5rem, auto) minmax(5rem, 1fr) 4rem 5rem 1.75rem;
   }
 }
 
 @media (max-width: 380px) {
   .sliders > div {
-    grid-template-columns: minmax(0, 1fr) 4rem 1.75rem;
+    grid-template-columns: minmax(0, 1fr) 4rem 4.5rem 1.75rem;
   }
 
   .slider-name {

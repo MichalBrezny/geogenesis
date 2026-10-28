@@ -53,6 +53,8 @@ export const POLLUTION_RESIDENCE_TIME = 50;
 const FOSSIL_EXTRACTION_HALF = 500;
 /** Pollution-index source per billion people per year at a 100% fossil mix. */
 const POLLUTION_RATE = 0.005;
+/** Earth-like population at which the global emissions calibration is unchanged. */
+const EARTH_CIVILIZATION_POPULATION = 7;
 
 declare module '../../core/planet' {
   interface CivilizationState {
@@ -304,8 +306,15 @@ function emitCarbonAndPollution(
 ): void {
   const defaultMix = effectiveMixForPolicy(DEFAULT_CIV_POLICY.energy, state.civilization.age);
   const defaultFossil = Math.max(0.01, defaultMix.fossil);
+  // A small civilization concentrates industry in its inhabited area instead of
+  // diluting it over an empty planet. The sub-linear scale makes island societies
+  // environmentally visible, while remaining exactly 7 billion at Earth's calibration.
+  const environmentalPopulation = civilizationEnvironmentalScale(population);
   const desiredMicrobar =
-    baselineEmissions * population * dtYears * (production.mix.fossil / defaultFossil);
+    baselineEmissions *
+    environmentalPopulation *
+    dtYears *
+    (production.mix.fossil / defaultFossil);
   const desiredCarbon = desiredMicrobar * gtCarbonPerMicrobar(state);
   const fossilBurned = burnFossilCarbon(state, desiredCarbon, dtYears);
   state.civilization.fossilSupply = desiredCarbon > 0 ? fossilBurned / desiredCarbon : 1;
@@ -313,7 +322,7 @@ function emitCarbonAndPollution(
   // carbon is the dominant industrial source and is strictly limited by the reserve.
   const biomassCarbon =
     baselineEmissions *
-    population *
+    environmentalPopulation *
     dtYears *
     ENERGY_SOURCES.biomass.co2 *
     (production.mix.biomass / defaultFossil) *
@@ -324,7 +333,21 @@ function emitCarbonAndPollution(
     (sum, key) => sum + production.mix[key] * ENERGY_SOURCES[key].pollution,
     0,
   );
-  updatePollution(state, dtYears, population * pollutionIntensity * POLLUTION_RATE);
+  updatePollution(
+    state,
+    dtYears,
+    environmentalPopulation * pollutionIntensity * POLLUTION_RATE,
+  );
+}
+
+/** Effective population for planet-wide emissions and pollution (billions). */
+export function civilizationEnvironmentalScale(population: number): number {
+  if (!(population > 0)) return 0;
+  if (population >= EARTH_CIVILIZATION_POPULATION) return population;
+  return (
+    EARTH_CIVILIZATION_POPULATION *
+    (population / EARTH_CIVILIZATION_POPULATION) ** 0.72
+  );
 }
 
 /** Depletes the reserve with extraction becoming progressively harder at low inventory. */

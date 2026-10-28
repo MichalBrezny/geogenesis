@@ -48,6 +48,7 @@ import { goalTracker } from './goals/goals';
 import { terraformDevices } from './tools/devices';
 import { disasterModel } from './models/disasters';
 import { mapNamingModel } from './mapNames';
+import { modelControlLag } from './controls';
 import { trendAlerts } from './trendAlerts';
 
 export interface WorldOptions extends PlanetOptions {
@@ -122,6 +123,7 @@ export function createRandomWorld(options: WorldOptions = {}): World {
   const start = options.start ?? (options.startYear === undefined ? 'young' : 'quick');
   const parameterRng = createRng(planet.rngState);
   planet.controls.obliquity = randomObliquity(parameterRng);
+  planet.effectiveControls.obliquity = planet.controls.obliquity;
   planet.rngState = parameterRng.state;
   planet.globals.year = options.startYear ?? PLANET_START_AGES[start];
   const continentalFraction = options.continentalFraction ?? 0.28;
@@ -187,6 +189,7 @@ export function randomWorldFromPlanet(
   const simulation = createSimulation(
     [
       planetaryEvolution,
+      modelControlLag,
       impactModel,
       withMinInterval(
         createPlateDrift({ continentalFraction: settings.continentalFraction }),
@@ -279,6 +282,7 @@ export function createPlanetPreset(preset: PlanetPreset, options: PlanetOptions 
   const planet = createPlanet({ ...options, planetParams: definition.planetParams });
   planet.globals.year = 4.5e9;
   planet.controls.obliquity = definition.obliquity;
+  planet.effectiveControls.obliquity = definition.obliquity;
   planet.globals.atmosphere = { ...definition.atmosphere };
   planet.globals.co2Ice = definition.co2IceBar;
   planet.globals.crustalCarbon = Math.max(0, planet.globals.crustalCarbon - definition.co2IceBar);

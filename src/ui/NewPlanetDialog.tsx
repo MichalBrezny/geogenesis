@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { t, type MessageKey } from '../i18n/i18n';
-import type { PlanetParameters, StarType } from '../sim/core/planet';
+import type { Difficulty, PlanetParameters, StarType } from '../sim/core/planet';
+import { DIFFICULTIES } from '../sim/balance';
 import { SCENARIO_IDS, type ScenarioId } from '../sim/scenarios';
 import { PLANET_STARTS, type PlanetStart } from '../sim/world';
 import { Dialog } from './Dialog';
@@ -12,6 +13,8 @@ export interface NewPlanetChoice {
   seed: number;
   resolutionIndex: number;
   start: PlanetStart;
+  difficulty: Difficulty;
+  adaptivePacing: boolean;
   planetParams?: Partial<PlanetParameters>;
   continentalFraction?: number;
 }
@@ -21,6 +24,8 @@ export interface NewPlanetForm {
   seed: number;
   resolutionIndex: number;
   start: PlanetStart;
+  difficulty: Difficulty;
+  adaptivePacing: boolean;
   radiusKm: number;
   distanceAu: number;
   starType: StarType;
@@ -36,6 +41,8 @@ export function newPlanetChoice(form: NewPlanetForm): NewPlanetChoice {
     seed: form.seed >>> 0,
     resolutionIndex: form.resolutionIndex,
     start: form.start,
+    difficulty: form.difficulty,
+    adaptivePacing: form.adaptivePacing,
     ...(form.scenario === 'random'
       ? {
           planetParams: {
@@ -76,6 +83,8 @@ export function NewPlanetDialog({
     seed: randomSeed(),
     resolutionIndex: 1,
     start: 'young',
+    difficulty: 'normal',
+    adaptivePacing: true,
     radiusKm: 6371,
     distanceAu: 1,
     starType: 'G',
@@ -144,6 +153,20 @@ export function NewPlanetDialog({
         )}
 
         <div className="dialog-form-grid">
+          <label title={t('controls.difficultyHint')}>
+            {t('controls.difficulty')}
+            <select
+              value={form.difficulty}
+              onChange={(event) => set('difficulty', event.target.value as Difficulty)}
+              title={t('controls.difficultyHint')}
+            >
+              {DIFFICULTIES.map((id) => (
+                <option key={id} value={id}>
+                  {t(`difficulty.${id}`)}
+                </option>
+              ))}
+            </select>
+          </label>
           <label title={t('controls.resolutionHint')}>
             {t('controls.resolution')}
             <select
@@ -178,6 +201,15 @@ export function NewPlanetDialog({
                 {DICE_ICON}
               </button>
             </span>
+          </label>
+          <label className="checkbox-label" title={t('controls.adaptivePacingHint')}>
+            <input
+              type="checkbox"
+              checked={form.adaptivePacing}
+              onChange={(event) => set('adaptivePacing', event.target.checked)}
+              title={t('controls.adaptivePacingHint')}
+            />
+            {t('controls.adaptivePacing')}
           </label>
         </div>
 

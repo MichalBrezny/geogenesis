@@ -5,6 +5,7 @@ import { monthlyClimate } from './climateDiagram';
 function climateAt(latitude: number, options: { obliquity?: number; ocean?: boolean } = {}) {
   const state = createPlanet({ width: 36, height: 18, seed: 7 });
   state.controls.obliquity = options.obliquity ?? 23.44;
+  state.effectiveControls.obliquity = state.controls.obliquity;
   state.globals.circulation = { hadleyWidth: 30, meanItcz: 0 };
   state.globals.seaLevel = 0;
   state.fields.elevation.fill(options.ocean ? -1000 : 500);

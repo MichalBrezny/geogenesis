@@ -11,6 +11,7 @@ import { TECH_AGES } from '../data/civilization';
 import { LIFE_CLASSES } from '../data/lifeClasses';
 import { recordEvent } from '../events';
 import { complexBiomass } from '../models/biosphere/life';
+import { difficultyBalance } from '../balance';
 
 export type GoalId = 'brighteningSun' | 'snowball' | 'cradle' | 'terraformMars' | 'exodus';
 export type GoalStatus = 'active' | 'won' | 'lost';
@@ -52,15 +53,16 @@ export interface GoalDefinition {
   };
 }
 
-const BRIGHTENING_TARGET_YEAR = 8.1e9;
+/** Normal target: untouched worlds should fail; active solar/climate management can survive. */
+const BRIGHTENING_TARGET_YEAR = 8.5e9;
 const SNOWBALL_TIME_LIMIT = 1e9;
 const SNOWBALL_HOLD_YEARS = 5e6;
 const CRADLE_TIME_LIMIT = 2e9;
 const COMPLEX_LIFE_EPSILON = 1e-8;
 const TERRAFORM_TIME_LIMIT: Partial<Record<GoalId, number>> = {
   terraformMars: 500e6,
-  // The tech ages take ~55 kyr at their expected pace; plagues and wars set them back.
-  exodus: 300e3,
+  // Default policy reaches Exodus around 110 kyr; normal therefore needs active policy.
+  exodus: 95e3,
 };
 const TERRAFORM_HOLD_YEARS = 10e6;
 /** Share of the planet's area that must be open (ice-free) sea. */
@@ -95,6 +97,16 @@ function evaluationYear(state: PlanetState, dtYears: number): number {
 function deadline(goal: GoalState): number {
   const value = goal.memory.deadlineYear;
   return typeof value === 'number' ? value : Number.POSITIVE_INFINITY;
+}
+
+/** Difficulty stretches ordinary deadlines; survival goals invert it (easy ends earlier). */
+function goalDeadline(state: PlanetState, goal: GoalState): number {
+  const base = deadline(goal);
+  const duration = base - goal.startYear;
+  const tolerance = difficultyBalance(state).goalTolerance;
+  return goal.id === 'brighteningSun'
+    ? goal.startYear + duration / tolerance
+    : goal.startYear + duration * tolerance;
 }
 
 function finish(
@@ -177,7 +189,9 @@ const brighteningSun: GoalDefinition = {
       previousIntegral + state.globals.biodiversity * Math.max(0, dtYears);
     const meanBiodiversity =
       elapsed > 0 ? Number(goal.memory.biodiversityIntegral) / elapsed : state.globals.biodiversity;
-    goal.score = (elapsed / 1e6) * (1 + meanBiodiversity);
+    const targetYear = goalDeadline(state, goal);
+    const targetDuration = targetYear - goal.startYear;
+    goal.score = Math.min(1000, (1000 * elapsed * (0.5 + 0.5 * meanBiodiversity)) / targetDuration);
 
     const lifeAlive = updateComplexLifeMemory(state, goal);
     if (hasEvent(state, 'oceansLost', goal.startYear) || state.globals.water <= 1) {
@@ -189,7 +203,7 @@ const brighteningSun: GoalDefinition = {
       finish(goal, 'lost', year, 'runawayGreenhouse');
     } else if (goal.memory.complexLifeSeen === true && !lifeAlive) {
       finish(goal, 'lost', year, 'complexLifeExtinct');
-    } else if (year >= BRIGHTENING_TARGET_YEAR && hasLiquidOceans(state) && lifeAlive) {
+    } else if (year >= targetYear && hasLiquidOceans(state) && lifeAlive) {
       finish(goal, 'won', year, 'survivedBrightening');
     }
   },
@@ -213,9 +227,9 @@ const brighteningSun: GoalDefinition = {
       {
         key: 'goal.condition.surviveUntil',
         value: state.globals.year / 1e9,
-        target: BRIGHTENING_TARGET_YEAR / 1e9,
+        target: goalDeadline(state, goal) / 1e9,
         unit: 'goal.unit.gyr',
-        met: goal.status === 'won' || state.globals.year >= BRIGHTENING_TARGET_YEAR,
+        met: goal.status === 'won' || state.globals.year >= goalDeadline(state, goal),
       },
     ];
   },
@@ -241,11 +255,11 @@ const snowball: GoalDefinition = {
     } else {
       goal.heldSince = null;
     }
-    const remainingMyr = Math.max(0, deadline(goal) - year) / 1e6;
+    const remainingMyr = Math.max(0, goalDeadline(state, goal) - year) / 1e6;
     goal.score = remainingMyr + state.globals.energy / 10;
     if (goal.heldSince !== null && year - goal.heldSince >= SNOWBALL_HOLD_YEARS) {
       finish(goal, 'won', year, 'snowballThawed');
-    } else if (year >= deadline(goal)) {
+    } else if (year >= goalDeadline(state, goal)) {
       finish(goal, 'lost', year, 'timeExpired');
     }
   },
@@ -291,13 +305,13 @@ const cradle: GoalDefinition = {
   evaluate(state, goal, dtYears) {
     const year = evaluationYear(state, dtYears);
     const lifeAlive = updateComplexLifeMemory(state, goal);
-    const remainingMyr = Math.max(0, deadline(goal) - year) / 1e6;
+    const remainingMyr = Math.max(0, goalDeadline(state, goal) - year) / 1e6;
     goal.score = remainingMyr + landVertebrateClasses(state) * 100;
     if (sentienceReached(state, goal)) {
       finish(goal, 'won', year, 'sentience');
     } else if (goal.memory.complexLifeSeen === true && !lifeAlive) {
       finish(goal, 'lost', year, 'complexLifeExtinct');
-    } else if (year >= deadline(goal)) {
+    } else if (year >= goalDeadline(state, goal)) {
       finish(goal, 'lost', year, 'timeExpired');
     }
   },
@@ -439,11 +453,11 @@ function terraformGoal(
         .every((condition) => condition.met);
       if (habitable) goal.heldSince ??= year;
       else goal.heldSince = null;
-      const remainingMyr = Math.max(0, deadline(goal) - year) / 1e6;
+      const remainingMyr = Math.max(0, goalDeadline(state, goal) - year) / 1e6;
       goal.score = remainingMyr + state.globals.energy / 10;
       if (goal.heldSince !== null && year - goal.heldSince >= TERRAFORM_HOLD_YEARS) {
         finish(goal, 'won', year, 'terraformed');
-      } else if (year >= deadline(goal)) {
+      } else if (year >= goalDeadline(state, goal)) {
         finish(goal, 'lost', year, 'timeExpired');
       }
     },
@@ -477,7 +491,7 @@ const exodus: GoalDefinition = {
   evaluate(state, goal, dtYears) {
     const year = evaluationYear(state, dtYears);
     goal.memory.bestAge = Math.max(Number(goal.memory.bestAge) || 0, agesReached(state));
-    const remainingKyr = Math.max(0, deadline(goal) - year) / 1e3;
+    const remainingKyr = Math.max(0, goalDeadline(state, goal) - year) / 1e3;
     goal.score = remainingKyr + 100 * Number(goal.memory.bestAge);
     if (hasEvent(state, 'exodus', goal.startYear)) {
       finish(goal, 'won', year, 'exodus');
@@ -486,7 +500,7 @@ const exodus: GoalDefinition = {
       state.civilization.species === null
     ) {
       finish(goal, 'lost', year, 'civilizationCollapsed');
-    } else if (year >= deadline(goal)) {
+    } else if (year >= goalDeadline(state, goal)) {
       finish(goal, 'lost', year, 'timeExpired');
     }
   },
