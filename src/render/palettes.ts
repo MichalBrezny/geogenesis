@@ -1,3 +1,5 @@
+import { getAccessibilitySettings } from './accessibilitySettings';
+
 export type Rgb = readonly [number, number, number];
 
 interface Stop {
@@ -28,7 +30,54 @@ export function gradient(stops: readonly Stop[]): (value: number) => Rgb {
   };
 }
 
-export const elevationPalette = gradient([
+const CIVIDIS: readonly Rgb[] = [
+  [0, 32, 77],
+  [40, 72, 110],
+  [85, 104, 112],
+  [132, 137, 110],
+  [180, 172, 101],
+  [229, 210, 73],
+  [255, 234, 70],
+];
+
+/** Uses each layer's familiar colours by default and a monotonic Cividis ramp on request. */
+function accessibleGradient(stops: readonly Stop[]): (value: number) => Rgb {
+  const normal = gradient(stops);
+  const first = stops[0]!.value;
+  const last = stops[stops.length - 1]!.value;
+  const safe = gradient(
+    CIVIDIS.map((color, index) => ({
+      value: first + ((last - first) * index) / (CIVIDIS.length - 1),
+      color,
+    })),
+  );
+  return (value) =>
+    getAccessibilitySettings().palette === 'colourBlind' ? safe(value) : normal(value);
+}
+
+/** Okabe-Ito/Tol-inspired categorical colours, repeated only after twelve classes. */
+export const CVD_CATEGORICAL: readonly Rgb[] = [
+  [68, 119, 170],
+  [238, 102, 119],
+  [34, 136, 51],
+  [204, 187, 68],
+  [102, 204, 238],
+  [170, 51, 119],
+  [238, 153, 0],
+  [136, 34, 85],
+  [0, 153, 136],
+  [221, 204, 119],
+  [187, 187, 187],
+  [51, 34, 136],
+];
+
+export function categoricalColor(index: number, fallback: Rgb): Rgb {
+  return getAccessibilitySettings().palette === 'colourBlind'
+    ? CVD_CATEGORICAL[index % CVD_CATEGORICAL.length]!
+    : fallback;
+}
+
+export const elevationPalette = accessibleGradient([
   { value: -8000, color: [8, 24, 68] },
   { value: -200, color: [40, 100, 170] },
   { value: 0, color: [90, 150, 200] },
@@ -39,7 +88,7 @@ export const elevationPalette = gradient([
 ]);
 
 /** Drained-ocean relief: abyssal plains through ridges and pale continental shelves. */
-export const bathymetricReliefPalette = gradient([
+export const bathymetricReliefPalette = accessibleGradient([
   { value: -8000, color: [34, 32, 58] },
   { value: -5000, color: [48, 61, 82] },
   { value: -3000, color: [67, 91, 103] },
@@ -48,7 +97,7 @@ export const bathymetricReliefPalette = gradient([
   { value: 0, color: [211, 197, 154] },
 ]);
 
-export const temperaturePalette = gradient([
+export const temperaturePalette = accessibleGradient([
   { value: -40, color: [60, 20, 140] },
   { value: -10, color: [70, 130, 220] },
   { value: 10, color: [120, 210, 140] },
@@ -57,7 +106,7 @@ export const temperaturePalette = gradient([
 ]);
 
 /** Seasonal monthly-mean temperature amplitude (°C), calm to strongly continental. */
-export const seasonalRangePalette = gradient([
+export const seasonalRangePalette = accessibleGradient([
   { value: 0, color: [28, 48, 82] },
   { value: 2, color: [42, 105, 150] },
   { value: 6, color: [72, 166, 172] },
@@ -66,7 +115,7 @@ export const seasonalRangePalette = gradient([
   { value: 30, color: [160, 42, 45] },
 ]);
 
-export const precipitationPalette = gradient([
+export const precipitationPalette = accessibleGradient([
   { value: 0, color: [150, 100, 50] },
   { value: 250, color: [210, 180, 110] },
   { value: 600, color: [190, 210, 120] },
@@ -76,7 +125,7 @@ export const precipitationPalette = gradient([
 ]);
 
 /** Relative volcanic activity: dim background through orange to incandescent yellow. */
-export const volcanicPalette = gradient([
+export const volcanicPalette = accessibleGradient([
   { value: 0, color: [18, 22, 28] },
   { value: 0.2, color: [67, 43, 46] },
   { value: 1, color: [180, 57, 35] },
@@ -85,7 +134,7 @@ export const volcanicPalette = gradient([
 ]);
 
 /** Sea-level pressure (hPa): cool lows and warm highs, centred on 1013 hPa. */
-export const pressurePalette = gradient([
+export const pressurePalette = accessibleGradient([
   { value: 997, color: [38, 92, 170] },
   { value: 1005, color: [105, 164, 210] },
   { value: 1013, color: [218, 220, 211] },
@@ -94,7 +143,7 @@ export const pressurePalette = gradient([
 ]);
 
 /** Wind speed (m/s): calm dark blue to strong pale cyan, on the dark map. */
-export const windSpeedPalette = gradient([
+export const windSpeedPalette = accessibleGradient([
   { value: 0, color: [22, 32, 58] },
   { value: 3, color: [36, 82, 140] },
   { value: 6, color: [57, 135, 229] },
@@ -103,7 +152,7 @@ export const windSpeedPalette = gradient([
 ]);
 
 /** Sea surface temperature anomaly (°C): cold currents blue, warm currents red. */
-export const seaAnomalyPalette = gradient([
+export const seaAnomalyPalette = accessibleGradient([
   { value: -6, color: [40, 90, 190] },
   { value: -2, color: [120, 160, 215] },
   { value: 0, color: [215, 215, 215] },
@@ -112,13 +161,13 @@ export const seaAnomalyPalette = gradient([
 ]);
 
 /** Cloud cover (%): dark sky to white overcast. */
-export const cloudPalette = gradient([
+export const cloudPalette = accessibleGradient([
   { value: 0, color: [16, 30, 52] },
   { value: 100, color: [242, 244, 248] },
 ]);
 
 /** Number of life classes present: dark blue (one) to pale yellow (a full community). */
-export const diversityPalette = gradient([
+export const diversityPalette = accessibleGradient([
   { value: 1, color: [30, 60, 110] },
   { value: 5, color: [34, 150, 150] },
   { value: 10, color: [140, 205, 110] },
@@ -126,7 +175,7 @@ export const diversityPalette = gradient([
 ]);
 
 /** Dissolved oxygen relative to saturation: anoxic red through well-oxygenated blue. */
-export const oceanOxygenPalette = gradient([
+export const oceanOxygenPalette = accessibleGradient([
   { value: 0, color: [112, 24, 38] },
   { value: 10, color: [183, 54, 50] },
   { value: 30, color: [225, 139, 65] },
@@ -135,7 +184,7 @@ export const oceanOxygenPalette = gradient([
 ]);
 
 /** Surface-ocean phosphate supply relative to the modern mean. */
-export const nutrientPalette = gradient([
+export const nutrientPalette = accessibleGradient([
   { value: 0, color: [18, 37, 68] },
   { value: 0.5, color: [31, 91, 122] },
   { value: 1, color: [42, 145, 124] },
@@ -144,7 +193,7 @@ export const nutrientPalette = gradient([
 ]);
 
 /** Local clathrate/permafrost storage, from empty to the maximum stable store. */
-export const clathratePalette = gradient([
+export const clathratePalette = accessibleGradient([
   { value: 0, color: [34, 30, 45] },
   { value: 20, color: [67, 61, 104] },
   { value: 50, color: [69, 119, 151] },
@@ -153,7 +202,7 @@ export const clathratePalette = gradient([
 ]);
 
 /** Combined disaster-risk index: quiet blue through warning amber to severe red. */
-export const hazardPalette = gradient([
+export const hazardPalette = accessibleGradient([
   { value: 0, color: [25, 43, 67] },
   { value: 0.1, color: [54, 112, 133] },
   { value: 0.3, color: [222, 190, 82] },

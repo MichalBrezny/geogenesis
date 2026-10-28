@@ -6,6 +6,7 @@ import { co2FrostCover } from '../sim/models/atmosphere/co2Frost';
 import {
   clathratePalette,
   bathymetricReliefPalette,
+  categoricalColor,
   diversityPalette,
   elevationPalette,
   hazardPalette,
@@ -199,7 +200,8 @@ const layerColors: Record<MapLayer, CellColor> = {
   },
   biomes(state, i) {
     const { biome, vegetation, elevation } = state.fields;
-    const color = BIOMES[biome[i] as Biome].color;
+    const biomeId = biome[i] as Biome;
+    const color = categoricalColor(biomeId, BIOMES[biomeId].color);
     // Climate says what could grow; plant cover says how much of it actually does.
     if (elevation[i]! < state.seaLevel || biome[i] === Biome.Ice) return color;
     return mix(BARREN_COLOR, color, Math.min(1, vegetation[i]! * 1.5));
@@ -219,7 +221,7 @@ const layerColors: Record<MapLayer, CellColor> = {
     return state.fields.elevation[i]! < state.seaLevel ? mix(color, [18, 31, 52], 0.55) : color;
   },
   life(state, i) {
-    return LIFE_TIER_COLORS[state.fields.lifeTier[i]!]!;
+    return lifeTierColor(state.fields.lifeTier[i]!);
   },
   diversity(state, i) {
     const { diversity, elevation } = state.fields;
@@ -399,7 +401,10 @@ function platePixels(
       const east = y * width + ((x + 1) % width);
       const south = y + 1 < height ? i + width : -1;
       const boundary = ids[east] !== ids[i] || (south >= 0 && ids[south] !== ids[i]);
-      let color: Rgb = boundary ? [9, 13, 18] : PLATE_PALETTE[assigned[ids[i]!]!]!;
+      const paletteIndex = assigned[ids[i]!]!;
+      let color: Rgb = boundary
+        ? [9, 13, 18]
+        : categoricalColor(paletteIndex, PLATE_PALETTE[paletteIndex]!);
       if (!boundary && state.fields.elevation[i]! < state.seaLevel) {
         color = mix(color, [10, 20, 40], 0.45);
       }
@@ -426,6 +431,10 @@ export const PLATE_PALETTE: readonly Rgb[] = [
   [154, 150, 65],
   [120, 120, 125],
 ];
+
+export function lifeTierColor(index: number): Rgb {
+  return categoricalColor(index, LIFE_TIER_COLORS[index]!);
+}
 
 /**
  * Draws one layer at native grid resolution (1 pixel per cell) into the canvas.

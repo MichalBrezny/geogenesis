@@ -23,7 +23,30 @@ export function ToolPalette(props: Props) {
   const evolved = LIFE_CLASSES.filter((_, c) => frame.life.appeared[c] != null);
   return (
     <div className="tools">
-      <div className="tool-buttons" role="group" aria-label={t('tools.title')}>
+      <div
+        className="tool-buttons"
+        role="group"
+        aria-label={t('tools.title')}
+        onKeyDown={(event) => {
+          if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+          const buttons = [
+            ...event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'),
+          ];
+          const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
+          if (current < 0 || buttons.length === 0) return;
+          event.preventDefault();
+          const columns = 2;
+          const delta =
+            event.key === 'ArrowLeft'
+              ? -1
+              : event.key === 'ArrowRight'
+                ? 1
+                : event.key === 'ArrowUp'
+                  ? -columns
+                  : columns;
+          buttons[(current + delta + buttons.length) % buttons.length]?.focus();
+        }}
+      >
         {TOOL_IDS.map((id) => (
           <button
             key={id}
@@ -43,6 +66,7 @@ export function ToolPalette(props: Props) {
         <label>
           {t('tools.lifeClass')}{' '}
           <select
+            title={t('tools.lifeClass')}
             value={lifeClass}
             onChange={(e) => props.onLifeClassChange(e.target.value as LifeClassKey)}
           >
@@ -57,6 +81,7 @@ export function ToolPalette(props: Props) {
       <p className="muted">{tool ? t(`toolHelp.${tool}` as MessageKey) : t('tools.hint')}</p>
       <label className="experimental">
         <input
+          title={t('tools.experimental')}
           type="checkbox"
           checked={frame.unlimitedEnergy}
           onChange={(e) => props.onUnlimitedEnergyChange(e.target.checked)}
