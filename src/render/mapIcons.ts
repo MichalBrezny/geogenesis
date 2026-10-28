@@ -101,6 +101,17 @@ export const EVENT_ICON_PATHS: Record<EventKey, string> = {
     'M1 15c3-5 7-7 12-7 4 0 7 2 10 5-5-1-8 1-8 5-5-5-9-4-14 0Zm1 5c3-3 6-3 9 0s7 3 11 0v3H2Z',
   cyclone: 'M12 10c-5-1-7-5-5-8-3 5-1 10 5 12 5 1 7 5 5 8 3-5 1-10-5-12-5-1-7-5-5-8-3 5-1 10 5 12Z',
   drought: 'M2 21 7 12l4 4 3-3 8 8Zm15-19a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm0-2v2m0 8v2m-6-6h2m8 0h2',
+  greatOxidation: EVENT_GROUP_PATHS.life,
+  snowballOnset: EVENT_GROUP_PATHS.climate,
+  snowballEnded: EVENT_GROUP_PATHS.climate,
+  trendRunaway: EVENT_GROUP_PATHS.climate,
+  trendSnowball: EVENT_GROUP_PATHS.climate,
+  trendCo2Starvation: EVENT_GROUP_PATHS.life,
+  trendOxygenLoss: EVENT_GROUP_PATHS.life,
+  trendBiodiversityLoss: EVENT_GROUP_PATHS.life,
+  trendFossilLow: EVENT_GROUP_PATHS.civilization,
+  trendPollution: EVENT_GROUP_PATHS.climate,
+  disasterWarning: 'M12 2 23 21H1Zm0 6v6m0 3v2',
 };
 
 export interface IconSample {

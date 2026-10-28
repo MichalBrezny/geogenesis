@@ -48,6 +48,7 @@ import { goalTracker } from './goals/goals';
 import { terraformDevices } from './tools/devices';
 import { disasterModel } from './models/disasters';
 import { mapNamingModel } from './mapNames';
+import { trendAlerts } from './trendAlerts';
 
 export interface WorldOptions extends PlanetOptions {
   /** Preset age and biosphere for a new random planet. Defaults to `young`. */
@@ -229,6 +230,7 @@ export function randomWorldFromPlanet(
       biogeochemistry,
       createCarbonCycle(),
       co2FrostCycle,
+      trendAlerts,
       energyIncome,
       // One sample per million years keeps the long history readable in the charts.
       withMinInterval(recordHistory, HISTORY_INTERVAL),

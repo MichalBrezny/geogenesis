@@ -3,6 +3,7 @@ import { getTopology, NEIGHBOR_COUNT } from '../core/grid';
 import type { PlanetState, Plate } from '../core/planet';
 import { createRng, type Rng } from '../core/rng';
 import { recordEvent } from '../events';
+import { ALERT_THRESHOLDS } from '../trendAlerts';
 import { addDustSource, DUST_FINE } from './atmosphere/dust';
 import { aridityIndex } from './biosphere/biomes';
 
@@ -405,6 +406,64 @@ function recordNotableEvents(state: PlanetState, cache: HazardCache, dt: number,
   }
 }
 
+/**
+ * Warns about elevated exposure without drawing from either RNG stream or
+ * changing any hazard outcome. Hysteresis prevents a persistent hazard from
+ * producing a notification every step.
+ */
+function recordHazardWarnings(state: PlanetState, cache: HazardCache, endYear: number): void {
+  const memory = state.alertDiagnostics.disaster;
+  const thresholds = ALERT_THRESHOLDS.disaster;
+  let population = 0;
+  let droughtExposure = 0;
+  let strongestDrought = 0;
+  let strongestDroughtCell = -1;
+  let strongestHazard = 0;
+  let strongestHazardCell = -1;
+  let strongestVolcanism = 0;
+  let strongestVolcanismCell = -1;
+  for (let i = 0; i < state.grid.cellCount; i++) {
+    const settled = state.fields.civilization[i]!;
+    if (settled <= 0) continue;
+    population += settled;
+    droughtExposure += settled * cache.drought[i]!;
+    if (cache.drought[i]! > strongestDrought) {
+      strongestDrought = cache.drought[i]!;
+      strongestDroughtCell = i;
+    }
+    const hazard = cache.mortality[i]!;
+    if (hazard > strongestHazard) {
+      strongestHazard = hazard;
+      strongestHazardCell = i;
+    }
+    const volcanism = state.fields.volcanicActivity[i]!;
+    if (volcanism > strongestVolcanism) {
+      strongestVolcanism = volcanism;
+      strongestVolcanismCell = i;
+    }
+  }
+  const drought = population > 0 ? droughtExposure / population : 0;
+  if (memory.droughtArmed && drought >= thresholds.droughtExposure) {
+    recordEvent(state, 'disasterWarning', 'drought', endYear, strongestDroughtCell);
+    memory.droughtArmed = false;
+  } else if (drought <= thresholds.droughtSafe) memory.droughtArmed = true;
+
+  if (memory.localHazardArmed && strongestHazard >= thresholds.annualMortality) {
+    recordEvent(state, 'disasterWarning', 'localHazard', endYear, strongestHazardCell);
+    memory.localHazardArmed = false;
+  } else if (strongestHazard <= thresholds.annualMortalitySafe) memory.localHazardArmed = true;
+
+  if (memory.volcanicArmed && strongestVolcanism >= thresholds.volcanicActivity) {
+    recordEvent(state, 'disasterWarning', 'volcanic', endYear, strongestVolcanismCell);
+    memory.volcanicArmed = false;
+  } else if (strongestVolcanism <= thresholds.volcanicSafe) memory.volcanicArmed = true;
+
+  if (memory.impactArmed && state.globals.impactFlux >= thresholds.impactFluxPerYear) {
+    recordEvent(state, 'disasterWarning', 'impact', endYear);
+    memory.impactArmed = false;
+  } else if (state.globals.impactFlux <= thresholds.impactFluxSafe) memory.impactArmed = true;
+}
+
 /** Natural-disaster rates, civilization damage, drought exposure and aeolian dust. */
 export const disasterModel: SimComponent = {
   name: 'disasters',
@@ -419,6 +478,7 @@ export const disasterModel: SimComponent = {
     'oceanAnomaly',
     'vegetation',
     'civilization',
+    'volcanicActivity',
   ],
   outputs: ['hazard', 'civilization'],
   runOneStep(state, dtYears) {
@@ -431,6 +491,7 @@ export const disasterModel: SimComponent = {
     const cache = hazardsFor(state);
     const dt = Math.max(0, dtYears);
     if (dt <= 0) return;
+    recordHazardWarnings(state, cache, state.globals.year + dt);
     applyDisasterMortality(state, cache.mortality, dt);
     if (state.disasters.dustStorms && cache.dustSource > 0) {
       addDustSource(

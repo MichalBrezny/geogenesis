@@ -131,6 +131,37 @@ describe('SimHost', () => {
     expect(messages).toHaveLength(count);
   });
 
+  it('auto-pauses in the worker before a queued step after a key event', () => {
+    const { host, messages, queue, runQueued } = createHost();
+    host.handle({
+      type: 'create',
+      scenario: 'random',
+      seed: 11,
+      width: 32,
+      height: 16,
+      start: 'young',
+    });
+    host.handle({ type: 'unlimitedEnergy', enabled: true });
+    host.handle({ type: 'run', running: true });
+    expect(queue).toHaveLength(1);
+
+    let applied = false;
+    for (let y = 0; y < 16 && !applied; y++) {
+      for (let x = 0; x < 32 && !applied; x++) {
+        const before = messages.length;
+        host.handle({ type: 'tool', use: { tool: 'seedLife', lifeClass: 'prokaryotes', x, y } });
+        applied = messages.slice(before).some((message) => message.type === 'toolApplied');
+      }
+    }
+    expect(applied).toBe(true);
+    const paused = lastFrame(messages);
+    expect(paused.events.at(-1)?.key).toBe('lifeOrigin');
+    expect(paused.running).toBe(false);
+    runQueued();
+    expect(lastFrame(messages).year).toBe(paused.year);
+    expect(queue).toHaveLength(0);
+  });
+
   it('clamps controls to the active goal ranges', () => {
     const { host, messages } = createHost();
     host.handle({
