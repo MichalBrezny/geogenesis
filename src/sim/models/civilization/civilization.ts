@@ -146,13 +146,7 @@ export function createCivilization(options: CivilizationOptions = {}): SimCompon
 }
 
 function maybeBecomeSentient(state: PlanetState, dtYears: number, sentienceTime: number) {
-  const candidates = LIFE_CLASSES.map((lifeClass, c) => {
-    const potential = SENTIENCE_POTENTIAL[lifeClass.key] ?? 0;
-    // Competition changes density, not the geographic range that establishes a species.
-    const share = occupiedHabitatShare(state, c);
-    if (share < MIN_HABITAT_SHARE) return 0;
-    return potential * Math.min(1, share / FULL_HABITAT_SHARE);
-  });
+  const candidates = sentienceCandidates(state);
   const total = candidates.reduce((sum, w) => sum + w, 0);
   if (total === 0) return;
   const civ = state.civilization;
@@ -177,6 +171,56 @@ function maybeBecomeSentient(state: PlanetState, dtYears: number, sentienceTime:
   civ.sentienceProgress = 0;
   civ.sentienceThreshold = exponentialThreshold(sentienceRng);
   civ.sentienceRngState = sentienceRng.state;
+}
+
+function sentienceCandidates(state: PlanetState): number[] {
+  const candidates = LIFE_CLASSES.map(() => 0);
+  const relevant: number[] = [];
+  for (let c = 0; c < LIFE_CLASSES.length; c++) {
+    // A class with no population anywhere occupies no habitat, so its weight is zero.
+    if ((SENTIENCE_POTENTIAL[LIFE_CLASSES[c]!.key] ?? 0) > 0 && hasPopulation(state, c)) {
+      relevant.push(c);
+    }
+  }
+  if (relevant.length === 0) return candidates;
+
+  const { grid, fields, biota, globals } = state;
+  const occupied = LIFE_CLASSES.map(() => 0);
+  let landHabitat = 0;
+  let oceanHabitat = 0;
+  for (let y = 0; y < grid.height; y++) {
+    const weight = grid.rowAreaWeight[y]!;
+    for (let x = 0; x < grid.width; x++) {
+      const i = y * grid.width + x;
+      const ocean = isOcean(fields.elevation[i]!, globals.seaLevel);
+      if (ocean) oceanHabitat += weight;
+      else landHabitat += weight;
+      for (const c of relevant) {
+        if (
+          (LIFE_CLASSES[c]!.habitat === 'ocean') === ocean &&
+          biota.populations[c * grid.cellCount + i]! > 0
+        ) {
+          occupied[c] = occupied[c]! + weight;
+        }
+      }
+    }
+  }
+  for (const c of relevant) {
+    const habitat = LIFE_CLASSES[c]!.habitat === 'ocean' ? oceanHabitat : landHabitat;
+    const share = habitat > 0 ? occupied[c]! / habitat : 0;
+    if (share >= MIN_HABITAT_SHARE) {
+      candidates[c] =
+        SENTIENCE_POTENTIAL[LIFE_CLASSES[c]!.key]! * Math.min(1, share / FULL_HABITAT_SHARE);
+    }
+  }
+  return candidates;
+}
+
+function hasPopulation(state: PlanetState, c: number): boolean {
+  const n = state.grid.cellCount;
+  const populations = state.biota.populations;
+  for (let i = c * n, end = i + n; i < end; i++) if (populations[i]! > 0) return true;
+  return false;
 }
 
 function ensureSentienceMemory(state: PlanetState, rng: Rng): void {

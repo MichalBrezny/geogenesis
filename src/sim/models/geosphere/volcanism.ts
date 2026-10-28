@@ -246,6 +246,9 @@ function hotspotPattern(state: PlanetState): Float32Array {
   const out = new Float32Array(grid.cellCount);
   const positions = grid.cellPosition;
   const sigma = HOTSPOT_RADIUS / grid.radius;
+  // Cells clearly beyond 3σ skip the inverse cosine; the margin leaves every cell
+  // near the cut-off on the exact acos test.
+  const farDot = Math.cos(Math.min(Math.PI, sigma * 3)) - 1e-9;
   for (const hotspot of state.geosphere.hotspots) {
     const [hx, hy, hz] = hotspot.position;
     for (let i = 0; i < grid.cellCount; i++) {
@@ -256,6 +259,7 @@ function hotspotPattern(state: PlanetState): Float32Array {
           hx * positions[i * 3]! + hy * positions[i * 3 + 1]! + hz * positions[i * 3 + 2]!,
         ),
       );
+      if (dot < farDot) continue;
       const distance = Math.acos(dot);
       if (distance > sigma * 3) continue;
       out[i] = out[i]! + hotspot.strength * Math.exp(-(distance * distance) / (2 * sigma * sigma));

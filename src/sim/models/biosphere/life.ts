@@ -1,5 +1,5 @@
 import type { SimComponent } from '../../core/component';
-import { getTopology, NEIGHBOR_COUNT } from '../../core/grid';
+import { getTopology, NEIGHBOR_COUNT, type Grid } from '../../core/grid';
 import type { EcologyMemory, PlanetState } from '../../core/planet';
 import { createRng, type Rng } from '../../core/rng';
 import type { Biome } from '../../data/biomes';
@@ -558,7 +558,8 @@ function computeSuitability(
   dust = state.globals.dust,
 ): Float32Array {
   const n = state.grid.cellCount;
-  const result = new Float32Array(n * LIFE_CLASS_COUNT);
+  const result = lifeScratch(state.grid).suitability;
+  result.fill(0);
   const stress = globalStress(state, dust);
   for (let c = 0; c < LIFE_CLASS_COUNT; c++) {
     if (relevant[c]) {
@@ -583,7 +584,8 @@ export function applyCompetition(
 ): void {
   const n = state.grid.cellCount;
   const { populations } = state.biota;
-  const base = suitability.slice();
+  const base = lifeScratch(state.grid).competitionBase;
+  base.set(suitability);
   for (let c = 0; c < LIFE_CLASS_COUNT; c++) {
     const guild = LIFE_CLASSES[c]!.guild;
     if (!relevant[c] || guild === undefined) continue;
@@ -605,6 +607,27 @@ export function applyCompetition(
       suitability[c * n + i] = own / (1 + pressure);
     }
   }
+}
+
+interface LifeScratch {
+  suitability: Float32Array;
+  competitionBase: Float32Array;
+}
+
+const lifeScratchCache = new WeakMap<Grid, LifeScratch>();
+
+/** Per-grid carrying-capacity buffers; they are derived work, never saved state. */
+function lifeScratch(grid: Grid): LifeScratch {
+  let scratch = lifeScratchCache.get(grid);
+  if (!scratch) {
+    const length = grid.cellCount * LIFE_CLASS_COUNT;
+    scratch = {
+      suitability: new Float32Array(length),
+      competitionBase: new Float32Array(length),
+    };
+    lifeScratchCache.set(grid, scratch);
+  }
+  return scratch;
 }
 
 /** Whether each class has any population anywhere. */

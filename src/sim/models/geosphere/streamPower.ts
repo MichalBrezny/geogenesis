@@ -80,8 +80,11 @@ export function createStreamPowerEroder(options: StreamPowerOptions = {}): SimCo
         iceThickness,
         airTemperature,
       } = fields;
-      const sediment = new Float64Array(grid.cellCount);
-      const initialOcean = new Uint8Array(grid.cellCount);
+      const scratch = sedimentScratch(grid);
+      const { sediment, initialOcean, marineSupply } = scratch;
+      sediment.fill(0);
+      initialOcean.fill(0);
+      marineSupply.fill(0);
       for (let i = 0; i < grid.cellCount; i++) {
         if (isOcean(elevation[i]!, seaLevel)) initialOcean[i] = 1;
       }
@@ -124,7 +127,6 @@ export function createStreamPowerEroder(options: StreamPowerOptions = {}): SimCo
         sediment[i] = sediment[i]! + Math.max(0, h - elevation[i]!) * area;
       }
 
-      const marineSupply = new Float64Array(grid.cellCount);
       // Donors now precede receivers, so all supply has arrived when a cell is handled.
       for (let k = flowUpstreamOrder.length - 1; k >= 0; k--) {
         const i = flowUpstreamOrder[k]!;
@@ -160,6 +162,7 @@ export function createStreamPowerEroder(options: StreamPowerOptions = {}): SimCo
         initialOcean,
         seaLevel,
         marineSupply,
+        scratch.spread,
       );
     },
   };
@@ -237,10 +240,10 @@ function depositMarineSediment(
   initialOcean: Uint8Array,
   seaLevel: number,
   supply: Float64Array,
+  next: Float64Array,
 ): number {
   const { neighbors } = getTopology(grid);
   const passes = Math.max(1, Math.ceil(SHELF_DEPOSITION_WIDTH / grid.dy));
-  const next = new Float64Array(grid.cellCount);
   for (let pass = 0; pass < passes; pass++) {
     next.fill(0);
     for (let i = 0; i < grid.cellCount; i++) {
@@ -282,6 +285,31 @@ function depositMarineSediment(
   // globally, then deeper submarine fans, only when the local fan filled.
   overflow = depositGlobally(grid, elevation, initialOcean, seaLevel, overflow, MAX_SHELF_DEPTH);
   return depositGlobally(grid, elevation, initialOcean, seaLevel, overflow, Infinity);
+}
+
+interface SedimentScratch {
+  sediment: Float64Array;
+  initialOcean: Uint8Array;
+  marineSupply: Float64Array;
+  spread: Float64Array;
+}
+
+const sedimentScratchCache = new WeakMap<Grid, SedimentScratch>();
+
+/** Grid-sized sediment-routing work arrays, cleared and reused each geology step. */
+function sedimentScratch(grid: Grid): SedimentScratch {
+  let scratch = sedimentScratchCache.get(grid);
+  if (!scratch) {
+    const n = grid.cellCount;
+    scratch = {
+      sediment: new Float64Array(n),
+      initialOcean: new Uint8Array(n),
+      marineSupply: new Float64Array(n),
+      spread: new Float64Array(n),
+    };
+    sedimentScratchCache.set(grid, scratch);
+  }
+  return scratch;
 }
 
 /** Spreads a fallback volume across available marine accommodation. */

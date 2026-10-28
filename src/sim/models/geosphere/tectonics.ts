@@ -1,7 +1,7 @@
 import type { SimComponent } from '../../core/component';
-import { getTopology, NEIGHBOR_COUNT } from '../../core/grid';
+import { getTopology, NEIGHBOR_COUNT, type Grid } from '../../core/grid';
 import { createValueNoise3D, fractalNoise, type Noise3D } from '../../core/noise';
-import type { PlanetState, Plate } from '../../core/planet';
+import type { PlanetState } from '../../core/planet';
 import { createRng, type Rng } from '../../core/rng';
 import { mantleHeat } from '../atmosphere/carbon';
 import {
@@ -163,13 +163,6 @@ function assignPlates(
   }
 }
 
-/** Surface velocity (m/yr) of `plate` at unit position p: ω × p, scaled by the radius. */
-function plateVelocity(plate: Plate, x: number, y: number, z: number, radius: number) {
-  const s = plate.angularSpeed * radius;
-  const [ax, ay, az] = plate.eulerPole;
-  return [s * (ay * z - az * y), s * (az * x - ax * z), s * (ax * y - ay * x)] as const;
-}
-
 /** Noise that decides where island arcs break the surface. Fixed per planet so arcs stay put. */
 function arcNoise(state: PlanetState): Noise3D {
   return createValueNoise3D(createRng(state.seed ^ 0x5bd1e995));
@@ -185,9 +178,10 @@ function computeBoundaries(state: PlanetState): { relief: Float32Array; collisio
   const { neighbors } = getTopology(grid);
   const pos = grid.cellPosition;
   const { plateId, crustType } = state.fields;
-  const relief = new Float32Array(grid.cellCount);
-  const collision = new Float32Array(grid.cellCount);
-  const arcs = arcNoise(state);
+  const scratch = tectonicsScratch(grid, state);
+  const { relief, collision, arcNoise: arcs } = scratch;
+  relief.fill(0);
+  collision.fill(0);
 
   for (let i = 0; i < grid.cellCount; i++) {
     // Most cells are plate interiors; skip them before doing any vector maths.
@@ -200,7 +194,11 @@ function computeBoundaries(state: PlanetState): { relief: Float32Array; collisio
 
     const plate = plates[plateId[i]!]!;
     const p = i * 3;
-    const [vx, vy, vz] = plateVelocity(plate, pos[p]!, pos[p + 1]!, pos[p + 2]!, grid.radius);
+    const plateScale = plate.angularSpeed * grid.radius;
+    const [plateX, plateY, plateZ] = plate.eulerPole;
+    const vx = plateScale * (plateY * pos[p + 2]! - plateZ * pos[p + 1]!);
+    const vy = plateScale * (plateZ * pos[p]! - plateX * pos[p + 2]!);
+    const vz = plateScale * (plateX * pos[p + 1]! - plateY * pos[p]!);
     let strongest = 0;
     let strongestCollision = 0;
     // Orthogonal neighbours only (even directions), so diagonal contacts do not double count.
@@ -209,7 +207,11 @@ function computeBoundaries(state: PlanetState): { relief: Float32Array; collisio
       if (n < 0 || plateId[n] === plateId[i]) continue;
       const other = plates[plateId[n]!]!;
       const q = n * 3;
-      const [ux, uy, uz] = plateVelocity(other, pos[q]!, pos[q + 1]!, pos[q + 2]!, grid.radius);
+      const otherScale = other.angularSpeed * grid.radius;
+      const [otherX, otherY, otherZ] = other.eulerPole;
+      const ux = otherScale * (otherY * pos[q + 2]! - otherZ * pos[q + 1]!);
+      const uy = otherScale * (otherZ * pos[q]! - otherX * pos[q + 2]!);
+      const uz = otherScale * (otherX * pos[q + 1]! - otherY * pos[q]!);
       let dx = pos[q]! - pos[p]!;
       let dy = pos[q + 1]! - pos[p + 1]!;
       let dz = pos[q + 2]! - pos[p + 2]!;
@@ -256,7 +258,8 @@ export function updateUplift(state: PlanetState, maxUpliftRate: number): void {
   const { relief, collision } = computeBoundaries(state);
   const { crustType, elevation, upliftRate } = state.fields;
   // Island arcs stay narrow chains on the boundary itself; only mountain belts are widened.
-  const arcs = Float32Array.from(collision);
+  const arcs = tectonicsScratch(state.grid, state).arcs;
+  arcs.set(collision);
   spreadFromBoundaries(state, collision);
   for (let i = 0; i < upliftRate.length; i++) {
     const source = crustType[i] ? collision[i]! : arcs[i]!;
@@ -280,15 +283,17 @@ export function spreadFromBoundaries(state: PlanetState, relief: Float32Array): 
   const { neighbors } = getTopology(grid);
   const passes = Math.max(1, Math.round(BELT_WIDTH / grid.dy));
   const decay = Math.exp(-grid.dy / (BELT_WIDTH / 2));
-  let front: number[] = [];
-  for (let i = 0; i < relief.length; i++) if (relief[i] !== 0) front.push(i);
+  const { proposed, touched, front, changed } = tectonicsScratch(grid, state);
+  let currentFront = front;
+  let nextFront = changed;
+  let frontCount = 0;
+  for (let i = 0; i < relief.length; i++) if (relief[i] !== 0) currentFront[frontCount++] = i;
 
   // Values proposed in this pass; applied together at the end, like a full-grid sweep.
-  const proposed = new Float32Array(relief.length);
-  const touched = new Uint8Array(relief.length);
-  for (let pass = 0; pass < passes && front.length > 0; pass++) {
-    const changed: number[] = [];
-    for (const c of front) {
+  for (let pass = 0; pass < passes && frontCount > 0; pass++) {
+    let changedCount = 0;
+    for (let index = 0; index < frontCount; index++) {
+      const c = currentFront[index]!;
       const candidate = relief[c]! * decay;
       for (let d = 0; d < NEIGHBOR_COUNT; d += 2) {
         const n = neighbors[c * NEIGHBOR_COUNT + d]!;
@@ -296,18 +301,55 @@ export function spreadFromBoundaries(state: PlanetState, relief: Float32Array): 
         if (!touched[n]) {
           touched[n] = 1;
           proposed[n] = candidate;
-          changed.push(n);
+          nextFront[changedCount++] = n;
         } else if (Math.abs(candidate) > Math.abs(proposed[n]!)) {
           proposed[n] = candidate;
         }
       }
     }
-    for (const n of changed) {
+    for (let index = 0; index < changedCount; index++) {
+      const n = nextFront[index]!;
       relief[n] = proposed[n]!;
       touched[n] = 0;
     }
-    front = changed;
+    frontCount = changedCount;
+    const swap = currentFront;
+    currentFront = nextFront;
+    nextFront = swap;
   }
+}
+
+interface TectonicsScratch {
+  relief: Float32Array;
+  collision: Float32Array;
+  arcs: Float32Array;
+  proposed: Float32Array;
+  touched: Uint8Array;
+  front: Int32Array;
+  changed: Int32Array;
+  arcNoise: Noise3D;
+}
+
+const tectonicsScratchCache = new WeakMap<Grid, TectonicsScratch>();
+
+/** Derived boundary work arrays, kept outside the serializable planet state. */
+function tectonicsScratch(grid: Grid, state: PlanetState): TectonicsScratch {
+  let scratch = tectonicsScratchCache.get(grid);
+  if (!scratch) {
+    const n = grid.cellCount;
+    scratch = {
+      relief: new Float32Array(n),
+      collision: new Float32Array(n),
+      arcs: new Float32Array(n),
+      proposed: new Float32Array(n),
+      touched: new Uint8Array(n),
+      front: new Int32Array(n),
+      changed: new Int32Array(n),
+      arcNoise: arcNoise(state),
+    };
+    tectonicsScratchCache.set(grid, scratch);
+  }
+  return scratch;
 }
 
 function percentile(values: Float32Array, fraction: number): number {

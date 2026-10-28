@@ -53,6 +53,7 @@ export const RENDERED_FIELDS = [
   'civilization',
   'hazard',
 ] as const;
+export type RenderedField = (typeof RENDERED_FIELDS)[number];
 export interface MapSource {
   grid: Pick<Grid, 'width' | 'height' | 'cellCount'>;
   fields: Pick<Fields, (typeof RENDERED_FIELDS)[number]>;
@@ -85,6 +86,29 @@ export const MAP_LAYERS = [
   'daisies',
 ] as const;
 export type MapLayer = (typeof MAP_LAYERS)[number];
+/** Exact field payload needed to paint each layer. */
+export const LAYER_FIELDS: Record<MapLayer, readonly RenderedField[]> = {
+  terrain: ['elevation', 'discharge', 'iceCover', 'co2Ice', 'lakeType'],
+  seafloor: ['elevation'],
+  plates: ['elevation', 'plateId'],
+  volcanism: ['elevation', 'volcanicActivity'],
+  airTemperature: ['airTemperature', 'seasonalAmplitude'],
+  seasons: ['seasonalAmplitude'],
+  pressure: ['elevation', 'pressure'],
+  precipitation: ['elevation', 'precipitation'],
+  clouds: ['elevation', 'cloudCover'],
+  wind: ['elevation', 'windU', 'windV'],
+  oceanCurrents: ['elevation', 'oceanAnomaly'],
+  oceanOxygen: ['elevation', 'oceanOxygen'],
+  nutrients: ['elevation', 'nutrients'],
+  clathrates: ['elevation', 'airTemperature', 'iceCover'],
+  biomes: ['elevation', 'biome', 'vegetation'],
+  life: ['lifeTier'],
+  diversity: ['elevation', 'diversity'],
+  civilization: ['elevation', 'civilization'],
+  hazard: ['elevation', 'hazard'],
+  daisies: ['elevation', 'daisyWhite', 'daisyBlack'],
+};
 export const TEMPERATURE_MONTHS = ['annual', 'january', 'july'] as const;
 export type TemperatureMonth = (typeof TEMPERATURE_MONTHS)[number];
 

@@ -1,4 +1,4 @@
-import { RENDERED_FIELDS } from '../render/mapRenderer';
+import { RENDERED_FIELDS, type RenderedField } from '../render/mapRenderer';
 import { HISTORY_SERIES, type HistorySeries } from '../sim/history';
 import { inspectCellLife, updateDiversity } from '../sim/models/biosphere/diversity';
 import { oxygenPartialPressure } from '../sim/models/atmosphere/atmosphere';
@@ -6,7 +6,7 @@ import { createScenario, isScenarioId, restoreScenario, type ScenarioId } from '
 import { compress, decompress, deserializeGame, serializeGame } from '../sim/serialize';
 import { applyTool, energyCap } from '../sim/tools/tools';
 import type { World } from '../sim/world';
-import type { Frame, WorkerRequest, WorkerResponse } from './protocol';
+import type { FrameUpdate, WorkerRequest, WorkerResponse } from './protocol';
 import { clampGoalCivilizationPolicy, clampGoalControls, GOALS } from '../sim/goals/goals';
 import { biosignature } from '../sim/models/biosphere/biosignature';
 import { updateCivilizationPolicy } from '../sim/data/civilization';
@@ -34,6 +34,11 @@ export class SimHost {
   private quietTicks = 0;
   private autoPause: AutoPauseSettings = { ...DEFAULT_AUTO_PAUSE };
   private worldRevision = 0;
+  private requestedFields = new Set<RenderedField>(RENDERED_FIELDS);
+  private fullFramePending = true;
+  private frameBackpressure = false;
+  private frameOutstanding = false;
+  private framePending = false;
 
   constructor(
     private readonly post: (message: WorkerResponse, transfer: Transferable[]) => void,
@@ -46,6 +51,9 @@ export class SimHost {
         case 'create':
           this.running = false;
           this.worldRevision++;
+          this.fullFramePending = true;
+          this.frameOutstanding = false;
+          this.framePending = false;
           this.scenario = request.scenario;
           this.world = createScenario(request.scenario, {
             seed: request.seed,
@@ -162,6 +170,20 @@ export class SimHost {
           this.world.planet.globals.unlimitedEnergy = request.enabled;
           this.sendFrame();
           break;
+        case 'view':
+          this.requestedFields = new Set(
+            request.fields.filter((field) => RENDERED_FIELDS.includes(field)),
+          );
+          this.sendFrame();
+          break;
+        case 'frameAck':
+          this.frameBackpressure = true;
+          this.frameOutstanding = false;
+          if (this.framePending) {
+            this.framePending = false;
+            this.sendFrame();
+          }
+          break;
         case 'pacing':
           if (!this.world) break;
           this.notePlayerInput();
@@ -195,6 +217,9 @@ export class SimHost {
       this.scenario = game.scenario;
       this.running = false;
       this.worldRevision++;
+      this.fullFramePending = true;
+      this.frameOutstanding = false;
+      this.framePending = false;
       this.world = restoreScenario(game.scenario, game.planet, game.settings);
       if (this.world.planet.mapNaming.updatedYear < 0) updateMapNames(this.world.planet);
       this.sendFrame();
@@ -255,22 +280,31 @@ export class SimHost {
 
   private sendFrame(): void {
     if (!this.world) return;
+    if (this.frameBackpressure && this.frameOutstanding && this.running) {
+      this.framePending = true;
+      return;
+    }
+    const frameStarted = performance.now();
     const { planet, simulation } = this.world;
-    updateDiversity(planet);
-    const fields = {} as Frame['fields'];
+    const fieldsToSend = this.fullFramePending ? RENDERED_FIELDS : [...this.requestedFields];
+    if (fieldsToSend.includes('diversity')) updateDiversity(planet);
+    const fields: FrameUpdate['fields'] = {};
     const transfer: Transferable[] = [];
-    for (const name of RENDERED_FIELDS) {
+    let transferBytes = 0;
+    for (const name of fieldsToSend) {
       const copy = planet.fields[name].slice();
       (fields as Record<string, Float32Array | Int32Array>)[name] = copy;
       transfer.push(copy.buffer);
+      transferBytes += copy.byteLength;
     }
     const history = {} as Record<HistorySeries, Float64Array>;
     for (const name of HISTORY_SERIES) {
       history[name] = Float64Array.from(planet.history[name]);
       transfer.push(history[name].buffer);
+      transferBytes += history[name].byteLength;
     }
     const { width, height, cellCount } = planet.grid;
-    const frame: Frame = {
+    const frame: FrameUpdate = {
       worldRevision: this.worldRevision,
       running: this.running,
       scenario: this.scenario,
@@ -347,7 +381,11 @@ export class SimHost {
       tectonicRegime: planet.globals.tectonicRegime,
       timings: Object.fromEntries(simulation.timings),
       history,
+      frameTiming: { buildMs: 0, transferBytes },
     };
+    frame.frameTiming.buildMs = performance.now() - frameStarted;
+    this.fullFramePending = false;
+    if (this.frameBackpressure) this.frameOutstanding = true;
     this.post({ type: 'frame', frame }, transfer);
   }
 }

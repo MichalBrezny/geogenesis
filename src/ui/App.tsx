@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { t, type MessageKey } from '../i18n/i18n';
-import type { MapLayer, TemperatureMonth } from '../render/mapRenderer';
+import {
+  LAYER_FIELDS,
+  type MapLayer,
+  type RenderedField,
+  type TemperatureMonth,
+} from '../render/mapRenderer';
 import type { Frame, WorkerRequest, WorkerResponse } from '../worker/protocol';
 import type { ScenarioId } from '../sim/scenarios';
 import type { LifeClassKey } from '../sim/data/lifeClasses';
@@ -41,6 +46,28 @@ import { rememberTourComplete, shouldStartTour, TOUR_ANCHORS, type GuidePageId }
 
 /** How long a tool notice stays on screen, ms. */
 const NOTICE_DURATION = 3000;
+
+/** Fields used by the hover inspector and map-name lookup regardless of the active layer. */
+const INSPECTOR_FIELDS: readonly RenderedField[] = [
+  'elevation',
+  'plateId',
+  'volcanicActivity',
+  'discharge',
+  'lakeDepth',
+  'lakeType',
+  'windU',
+  'windV',
+  'pressure',
+  'cloudCover',
+  'airTemperature',
+  'seasonalAmplitude',
+  'co2Ice',
+  'precipitation',
+  'biome',
+  'vegetation',
+  'lifeTier',
+  'civilization',
+];
 
 const FLOATING_WINDOWS: readonly FloatingWindowId[] = [
   'geosphere',
@@ -480,7 +507,15 @@ export function App() {
     worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
       const message = event.data;
       if (message.type === 'frame') {
-        setFrame(message.frame);
+        setFrame((current) =>
+          !current || current.worldRevision !== message.frame.worldRevision
+            ? (message.frame as Frame)
+            : ({
+                ...message.frame,
+                fields: { ...current.fields, ...message.frame.fields },
+              } as Frame),
+        );
+        requestAnimationFrame(() => worker.postMessage({ type: 'frameAck' } satisfies WorkerRequest));
         setRunning(message.frame.running);
         if (toastWorldRevision.current !== message.frame.worldRevision) {
           toastWorldRevision.current = message.frame.worldRevision;
@@ -547,6 +582,24 @@ export function App() {
   const scenarioView = SCENARIO_VIEW[frame?.scenario ?? 'random'];
   // A loaded game may be another scenario than the layer was chosen for.
   const shownLayer = scenarioView.layers.includes(layer) ? layer : scenarioView.layer;
+
+  useEffect(() => {
+    const fields = new Set<RenderedField>([...INSPECTOR_FIELDS, ...LAYER_FIELDS[shownLayer]]);
+    if (overlays.includes('wind')) {
+      fields.add('windU');
+      fields.add('windV');
+    }
+    if (overlays.includes('currents')) {
+      fields.add('oceanCurrentU');
+      fields.add('oceanCurrentV');
+    }
+    if (overlays.includes('isobars')) fields.add('pressure');
+    if (overlays.includes('icons')) {
+      fields.add('civilization');
+      fields.add('dominantClass');
+    }
+    send({ type: 'view', fields: [...fields] });
+  }, [overlays, send, shownLayer]);
 
   const toggleRunning = () => {
     if (!frame) return;
