@@ -2,6 +2,7 @@ import { t, type MessageKey } from '../i18n/i18n';
 import { TEMPERATURE_MONTHS, type MapLayer, type TemperatureMonth } from '../render/mapRenderer';
 import { LAYER_ICONS, OVERLAY_ICONS, VIEW_ICONS } from './icons';
 import { OVERLAYS, VIEWS, type Overlay, type View } from './PlanetView';
+import { TOUR_ANCHORS } from './guide';
 
 interface Props {
   layers: readonly MapLayer[];
@@ -19,7 +20,7 @@ interface Props {
 export function LayerBar(props: Props) {
   const { layers, layer, onLayerChange, view, onViewChange, overlays, onToggleOverlay } = props;
   return (
-    <div className="layerbar">
+    <div className="layerbar" data-tour={TOUR_ANCHORS.map}>
       <div className="segmented wrap" role="radiogroup" aria-label={t('layer.label')}>
         {layers.map((id, index) => (
           <button
@@ -86,7 +87,13 @@ export function LayerBar(props: Props) {
 }
 
 function overlayKey(id: Overlay): string {
-  return { wind: 'W', currents: 'C', isobars: 'P', mantle: 'T', names: 'N', icons: 'I', events: 'V' }[
-    id
-  ];
+  return {
+    wind: 'W',
+    currents: 'C',
+    isobars: 'P',
+    mantle: 'T',
+    names: 'N',
+    icons: 'I',
+    events: 'V',
+  }[id];
 }

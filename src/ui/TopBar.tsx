@@ -5,6 +5,7 @@ import { formatGyr, formatPpm, formatStep } from './format';
 import { GaiaFace } from './GaiaFace';
 import { NewPlanetDialog, type NewPlanetChoice } from './NewPlanetDialog';
 import { SaveLoadDialog, type FileDialogMode } from './SaveLoadDialog';
+import { TOUR_ANCHORS } from './guide';
 export { RESOLUTIONS } from './menuOptions';
 
 export const SPEEDS = { slow: 500, normal: 120, fast: 0 } as const;
@@ -44,7 +45,12 @@ export function TopBar(props: Props) {
           <img className="logo" src={`${import.meta.env.BASE_URL}icon-180.png`} alt="" />
           {t('app.title')} <span className="subtitle">{t('app.subtitle')}</span>
         </h1>
-        <div className="group" role="group" aria-label={t('controls.time')}>
+        <div
+          className="group"
+          role="group"
+          aria-label={t('controls.time')}
+          data-tour={TOUR_ANCHORS.time}
+        >
           <button
             className="primary"
             onClick={props.onToggleRunning}
@@ -93,7 +99,7 @@ export function TopBar(props: Props) {
           <button
             onClick={props.onShowHelp}
             title={t('help.shortcutsHint')}
-            aria-label={t('help.shortcuts')}
+            aria-label={t('help.title')}
           >
             ?
           </button>
@@ -173,7 +179,7 @@ function Vitals({ frame }: { frame: Frame }) {
     ],
   ];
   return (
-    <dl className="vitals">
+    <dl className="vitals" data-tour={TOUR_ANCHORS.vitals}>
       <div className="gaia-vital">
         <dt className="visually-hidden">{t('gaia.title')}</dt>
         <dd>
@@ -181,7 +187,12 @@ function Vitals({ frame }: { frame: Frame }) {
         </dd>
       </div>
       {items.map(([label, hint, value, warning]) => (
-        <div key={label} title={t(hint)} className={warning ? 'warning' : undefined}>
+        <div
+          key={label}
+          title={t(hint)}
+          className={warning ? 'warning' : undefined}
+          data-tour={label === 'stat.era' ? TOUR_ANCHORS.era : undefined}
+        >
           <dt>{t(label)}</dt>
           <dd>{value}</dd>
         </div>
