@@ -44,6 +44,7 @@ import { eventSignature, eventsAfter, mergeToastEvents, type EventToast } from '
 import { FirstGameTour } from './FirstGameTour';
 import { rememberTourComplete, shouldStartTour, TOUR_ANCHORS, type GuidePageId } from './guide';
 import { SettingsDialog } from './SettingsDialog';
+import { SoundSettingsSection } from './SoundSettingsSection';
 import { loadSettings, saveSettings, type Settings } from './settings';
 import {
   addAutosave,
@@ -1118,7 +1119,9 @@ export function App() {
           settings={settings}
           onClose={() => setSettingsOpen(false)}
           onSave={applySettings}
-        />
+        >
+          <SoundSettingsSection settings={soundSettings} onChange={setSoundSettings} />
+        </SettingsDialog>
       )}
       {frame &&
         FLOATING_WINDOWS.map((id, index) => {

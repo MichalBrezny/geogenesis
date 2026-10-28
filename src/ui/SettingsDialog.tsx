@@ -1,4 +1,4 @@
-import { useState, type ComponentType } from 'react';
+import { useState, type ComponentType, type ReactNode } from 'react';
 import { t, type MessageKey } from '../i18n/i18n';
 import { Dialog } from './Dialog';
 import { RESOLUTIONS } from './menuOptions';
@@ -24,10 +24,13 @@ export function SettingsDialog({
   settings,
   onClose,
   onSave,
+  children,
 }: {
   settings: Settings;
   onClose: () => void;
   onSave: (settings: Settings) => void;
+  /** Self-contained sections (sound, accessibility) that apply their changes immediately. */
+  children?: ReactNode;
 }) {
   const [draft, setDraft] = useState(settings);
   const set = <K extends keyof Settings>(key: K, value: Settings[K]) =>
@@ -50,6 +53,7 @@ export function SettingsDialog({
             </div>
           </section>
         ))}
+        {children}
         <div className="actions">
           <button type="button" onClick={onClose} title={t('controls.cancel')}>
             {t('controls.cancel')}
