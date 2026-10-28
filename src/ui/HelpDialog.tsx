@@ -8,6 +8,7 @@ import type { ChartSeries } from './charts/HistoryCharts';
 import type { GlossaryTerm } from './glossary';
 import type { GuidePageId } from './guide';
 import { Glossary, HelpNav, ModelGuide, type HelpSection } from './GuideContent';
+import { AccessibilitySettingsSection } from './AccessibilitySettingsSection';
 
 export function HelpDialog(props: {
   onClose: () => void;
@@ -50,6 +51,7 @@ export function HelpDialog(props: {
               {t('tour.restart')}
             </button>
           </section>
+          <AccessibilitySettingsSection />
           <section>
             <h3>{t('help.about')}</h3>
             <p>{t('help.aboutText', { version: packageInfo.version })}</p>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { t } from '../i18n/i18n';
+import { t, type MessageKey } from '../i18n/i18n';
 import {
   buildGlobeLookup,
   dragGlobe,
@@ -60,6 +60,9 @@ import type { MonthlyClimate } from '../sim/models/atmosphere/climateDiagram';
 import { EventMapPanel } from './EventMapPanel';
 import { EVENT_CATEGORIES, filterMapEvents, type EventCategory } from './eventMap';
 import type { PlanetEvent } from '../sim/events';
+import { isTap, pinchGesture, type GesturePoint } from './mapGestures';
+import { useAccessibilitySettings } from './AccessibilitySettingsSection';
+import { BIOMES, type Biome } from '../sim/data/biomes';
 
 /** Ways to look at the planet. */
 export const VIEWS = ['map', 'globe'] as const;
@@ -67,13 +70,21 @@ export type View = (typeof VIEWS)[number];
 
 /** Side of the globe image, pixels. */
 const GLOBE_SIZE = 512;
-/** Pointer travel, px, below which a press on the globe counts as a click, not a drag. */
-const CLICK_SLOP = 4;
+/** Pointer travel, px, below which a press counts as a tap, not a drag. */
+const TAP_SLOP = 6;
 /** Zoom factor of the zoom buttons and keys. */
 const ZOOM_STEP = Math.SQRT2;
 /** Zoom per pixel of mouse-wheel travel (exponential, so zooming in and out cancel). */
 const WHEEL_ZOOM = 0.002;
 const MINIMAP_KEY = 'geogenesis.minimap';
+
+function loadMinimapPreference(): boolean {
+  try {
+    return globalThis.localStorage.getItem(MINIMAP_KEY) !== 'false';
+  } catch {
+    return true;
+  }
+}
 
 /** Vector fields that can be drawn over any layer: animated particles, or arrows for reduced motion. */
 export const OVERLAYS = [
@@ -204,6 +215,7 @@ export function PlanetView({
   const isobarRef = useRef<HTMLCanvasElement>(null);
   const [overlaySize, setOverlaySize] = useState({ width: 0, height: 0 });
   const [reducedMotion] = useState(prefersReducedMotion);
+  const paletteMode = useAccessibilitySettings().palette;
   // The running particle animation: its layers and the current projection.
   const flow = useRef<{
     layers: Map<FlowOverlay, FlowLayer>;
@@ -212,27 +224,39 @@ export function PlanetView({
     height: number;
   }>({ layers: new Map(), project: null, width: 0, height: 0 });
   const [hovered, setHovered] = useState<HoveredCell | null>(null);
+  const [keyboardCursor, setKeyboardCursor] = useState<number | null>(null);
+  const [keyboardInspector, setKeyboardInspector] = useState<HoveredCell | null>(null);
+  const [mapFocused, setMapFocused] = useState(false);
   const [eventCategories, setEventCategories] = useState<Set<EventCategory>>(
     () => new Set(EVENT_CATEGORIES),
   );
   const [selectedEvent, setSelectedEvent] = useState<PlanetEvent | null>(null);
-  const hoveredCell = hovered?.index;
+  const inspected = keyboardInspector ?? hovered;
+  const inspectedCell = inspected?.index;
   // One request per newly inspected cell and per new frame (the life changes as time runs).
   useEffect(() => {
-    if (hoveredCell !== undefined) onInspect?.(hoveredCell);
-  }, [hoveredCell, frame, onInspect]);
+    if (inspectedCell !== undefined) onInspect?.(inspectedCell);
+  }, [inspectedCell, frame, onInspect]);
   const [globeView, setGlobeView] = useState<GlobeView>({ longitude: 180, latitude: 20 });
   const [mapView, setMapView] = useState<MapViewport>(FULL_VIEW);
-  const [minimapOn, setMinimapOn] = useState(() => localStorage.getItem(MINIMAP_KEY) !== 'false');
-  const drag = useRef<{
-    x: number;
-    y: number;
-    originX: number;
-    originY: number;
+  const [minimapOn, setMinimapOn] = useState(loadMinimapPreference);
+  const pointers = useRef(new Map<number, { start: GesturePoint; current: GesturePoint }>());
+  const primaryGesture = useRef<{
+    pointerId: number;
+    start: GesturePoint;
+    last: GesturePoint;
     startCell: number;
     moved: boolean;
+    pointerType: string;
   } | null>(null);
-  const suppressClick = useRef(false);
+  const pinchStart = useRef<{
+    firstId: number;
+    secondId: number;
+    first: GesturePoint;
+    second: GesturePoint;
+    view: MapViewport;
+  } | null>(null);
+  const pointerFocused = useRef(false);
   const [directionArrow, setDirectionArrow] = useState<{
     x1: number;
     y1: number;
@@ -243,7 +267,11 @@ export function PlanetView({
   const mapSource = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
-    localStorage.setItem(MINIMAP_KEY, String(minimapOn));
+    try {
+      globalThis.localStorage.setItem(MINIMAP_KEY, String(minimapOn));
+    } catch {
+      // The minimap still works for this session when storage is unavailable.
+    }
   }, [minimapOn]);
 
   useEffect(() => {
@@ -303,7 +331,7 @@ export function PlanetView({
     canvas.height = GLOBE_SIZE;
     const pixels = projectGlobe(layerPixels(frame, layer, temperatureMonth), globeLookup);
     canvas.getContext('2d')?.putImageData(new ImageData(pixels, GLOBE_SIZE, GLOBE_SIZE), 0, 0);
-  }, [frame, layer, globeLookup, temperatureMonth]);
+  }, [frame, layer, globeLookup, temperatureMonth, paletteMode]);
 
   // The flat map is drawn at screen resolution, zoomed and panned.
   useEffect(() => {
@@ -311,7 +339,7 @@ export function PlanetView({
     const source = mapSource.current;
     if (view !== 'map' || !canvas || !source) return;
     drawViewport(canvas, source, mapView, overlaySize.width, overlaySize.height);
-  }, [frame, layer, temperatureMonth, view, mapView, overlaySize]);
+  }, [frame, layer, temperatureMonth, view, mapView, overlaySize, paletteMode]);
 
   // Mouse-wheel zoom around the pointer; a native listener, so it can keep the page from scrolling.
   useEffect(() => {
@@ -502,15 +530,56 @@ export function PlanetView({
   }, [frame, overlays, view, globeView, mapView, overlaySize, reducedMotion]);
 
   /** Grid cell under the pointer on the map or the globe, or −1 off the planet. */
-  const cellAt = (event: React.MouseEvent<HTMLCanvasElement>): number => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const fx = (event.clientX - rect.left) / rect.width;
-    const fy = (event.clientY - rect.top) / rect.height;
+  const cellAtPoint = (clientX: number, clientY: number, canvas: HTMLCanvasElement): number => {
+    const rect = canvas.getBoundingClientRect();
+    const fx = (clientX - rect.left) / rect.width;
+    const fy = (clientY - rect.top) / rect.height;
     if (view === 'globe') return globeCell(2 * fx - 1, 1 - 2 * fy, globeView, width, height);
     const { latitude, longitude } = viewportPoint(mapView, fx, fy);
     const x = Math.min(width - 1, Math.floor((longitude / 360) * width));
     const y = Math.min(height - 1, Math.max(0, Math.floor(((90 - latitude) / 180) * height)));
     return y * width + x;
+  };
+
+  const inspectedAt = (index: number, left: number, top: number): HoveredCell => {
+    const x = index % width;
+    const y = Math.floor(index / width);
+    return {
+      index,
+      latitude: 90 - ((y + 0.5) * 180) / height,
+      longitude: ((x + 0.5) * 360) / width,
+      left,
+      top,
+    };
+  };
+
+  const selectMapEvent = (clientX: number, clientY: number, canvas: HTMLCanvasElement): boolean => {
+    if (!overlays.includes('events')) return false;
+    const rect = canvas.getBoundingClientRect();
+    const project = projection(rect.width, rect.height, view, globeView, mapView);
+    for (let k = mapEvents.length - 1; k >= 0; k--) {
+      const mapEvent = mapEvents[k]!;
+      const cell = mapEvent.cell!;
+      const x = cell % width;
+      const y = Math.floor(cell / width);
+      const point = project(90 - ((y + 0.5) * 180) / height, ((x + 0.5) * 360) / width);
+      if (
+        point &&
+        Math.hypot(point[0] - (clientX - rect.left), point[1] - (clientY - rect.top)) <= 14
+      ) {
+        setSelectedEvent(mapEvent);
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const activatePoint = (clientX: number, clientY: number, canvas: HTMLCanvasElement) => {
+    if (selectMapEvent(clientX, clientY, canvas)) return;
+    const index = cellAtPoint(clientX, clientY, canvas);
+    if (index < 0) return;
+    setHovered(inspectedAt(index, clientX + 16, clientY + 16));
+    onCellClick(index % width, Math.floor(index / width));
   };
 
   const zoomed = view === 'map' && mapView.zoom > 1;
@@ -527,101 +596,247 @@ export function PlanetView({
     )(90 - ((y + 0.5) * 180) / height, ((x + 0.5) * 360) / width);
   })();
 
-  /**
-   * Shows the inspector for the cell under the pointer; a pressed button turns the
-   * globe or moves a zoomed map.
-   */
-  const onPointerMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    const start = drag.current;
-    if (tool === 'earthquake' && start && event.buttons & 1) {
-      const dx = event.clientX - start.originX;
-      const dy = event.clientY - start.originY;
-      if (start.moved || Math.hypot(dx, dy) > CLICK_SLOP) {
+  const cursorPoint = (() => {
+    if (!mapFocused || keyboardCursor === null || overlaySize.width <= 0) return null;
+    const x = keyboardCursor % width;
+    const y = Math.floor(keyboardCursor / width);
+    return projection(
+      overlaySize.width,
+      overlaySize.height,
+      view,
+      globeView,
+      mapView,
+    )(90 - ((y + 0.5) * 180) / height, ((x + 0.5) * 360) / width);
+  })();
+
+  /** Shows the inspector for a mouse pointer that is not currently dragging. */
+  const inspectPointer = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const index = cellAtPoint(event.clientX, event.clientY, event.currentTarget);
+    if (index < 0) {
+      setHovered(null);
+      return;
+    }
+    setHovered(inspectedAt(index, event.clientX + 16, event.clientY + 16));
+  };
+
+  const beginPointer = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    pointerFocused.current = true;
+    event.currentTarget.focus({ preventScroll: true });
+    pointerFocused.current = false;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const point = { x: event.clientX, y: event.clientY };
+    pointers.current.set(event.pointerId, { start: point, current: point });
+    if (pointers.current.size === 1) {
+      primaryGesture.current = {
+        pointerId: event.pointerId,
+        start: point,
+        last: point,
+        startCell: cellAtPoint(point.x, point.y, event.currentTarget),
+        moved: false,
+        pointerType: event.pointerType,
+      };
+      return;
+    }
+    const entries = [...pointers.current.entries()].slice(0, 2);
+    const [firstId, firstPointer] = entries[0]!;
+    const [secondId, secondPointer] = entries[1]!;
+    pinchStart.current = {
+      firstId,
+      secondId,
+      first: firstPointer.current,
+      second: secondPointer.current,
+      view: mapView,
+    };
+    if (primaryGesture.current) primaryGesture.current.moved = true;
+    setHovered(null);
+  };
+
+  const movePointer = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const tracked = pointers.current.get(event.pointerId);
+    if (tracked) tracked.current = { x: event.clientX, y: event.clientY };
+    const pinch = pinchStart.current;
+    if (pinch && view === 'map') {
+      const first = pointers.current.get(pinch.firstId)?.current;
+      const second = pointers.current.get(pinch.secondId)?.current;
+      if (first && second) {
+        const gesture = pinchGesture(pinch.first, pinch.second, first, second);
         const rect = event.currentTarget.getBoundingClientRect();
-        start.moved = true;
+        const zoomedView = zoomViewport(
+          pinch.view,
+          gesture.scale,
+          (gesture.startCentre.x - rect.left) / rect.width,
+          (gesture.startCentre.y - rect.top) / rect.height,
+        );
+        setMapView(
+          panViewport(
+            zoomedView,
+            (gesture.centre.x - gesture.startCentre.x) / rect.width,
+            (gesture.centre.y - gesture.startCentre.y) / rect.height,
+          ),
+        );
+        setHovered(null);
+      }
+      return;
+    }
+    if (pinch) return;
+    const gesture = primaryGesture.current;
+    if (gesture?.pointerId === event.pointerId && tracked) {
+      const threshold = gesture.pointerType === 'touch' ? TAP_SLOP * 1.5 : TAP_SLOP;
+      if (!isTap(gesture.start, tracked.current, threshold)) gesture.moved = true;
+      if (gesture.moved && tool === 'earthquake') {
+        const rect = event.currentTarget.getBoundingClientRect();
         setDirectionArrow({
-          x1: start.originX - rect.left,
-          y1: start.originY - rect.top,
+          x1: gesture.start.x - rect.left,
+          y1: gesture.start.y - rect.top,
           x2: event.clientX - rect.left,
           y2: event.clientY - rect.top,
         });
         setHovered(null);
         return;
       }
-    }
-    if ((view === 'globe' || zoomed) && start && event.buttons & 1) {
-      const dx = event.clientX - start.x;
-      const dy = event.clientY - start.y;
-      if (start.moved || Math.hypot(dx, dy) > CLICK_SLOP) {
+      if (gesture.moved) {
         const rect = event.currentTarget.getBoundingClientRect();
+        const dx = event.clientX - gesture.last.x;
+        const dy = event.clientY - gesture.last.y;
         if (view === 'globe') {
           const radius = rect.width / 2;
           setGlobeView((current) => dragGlobe(current, dx / radius, dy / radius));
         } else {
           setMapView((current) => panViewport(current, dx / rect.width, dy / rect.height));
         }
-        drag.current = { ...start, x: event.clientX, y: event.clientY, moved: true };
+        gesture.last = tracked.current;
         setHovered(null);
         return;
       }
     }
-    const index = cellAt(event);
-    if (index < 0) {
-      setHovered(null);
+    if (event.pointerType === 'mouse') inspectPointer(event);
+  };
+
+  const endPointer = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const gesture = primaryGesture.current;
+    const wasPinch = pinchStart.current !== null;
+    const endCell = cellAtPoint(event.clientX, event.clientY, event.currentTarget);
+    pointers.current.delete(event.pointerId);
+    if (pinchStart.current && pointers.current.size < 2) pinchStart.current = null;
+    if (pointers.current.size > 0) {
+      const [pointerId, pointer] = pointers.current.entries().next().value!;
+      primaryGesture.current = {
+        pointerId,
+        start: pointer.current,
+        last: pointer.current,
+        startCell: wasPinch
+          ? -1
+          : cellAtPoint(pointer.current.x, pointer.current.y, event.currentTarget),
+        moved: true,
+        pointerType: event.pointerType,
+      };
       return;
     }
+    primaryGesture.current = null;
+    setDirectionArrow(null);
+    if (!gesture || gesture.pointerId !== event.pointerId || wasPinch) return;
+    if (tool === 'earthquake' && gesture.moved && gesture.startCell >= 0 && endCell >= 0) {
+      const direction = bearingBetweenCells(gesture.startCell, endCell, width, height);
+      onCellClick(gesture.startCell % width, Math.floor(gesture.startCell / width), direction);
+      return;
+    }
+    if (!gesture.moved) activatePoint(event.clientX, event.clientY, event.currentTarget);
+  };
+
+  const cancelPointers = () => {
+    pointers.current.clear();
+    primaryGesture.current = null;
+    pinchStart.current = null;
+    setDirectionArrow(null);
+  };
+
+  const centreCell = (): number => {
+    const centre = view === 'globe' ? globeView : mapView;
+    const wrappedLongitude = ((centre.longitude % 360) + 360) % 360;
+    const x = Math.floor((wrappedLongitude / 360) * width) % width;
+    const y = Math.min(
+      height - 1,
+      Math.max(0, Math.floor(((90 - centre.latitude) / 180) * height)),
+    );
+    return y * width + x;
+  };
+
+  const setKeyboardCell = (index: number, centreView: boolean) => {
     const x = index % width;
     const y = Math.floor(index / width);
-    setHovered({
-      index,
-      latitude: 90 - ((y + 0.5) * 180) / height,
-      longitude: ((x + 0.5) * 360) / width,
-      left: event.clientX + 16,
-      top: event.clientY + 16,
-    });
+    const longitude = ((x + 0.5) * 360) / width;
+    const latitude = 90 - ((y + 0.5) * 180) / height;
+    setKeyboardCursor(index);
+    if (centreView) {
+      if (view === 'globe') setGlobeView({ longitude, latitude });
+      else setMapView((current) => clampViewport({ ...current, longitude, latitude }));
+    }
+    const rect = canvasRef.current?.getBoundingClientRect();
+    setKeyboardInspector(
+      inspectedAt(
+        index,
+        (rect?.left ?? 0) + (rect?.width ?? 0) / 2 + 16,
+        (rect?.top ?? 0) + (rect?.height ?? 0) / 2 + 16,
+      ),
+    );
   };
 
-  /** Clicks a cell (not at the end of a drag). */
-  const onClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (suppressClick.current) {
-      suppressClick.current = false;
+  const onMapKeyDown = (event: React.KeyboardEvent<HTMLCanvasElement>) => {
+    const moves: Partial<Record<string, readonly [number, number]>> = {
+      ArrowLeft: [-1, 0],
+      ArrowRight: [1, 0],
+      ArrowUp: [0, -1],
+      ArrowDown: [0, 1],
+    };
+    const move = moves[event.key];
+    if (move) {
+      event.preventDefault();
+      event.stopPropagation();
+      const current = keyboardCursor ?? centreCell();
+      const x = ((current % width) + move[0] + width) % width;
+      const y = Math.min(height - 1, Math.max(0, Math.floor(current / width) + move[1]));
+      setKeyboardCell(y * width + x, true);
       return;
     }
-    const dragged = drag.current?.moved;
-    drag.current = null;
-    if (dragged) return;
-    if (overlays.includes('events')) {
-      const rect = event.currentTarget.getBoundingClientRect();
-      const pointerX = event.clientX - rect.left;
-      const pointerY = event.clientY - rect.top;
-      const project = projection(rect.width, rect.height, view, globeView, mapView);
-      for (let k = mapEvents.length - 1; k >= 0; k--) {
-        const mapEvent = mapEvents[k]!;
-        const cell = mapEvent.cell!;
-        const x = cell % width;
-        const y = Math.floor(cell / width);
-        const point = project(90 - ((y + 0.5) * 180) / height, ((x + 0.5) * 360) / width);
-        if (point && Math.hypot(point[0] - pointerX, point[1] - pointerY) <= 14) {
-          setSelectedEvent(mapEvent);
-          return;
-        }
-      }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      event.stopPropagation();
+      const index = keyboardCursor ?? centreCell();
+      setKeyboardCell(index, false);
+      onCellClick(index % width, Math.floor(index / width));
+      return;
     }
-    const index = cellAt(event);
-    if (index >= 0) onCellClick(index % width, Math.floor(index / width));
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      setKeyboardCursor(null);
+      setKeyboardInspector(null);
+    }
   };
 
-  const onMouseUp = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    const start = drag.current;
-    if (tool !== 'earthquake' || !start?.moved || start.startCell < 0) return;
-    const end = cellAt(event);
-    drag.current = null;
-    setDirectionArrow(null);
-    suppressClick.current = true;
-    if (end < 0) return;
-    const direction = bearingBetweenCells(start.startCell, end, width, height);
-    onCellClick(start.startCell % width, Math.floor(start.startCell / width), direction);
-  };
+  const cellAlternative = inspected
+    ? (() => {
+        const relativeElevation = frame.fields.elevation[inspected.index]! - frame.seaLevel;
+        const biome = BIOMES[frame.fields.biome[inspected.index] as Biome];
+        return t('map.inspectedCell', {
+          position: formatMapPosition(inspected.latitude, inspected.longitude),
+          biome: t(`biome.${biome.key}` as MessageKey),
+          elevation: t(relativeElevation < 0 ? 'map.oceanDepth' : 'map.landElevation', {
+            value: Math.round(Math.abs(relativeElevation)).toLocaleString('en'),
+          }),
+          temperature: t('map.temperatureValue', {
+            value: frame.fields.airTemperature[inspected.index]!.toFixed(1),
+          }),
+        });
+      })()
+    : t('map.noInspectedCell');
+  const mapAlternative = t('map.textAlternative', {
+    view: t(`view.${view}`),
+    layer: t(`layer.${layer}`),
+    age: t('map.ageGyr', { value: (frame.year / 1e9).toFixed(3) }),
+    cell: cellAlternative,
+  });
 
   return (
     <>
@@ -629,26 +844,40 @@ export function PlanetView({
         <canvas
           ref={canvasRef}
           className={[view, zoomed ? 'zoomed' : '', tool ? 'tool-active' : ''].join(' ')}
-          onMouseDown={(event) => {
-            drag.current = {
-              x: event.clientX,
-              y: event.clientY,
-              originX: event.clientX,
-              originY: event.clientY,
-              startCell: cellAt(event),
-              moved: false,
-            };
+          tabIndex={0}
+          title={t('map.keyboardHint')}
+          onPointerDown={(event) => {
+            setKeyboardCursor(null);
+            setKeyboardInspector(null);
+            beginPointer(event);
           }}
-          onMouseUp={onMouseUp}
-          onClick={onClick}
-          onMouseMove={onPointerMove}
-          onMouseLeave={() => {
-            drag.current = null;
-            setDirectionArrow(null);
-            setHovered(null);
+          onPointerUp={endPointer}
+          onPointerCancel={cancelPointers}
+          onPointerMove={movePointer}
+          onPointerLeave={(event) => {
+            if (event.pointerType === 'mouse' && event.buttons === 0) setHovered(null);
           }}
-          aria-label={t(view === 'globe' ? 'map.globeLabel' : 'map.label')}
-        />
+          onKeyDown={onMapKeyDown}
+          onFocus={() => {
+            setMapFocused(true);
+            if (pointerFocused.current) {
+              pointerFocused.current = false;
+              return;
+            }
+            if (keyboardCursor === null) setKeyboardCell(centreCell(), false);
+          }}
+          onBlur={() => setMapFocused(false)}
+          aria-label={mapAlternative}
+        >
+          {mapAlternative}
+        </canvas>
+        {cursorPoint && (
+          <span
+            className="keyboard-cursor"
+            style={{ left: cursorPoint[0], top: cursorPoint[1] }}
+            aria-hidden="true"
+          />
+        )}
         {directionArrow && (
           <svg className="direction-arrow" aria-hidden="true">
             <defs>
@@ -756,13 +985,8 @@ export function PlanetView({
           />
         )}
       </div>
-      {hovered && (
-        <CellInspector
-          frame={frame}
-          cell={hovered}
-          life={cellLife}
-          climate={cellClimate}
-        />
+      {inspected && (
+        <CellInspector frame={frame} cell={inspected} life={cellLife} climate={cellClimate} />
       )}
     </>
   );
@@ -782,4 +1006,16 @@ function bearingBetweenCells(start: number, end: number, width: number, height: 
     Math.sin(dLon) * Math.cos(lat2),
     Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon),
   );
+}
+
+function formatMapPosition(latitude: number, longitude: number): string {
+  const wrappedLongitude = ((longitude % 360) + 360) % 360;
+  return t('map.positionValue', {
+    latitude: Math.abs(latitude).toFixed(0),
+    northSouth: t(latitude >= 0 ? 'map.north' : 'map.south'),
+    longitude: Math.abs(wrappedLongitude > 180 ? 360 - wrappedLongitude : wrappedLongitude).toFixed(
+      0,
+    ),
+    eastWest: t(wrappedLongitude > 180 ? 'map.west' : 'map.east'),
+  });
 }

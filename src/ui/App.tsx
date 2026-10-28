@@ -43,6 +43,7 @@ import { ToastStack } from './ToastStack';
 import { eventSignature, eventsAfter, mergeToastEvents, type EventToast } from './toastQueue';
 import { FirstGameTour } from './FirstGameTour';
 import { rememberTourComplete, shouldStartTour, TOUR_ANCHORS, type GuidePageId } from './guide';
+import { useAccessibilitySettings } from './AccessibilitySettingsSection';
 
 /** How long a tool notice stays on screen, ms. */
 const NOTICE_DURATION = 3000;
@@ -351,6 +352,7 @@ function randomSeed(): number {
 }
 
 export function App() {
+  const accessibilitySettings = useAccessibilitySettings();
   const workerRef = useRef<Worker | null>(null);
   const stageRef = useRef<HTMLElement>(null);
   const captureObliquityDefault = useRef(true);
@@ -753,7 +755,7 @@ export function App() {
   }
 
   return (
-    <div className="app">
+    <div className="app" data-contrast={accessibilitySettings.highContrast ? 'high' : undefined}>
       <TopBar
         frame={frame}
         running={running}
@@ -770,7 +772,7 @@ export function App() {
         newPlanetRequest={newPlanetRequest}
       />
       {frame && (
-        <aside className="sidebar left">
+        <aside className="sidebar left" aria-label={t('sidebar.tools')}>
           <CurrentTaskPanel frame={frame} onHelp={openHelp} />
           <Collapsible
             helpPage="goals"
@@ -900,7 +902,7 @@ export function App() {
         )}
       </main>
       {frame && (
-        <aside className="sidebar right">
+        <aside className="sidebar right" aria-label={t('sidebar.details')}>
           <TabbedPanel
             key={`${frame.scenario}:${frame.goal?.startYear ?? 'sandbox'}`}
             tabs={tabs}

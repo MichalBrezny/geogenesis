@@ -1,7 +1,7 @@
 import { t, type MessageKey } from '../i18n/i18n';
 import {
   FRESH_LAKE_COLOR,
-  LIFE_TIER_COLORS,
+  lifeTierColor,
   SALT_FLAT_COLOR,
   SALT_LAKE_COLOR,
   type MapLayer,
@@ -23,6 +23,7 @@ import {
   temperaturePalette,
   windSpeedPalette,
   volcanicPalette,
+  categoricalColor,
   type Rgb,
 } from '../render/palettes';
 import { BIOME_IDS, BIOMES } from '../sim/data/biomes';
@@ -30,6 +31,7 @@ import { CITY_ICON_PATHS, LIFE_ICON_PATHS, type VisibleMapIcons } from '../rende
 import { LIFE_CLASSES } from '../sim/data/lifeClasses';
 import { TECH_AGES } from '../sim/data/civilization';
 import { GlyphIcon } from './icons';
+import { useAccessibilitySettings } from './AccessibilitySettingsSection';
 
 const css = ([r, g, b]: Rgb) => `rgb(${r}, ${g}, ${b})`;
 
@@ -162,7 +164,10 @@ function LayerLegend({ layer }: { layer: MapLayer }) {
       <ul className="legend" aria-label={t('legend.label')}>
         {BIOME_IDS.map((id) => (
           <li key={id}>
-            <span className="swatch" style={{ background: css(BIOMES[id].color) }} />
+            <span
+              className="swatch"
+              style={{ background: css(categoricalColor(id, BIOMES[id].color)) }}
+            />
             {t(`biome.${BIOMES[id].key}` as MessageKey)}
           </li>
         ))}
@@ -185,7 +190,7 @@ function LayerLegend({ layer }: { layer: MapLayer }) {
       <ul className="legend" aria-label={t('legend.label')}>
         {tiers.map((tier, index) => (
           <li key={tier}>
-            <span className="swatch" style={{ background: css(LIFE_TIER_COLORS[index]!) }} />
+            <span className="swatch" style={{ background: css(lifeTierColor(index)) }} />
             {t(`lifeTier.${tier}`)}
           </li>
         ))}
@@ -263,9 +268,10 @@ export function MapLegend({
   mantleOn: boolean;
   visibleIcons: VisibleMapIcons;
 }) {
+  const paletteMode = useAccessibilitySettings().palette;
   const city = visibleIcons.cityAge === null ? null : TECH_AGES[visibleIcons.cityAge];
   return (
-    <div className="map-legends">
+    <div className="map-legends" data-palette={paletteMode}>
       <LayerLegend layer={layer} />
       {mantleOn && (
         <ul className="legend mantle-legend" aria-label={t('legend.mantleFlow')}>

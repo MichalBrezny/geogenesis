@@ -5,6 +5,7 @@ import { renderLayer, type MapLayer, type TemperatureMonth } from '../render/map
 import { viewBounds, type MapViewport } from '../render/viewport';
 import type { Frame } from '../worker/protocol';
 import type { View } from './PlanetView';
+import { useAccessibilitySettings } from './AccessibilitySettingsSection';
 
 /** Width of the minimap drawing, CSS pixels (the map is twice as wide as high; CSS may scale it). */
 const MINIMAP_WIDTH = 180;
@@ -49,10 +50,11 @@ export function Minimap({
 }: Props) {
   const baseRef = useRef<HTMLCanvasElement>(null);
   const markRef = useRef<HTMLCanvasElement>(null);
+  const paletteMode = useAccessibilitySettings().palette;
 
   useEffect(() => {
     if (baseRef.current) renderLayer(baseRef.current, frame, layer, temperatureMonth);
-  }, [frame, layer, temperatureMonth]);
+  }, [frame, layer, temperatureMonth, paletteMode]);
 
   useEffect(() => {
     const canvas = markRef.current;

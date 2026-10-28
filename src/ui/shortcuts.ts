@@ -14,6 +14,8 @@ export const SHORTCUT_DEFINITIONS: readonly { keys: string; label: MessageKey }[
   { keys: 'E / A / B / D', label: 'help.keyWindows' },
   { keys: '+ / −', label: 'help.keyZoom' },
   { keys: 'M', label: 'help.keyMinimap' },
+  { keys: 'Arrow keys', label: 'help.keyMapCursor' },
+  { keys: 'Enter', label: 'help.keyMapActivate' },
   { keys: 'Esc', label: 'help.keyEscape' },
   { keys: '?', label: 'help.keyHelp' },
 ];
@@ -33,6 +35,7 @@ export function useShortcuts(shortcuts: Shortcuts): void {
   });
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
       if (event.ctrlKey || event.metaKey || event.altKey) return;
       const target = event.target as HTMLElement | null;
       if (target?.closest('input, select, textarea, [contenteditable="true"]')) return;

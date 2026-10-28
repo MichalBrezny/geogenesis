@@ -483,13 +483,11 @@ body {
   width: min(100cqw, calc((100cqh - var(--legend-room)) * 2));
   aspect-ratio: 2 / 1;
   border: 1px solid var(--grid);
-}
-
-.map.zoomed {
   cursor: grab;
+  touch-action: none;
 }
 
-.map.zoomed:not(.tool-active):active {
+.map:not(.tool-active):active {
   cursor: grabbing;
 }
 
@@ -546,6 +544,7 @@ body {
   width: min(100cqw, calc(100cqh - var(--legend-room)));
   aspect-ratio: 1;
   cursor: grab;
+  touch-action: none;
 }
 
 .globe:active {
@@ -600,7 +599,10 @@ button:disabled {
 button:focus-visible,
 select:focus-visible,
 input:focus-visible,
-summary:focus-visible {
+summary:focus-visible,
+a:focus-visible,
+canvas:focus-visible,
+[tabindex]:focus-visible {
   outline: 2px solid var(--series-1);
   outline-offset: 1px;
 }
@@ -2272,4 +2274,78 @@ button.event-entry:hover:not(:disabled) {
   justify-content: space-between;
   gap: 12px;
   font-variant-numeric: tabular-nums;
+}
+
+.keyboard-cursor {
+  position: absolute;
+  z-index: 4;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #fff2a8;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgb(0 0 0 / 75%);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.accessibility-settings {
+  display: grid;
+  gap: 8px;
+}
+
+.accessibility-settings h3 {
+  margin-bottom: 0;
+}
+
+.accessibility-settings fieldset {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--grid);
+  border-radius: 5px;
+}
+
+.accessibility-settings label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.app[data-contrast='high'] {
+  --surface-page: #000;
+  --surface-chart: #080808;
+  --surface-control: #111;
+  --surface-control-hover: #292929;
+  --text-primary: #fff;
+  --text-secondary: #e5e5e5;
+  --grid: #d7d7d7;
+  --series-1: #7fc8ff;
+  --accent-strong: #075b9f;
+  --warning: #ffd166;
+}
+
+.app[data-contrast='high'] :focus-visible {
+  outline-width: 3px;
+  outline-color: #fff176;
+}
+
+@media (pointer: coarse) {
+  .topbar button,
+  .sidebar button,
+  .layerbar button,
+  .map-controls button,
+  .window-launchers button,
+  .floating-window-actions button,
+  .tabs button,
+  .tool-buttons button,
+  summary {
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  .compact-toggle,
+  .accessibility-settings label {
+    min-height: 40px;
+  }
 }
