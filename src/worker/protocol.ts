@@ -63,7 +63,7 @@ export type WorkerRequest =
   /** UI consumed the latest frame; permits a pending newer frame to replace it. */
   | { type: 'frameAck' }
   | { type: 'pacing'; adaptive: boolean }
-  | { type: 'save'; fileName?: string }
+  | { type: 'save'; fileName?: string; requestId?: number }
   /** Ask for the life and monthly climate in one cell; answered with one `cellLife` response. */
   | { type: 'inspect'; cell: number }
   /** Pause between steps while running, ms. */
@@ -153,4 +153,4 @@ export type WorkerResponse =
   /** A tool could not be used; the UI explains why. */
   | { type: 'toolRefused'; reason: 'energy' | 'notAllowed' }
   | { type: 'toolApplied'; tool: ToolId; cell: number }
-  | { type: 'saved'; bytes: ArrayBuffer; fileName: string };
+  | { type: 'saved'; bytes: ArrayBuffer; fileName: string; requestId?: number };

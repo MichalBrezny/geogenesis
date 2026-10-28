@@ -16,6 +16,7 @@ export const SHORTCUT_DEFINITIONS: readonly { keys: string; label: MessageKey }[
   { keys: 'M', label: 'help.keyMinimap' },
   { keys: 'Esc', label: 'help.keyEscape' },
   { keys: '?', label: 'help.keyHelp' },
+  { keys: ',', label: 'help.keySettings' },
 ];
 
 export function shortcutHelpItems() {

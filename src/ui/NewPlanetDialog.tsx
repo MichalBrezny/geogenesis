@@ -7,6 +7,7 @@ import { PLANET_STARTS, type PlanetStart } from '../sim/world';
 import { Dialog } from './Dialog';
 import { DICE_ICON, SCENARIO_ICONS, START_ICONS } from './icons';
 import { RESOLUTIONS } from './menuOptions';
+import { DEFAULT_SETTINGS, type Settings } from './settings';
 
 export interface NewPlanetChoice {
   scenario: ScenarioId;
@@ -74,17 +75,19 @@ const GOAL_SCENARIOS = new Set<ScenarioId>([
 export function NewPlanetDialog({
   onClose,
   onCreate,
+  settings = DEFAULT_SETTINGS,
 }: {
   onClose: () => void;
   onCreate: (choice: NewPlanetChoice) => void;
+  settings?: Readonly<Settings>;
 }) {
   const [form, setForm] = useState<NewPlanetForm>({
     scenario: 'random',
     seed: randomSeed(),
-    resolutionIndex: 1,
+    resolutionIndex: settings.resolutionIndex,
     start: 'young',
     difficulty: 'normal',
-    adaptivePacing: true,
+    adaptivePacing: settings.adaptivePacing,
     radiusKm: 6371,
     distanceAu: 1,
     starType: 'G',

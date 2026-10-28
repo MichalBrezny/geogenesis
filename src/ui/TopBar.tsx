@@ -6,6 +6,8 @@ import { GaiaFace } from './GaiaFace';
 import { NewPlanetDialog, type NewPlanetChoice } from './NewPlanetDialog';
 import { SaveLoadDialog, type FileDialogMode } from './SaveLoadDialog';
 import { TOUR_ANCHORS } from './guide';
+import type { StoredSave } from './saveStore';
+import type { Settings } from './settings';
 export { RESOLUTIONS } from './menuOptions';
 
 export const SPEEDS = { slow: 500, normal: 120, fast: 0 } as const;
@@ -23,6 +25,14 @@ interface Props {
   onSave: (fileName: string) => void;
   onLoad: (file: File) => void;
   onShowHelp: () => void;
+  onShowSettings: () => void;
+  settings: Settings;
+  saves: readonly StoredSave[];
+  latestAutosave: StoredSave | null;
+  onSaveSlot: (name: string, overwriteId?: string) => void;
+  onLoadSlot: (save: StoredSave) => void;
+  onRenameSlot: (id: string, name: string) => void;
+  onDeleteSlot: (id: string) => void;
   error: string | null;
   newPlanetRequest: number;
 }
@@ -107,6 +117,17 @@ export function TopBar(props: Props) {
           <button onClick={() => setFileDialog('load')} title={t('controls.loadHint')}>
             {t('controls.load')}
           </button>
+          {props.latestAutosave && (
+            <button
+              onClick={() => props.onLoadSlot(props.latestAutosave!)}
+              title={t('saves.continueHint')}
+            >
+              {t('saves.continue')}
+            </button>
+          )}
+          <button onClick={props.onShowSettings} title={t('settings.openHint')}>
+            {t('settings.open')}
+          </button>
           <button
             onClick={props.onShowHelp}
             title={t('help.shortcutsHint')}
@@ -117,7 +138,11 @@ export function TopBar(props: Props) {
         </div>
       </header>
       {(newPlanetOpen || requestedOpen) && (
-        <NewPlanetDialog onClose={closeNewPlanet} onCreate={props.onNewPlanet} />
+        <NewPlanetDialog
+          onClose={closeNewPlanet}
+          onCreate={props.onNewPlanet}
+          settings={props.settings}
+        />
       )}
       {fileDialog && (
         <SaveLoadDialog
@@ -127,6 +152,11 @@ export function TopBar(props: Props) {
           onClose={() => setFileDialog(null)}
           onSave={props.onSave}
           onLoad={props.onLoad}
+          saves={props.saves}
+          onSaveSlot={props.onSaveSlot}
+          onLoadSlot={props.onLoadSlot}
+          onRenameSlot={props.onRenameSlot}
+          onDeleteSlot={props.onDeleteSlot}
         />
       )}
     </>
