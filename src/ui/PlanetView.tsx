@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { t } from '../i18n/i18n';
 import {
   buildGlobeLookup,
@@ -53,6 +53,7 @@ import type { Frame } from '../worker/protocol';
 import { CellInspector, type HoveredCell } from './CellInspector';
 import { MAP_ICONS } from './icons';
 import { Minimap } from './Minimap';
+import { MapExportControls, type CaptureMap } from './MapExportControls';
 import { useShortcuts } from './shortcuts';
 import type { CellLife } from '../sim/models/biosphere/diversity';
 import type { ToolId } from '../sim/tools/tools';
@@ -223,7 +224,13 @@ export function PlanetView({
   }, [hoveredCell, frame, onInspect]);
   const [globeView, setGlobeView] = useState<GlobeView>({ longitude: 180, latitude: 20 });
   const [mapView, setMapView] = useState<MapViewport>(FULL_VIEW);
-  const [minimapOn, setMinimapOn] = useState(() => localStorage.getItem(MINIMAP_KEY) !== 'false');
+  const [minimapOn, setMinimapOn] = useState(() => {
+    try {
+      return localStorage.getItem(MINIMAP_KEY) !== 'false';
+    } catch {
+      return true;
+    }
+  });
   const drag = useRef<{
     x: number;
     y: number;
@@ -243,8 +250,41 @@ export function PlanetView({
   const mapSource = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
-    localStorage.setItem(MINIMAP_KEY, String(minimapOn));
+    try {
+      localStorage.setItem(MINIMAP_KEY, String(minimapOn));
+    } catch {
+      // The map remains usable when storage is unavailable.
+    }
   }, [minimapOn]);
+
+  const captureMap = useCallback<CaptureMap>((caption, maxWidth) => {
+    const base = canvasRef.current;
+    if (!base || base.width === 0 || base.height === 0) return null;
+    const scale = maxWidth && base.width > maxWidth ? maxWidth / base.width : 1;
+    const width = Math.max(1, Math.round(base.width * scale));
+    const mapHeight = Math.max(1, Math.round(base.height * scale));
+    const captionHeight = caption ? Math.max(26, Math.round(width / 32)) : 0;
+    const output = document.createElement('canvas');
+    output.width = width;
+    output.height = mapHeight + captionHeight;
+    const context = output.getContext('2d');
+    if (!context) return null;
+    context.fillStyle = '#101418';
+    context.fillRect(0, 0, output.width, output.height);
+    context.imageSmoothingEnabled = false;
+    context.drawImage(base, 0, 0, width, mapHeight);
+    for (const overlay of [overlayRef.current, isobarRef.current]) {
+      if (overlay) context.drawImage(overlay, 0, 0, width, mapHeight);
+    }
+    if (caption) {
+      context.imageSmoothingEnabled = true;
+      context.fillStyle = '#e6e6e6';
+      context.font = `${Math.max(11, Math.round(captionHeight * 0.48))}px system-ui, sans-serif`;
+      context.textBaseline = 'middle';
+      context.fillText(caption, 10, mapHeight + captionHeight / 2, width - 20);
+    }
+    return output;
+  }, []);
 
   useEffect(() => {
     if (!centreRequest || centreRequest.cell < 0 || centreRequest.cell >= frame.grid.cellCount)
@@ -724,6 +764,7 @@ export function PlanetView({
             {MAP_ICONS.minimap}
           </button>
         </div>
+        <MapExportControls frame={frame} layer={layer} capture={captureMap} />
         {minimapOn && (view === 'globe' || zoomed) && (
           <Minimap
             frame={frame}
@@ -757,12 +798,7 @@ export function PlanetView({
         )}
       </div>
       {hovered && (
-        <CellInspector
-          frame={frame}
-          cell={hovered}
-          life={cellLife}
-          climate={cellClimate}
-        />
+        <CellInspector frame={frame} cell={hovered} life={cellLife} climate={cellClimate} />
       )}
     </>
   );

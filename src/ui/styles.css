@@ -516,6 +516,58 @@ body {
   border-color: var(--series-1);
 }
 
+/* Current-view capture and bounded time-lapse controls. */
+.export-controls {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--grid);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--surface-chart) 90%, transparent);
+  line-height: normal;
+  font-size: 0.72rem;
+}
+
+.export-controls button {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 6px;
+}
+
+.export-controls select {
+  width: 74px;
+  padding: 3px;
+  font-size: inherit;
+}
+
+.export-controls output {
+  min-width: 50px;
+  color: var(--text-secondary);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.export-controls .recording {
+  color: #ff7b72;
+}
+
+@media (max-width: 699px) {
+  .export-controls {
+    left: 8px;
+    max-width: calc(100% - 70px);
+  }
+
+  .export-controls output {
+    display: none;
+  }
+}
+
 /* The whole planet, small, in the bottom-right corner. */
 .minimap {
   position: absolute;
@@ -712,6 +764,17 @@ button.primary:hover:not(:disabled) {
 .planet-parameters dd {
   margin: 0;
   text-align: right;
+}
+
+.planet-share {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.planet-share small {
+  color: var(--text-secondary);
+  line-height: 1.35;
 }
 
 .actions {

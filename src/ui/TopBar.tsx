@@ -22,6 +22,7 @@ interface Props {
   onNewPlanet: (choice: NewPlanetChoice) => void;
   onSave: (fileName: string) => void;
   onLoad: (file: File) => void;
+  onCopyShareLink: () => void;
   onShowHelp: () => void;
   error: string | null;
   newPlanetRequest: number;
@@ -106,6 +107,9 @@ export function TopBar(props: Props) {
           </button>
           <button onClick={() => setFileDialog('load')} title={t('controls.loadHint')}>
             {t('controls.load')}
+          </button>
+          <button onClick={props.onCopyShareLink} disabled={!frame} title={t('share.copyHint')}>
+            {t('share.copy')}
           </button>
           <button
             onClick={props.onShowHelp}
