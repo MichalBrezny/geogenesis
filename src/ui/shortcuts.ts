@@ -36,6 +36,8 @@ export function useShortcuts(shortcuts: Shortcuts): void {
       if (event.ctrlKey || event.metaKey || event.altKey) return;
       const target = event.target as HTMLElement | null;
       if (target?.closest('input, select, textarea, [contenteditable="true"]')) return;
+      // A modal dialog owns the keyboard; it handles Esc itself.
+      if (document.querySelector('[aria-modal="true"]')) return;
       const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
       const action = latest.current[key];
       if (!action) return;
