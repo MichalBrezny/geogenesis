@@ -51,7 +51,7 @@ export type WorkerRequest =
   | { type: 'civPolicy'; policy: CivilizationPolicyChanges }
   | { type: 'disasters'; disasters: Partial<DisasterSettings> }
   | { type: 'unlimitedEnergy'; enabled: boolean }
-  | { type: 'save' }
+  | { type: 'save'; fileName?: string }
   /** Ask for the life and monthly climate in one cell; answered with one `cellLife` response. */
   | { type: 'inspect'; cell: number }
   /** Pause between steps while running, ms. */
