@@ -6,6 +6,8 @@ import type { ControlGroupId } from './ControlsPanel';
 import { EVENT_ICON_PATHS } from '../render/mapIcons';
 import type { EventKey } from '../sim/events';
 import type { DisasterSettings } from '../sim/core/planet';
+import type { ScenarioId } from '../sim/scenarios';
+import type { PlanetStart } from '../sim/world';
 
 /**
  * Line icons drawn on a 24-unit grid in the current text colour, so they follow
@@ -368,6 +370,45 @@ export const VIEW_ICONS: Record<View, ReactNode> = {
   ),
 };
 
+/** Distinct scenario and starting-point art for the New Planet cards. */
+export const SCENARIO_ICONS: Record<ScenarioId, ReactNode> = {
+  random: VIEW_ICONS.globe,
+  daisyworld: LAYER_ICONS.daisies,
+  aquarium: LAYER_ICONS.oceanCurrents,
+  mars: TOOL_ICONS.meteor,
+  venus: LAYER_ICONS.clouds,
+  brighteningSun: (
+    <Icon>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2m0-14-2 2M7 17l-2 2" />
+    </Icon>
+  ),
+  snowball: (
+    <Icon>
+      <path d="M12 2v20M3.3 7l17.4 10M3.3 17 20.7 7M8 4l4 3 4-3M8 20l4-3 4 3" />
+    </Icon>
+  ),
+  cradle: LAYER_ICONS.life,
+  terraformMars: TOOL_ICONS.biomeFactory,
+  stoneAge: LAYER_ICONS.civilization,
+  cambrian: LAYER_ICONS.diversity,
+};
+
+export const START_ICONS: Record<PlanetStart, ReactNode> = {
+  young: TOOL_ICONS.volcano,
+  microbial: (
+    <Icon>
+      <circle cx="12" cy="12" r="7" />
+      <path d="M8 9h.1M15 8h.1M9 15c2 1 4 1 6-1" />
+    </Icon>
+  ),
+  quick: (
+    <Icon>
+      <path d="M13 2 5 14h7l-1 8 8-12h-7Z" />
+    </Icon>
+  ),
+};
+
 export type FloatingWindowId = ControlGroupId | 'civilization' | 'planet';
 
 export const WINDOW_ICONS: Record<FloatingWindowId, ReactNode> = {
@@ -408,6 +449,17 @@ export const MAP_ICONS = {
     </Icon>
   ),
 } satisfies Record<string, ReactNode>;
+
+export const DICE_ICON = (
+  <Icon>
+    <rect x="3" y="3" width="18" height="18" rx="3" />
+    <circle cx="8" cy="8" r="1" fill="currentColor" />
+    <circle cx="16" cy="8" r="1" fill="currentColor" />
+    <circle cx="12" cy="12" r="1" fill="currentColor" />
+    <circle cx="8" cy="16" r="1" fill="currentColor" />
+    <circle cx="16" cy="16" r="1" fill="currentColor" />
+  </Icon>
+);
 
 /** Scenario objective marker used by the Goal tab and outcome dialog. */
 export const GOAL_ICON = (

@@ -2,6 +2,7 @@ import { t, type MessageKey } from '../i18n/i18n';
 import type { FrameGoal } from '../worker/protocol';
 import { formatStep } from './format';
 import { GOAL_ICON } from './icons';
+import { Dialog } from './Dialog';
 
 function goalKey(prefix: string, id: FrameGoal['id']): MessageKey {
   return `${prefix}.${id}` as MessageKey;
@@ -71,33 +72,28 @@ export function GoalOutcome(props: {
   const won = goal.status === 'won';
   const reason = goal.outcomeReason ? t(`goal.reason.${goal.outcomeReason}` as MessageKey) : '';
   return (
-    <div className="overlay">
-      <section
-        className={`goal-outcome ${won ? 'won' : 'lost'}`}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t(won ? 'goal.won' : 'goal.lost')}
-      >
-        <div className="goal-outcome-icon">{GOAL_ICON}</div>
-        <h2>{t(won ? 'goal.won' : 'goal.lost')}</h2>
-        <p>{reason}</p>
-        <p className="goal-outcome-score">
-          {t('goal.finalScore', { value: goal.score.toFixed(1) })}
-        </p>
-        <div className="actions">
-          <button type="button" title={t('goal.keepPlayingHint')} onClick={props.onKeepPlaying}>
-            {t('goal.keepPlaying')}
-          </button>
-          <button
-            type="button"
-            className="primary"
-            title={t('goal.newPlanetHint')}
-            onClick={props.onNewPlanet}
-          >
-            {t('controls.newPlanet')}
-          </button>
-        </div>
-      </section>
-    </div>
+    <Dialog
+      title={t(won ? 'goal.won' : 'goal.lost')}
+      onClose={props.onKeepPlaying}
+      className={`goal-outcome ${won ? 'won' : 'lost'}`}
+    >
+      <div className="goal-outcome-icon">{GOAL_ICON}</div>
+      <p>{reason}</p>
+      <p className="goal-outcome-score">{t('goal.finalScore', { value: goal.score.toFixed(1) })}</p>
+      <GoalPanel goal={goal} year={goal.outcomeYear ?? goal.startYear} />
+      <div className="actions">
+        <button type="button" title={t('goal.keepPlayingHint')} onClick={props.onKeepPlaying}>
+          {t('goal.keepPlaying')}
+        </button>
+        <button
+          type="button"
+          className="primary"
+          title={t('goal.newPlanetHint')}
+          onClick={props.onNewPlanet}
+        >
+          {t('controls.newPlanet')}
+        </button>
+      </div>
+    </Dialog>
   );
 }

@@ -29,6 +29,8 @@ import { GoalOutcome, GoalPanel } from './GoalPanel';
 import type { VisibleMapIcons } from '../render/mapIcons';
 import { DisasterPanel } from './DisasterPanel';
 import { CivilizationControlsPanel } from './CivilizationControlsPanel';
+import type { NewPlanetChoice } from './NewPlanetDialog';
+import { HelpDialog } from './HelpDialog';
 
 /** How long a tool notice stays on screen, ms. */
 const NOTICE_DURATION = 3000;
@@ -300,20 +302,6 @@ const SCENARIO_VIEW: Record<
   },
 };
 
-/** Keys listed in the shortcut help, with their descriptions. */
-const SHORTCUT_HELP = [
-  ['Space', 'help.keyPlay'],
-  ['S', 'help.keyStep'],
-  ['1–9 / 0', 'help.keyLayer'],
-  ['G', 'help.keyView'],
-  ['W / C / P / T / N / I / V', 'help.keyOverlay'],
-  ['E / A / B / D', 'help.keyWindows'],
-  ['+ / −', 'help.keyZoom'],
-  ['M', 'help.keyMinimap'],
-  ['Esc', 'help.keyEscape'],
-  ['?', 'help.keyHelp'],
-] as const;
-
 /** Offers bytes from the worker as a file download. */
 function download(bytes: ArrayBuffer, fileName: string): void {
   const url = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
@@ -402,6 +390,7 @@ export function App() {
       start: PlanetStart = 'young',
       planetParams?: Partial<PlanetParameters>,
       continentalFraction?: number,
+      seed = randomSeed(),
     ) => {
       const [width, height] = RESOLUTIONS[resolutionIndex]!;
       captureObliquityDefault.current = true;
@@ -409,7 +398,7 @@ export function App() {
       send({
         type: 'create',
         scenario,
-        seed: randomSeed(),
+        seed,
         width,
         height,
         start,
@@ -419,17 +408,12 @@ export function App() {
     },
     [send],
   );
-  const newPlanet = (
-    scenario: ScenarioId,
-    resolutionIndex: number,
-    start: PlanetStart,
-    planetParams?: Partial<PlanetParameters>,
-    continentalFraction?: number,
-  ) => {
+  const newPlanet = (choice: NewPlanetChoice) => {
+    const { scenario, resolutionIndex, start, planetParams, continentalFraction, seed } = choice;
     send({ type: 'run', running: false });
     setRunning(false);
     setDismissedOutcome(null);
-    createPlanet(scenario, resolutionIndex, start, planetParams, continentalFraction);
+    createPlanet(scenario, resolutionIndex, start, planetParams, continentalFraction, seed);
     setLayer(SCENARIO_VIEW[scenario].layer);
     setOverlays(SCENARIO_VIEW[scenario].overlays ?? []);
     setError(null);
@@ -494,6 +478,8 @@ export function App() {
   };
   const load = async (file: File) => {
     setError(null);
+    send({ type: 'run', running: false });
+    setRunning(false);
     captureObliquityDefault.current = true;
     const bytes = await file.arrayBuffer();
     workerRef.current?.postMessage({ type: 'load', bytes } satisfies WorkerRequest, [bytes]);
@@ -622,9 +608,10 @@ export function App() {
         speed={speed}
         onSpeedChange={changeSpeed}
         onNewPlanet={newPlanet}
-        onSave={() => send({ type: 'save' })}
+        onSave={(fileName) => send({ type: 'save', fileName })}
         onLoad={(file) => void load(file)}
         onShowHelp={() => setHelpOpen(true)}
+        error={error}
         newPlanetRequest={newPlanetRequest}
       />
       {frame && (
@@ -817,7 +804,7 @@ export function App() {
             </FloatingWindow>
           );
         })}
-      {helpOpen && <ShortcutHelp onClose={() => setHelpOpen(false)} />}
+      {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
       {frame?.goal &&
         frame.goal.status !== 'active' &&
         dismissedOutcome !== outcomeKey(frame.goal) && (
@@ -840,34 +827,4 @@ export function App() {
 
 function outcomeKey(goal: NonNullable<Frame['goal']>): string {
   return `${goal.id}:${goal.status}:${goal.outcomeYear ?? ''}`;
-}
-
-function ShortcutHelp({ onClose }: { onClose: () => void }) {
-  return (
-    <div className="overlay" onClick={onClose}>
-      <section
-        className="help"
-        role="dialog"
-        aria-modal="true"
-        aria-label={t('help.shortcuts')}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <h2>{t('help.shortcuts')}</h2>
-        <dl>
-          {SHORTCUT_HELP.map(([key, label]) => (
-            <div key={key}>
-              <dt>
-                <kbd>{key}</kbd>
-              </dt>
-              <dd>{t(label)}</dd>
-            </div>
-          ))}
-        </dl>
-        <p className="muted">{t('help.mouse')}</p>
-        <button className="primary" onClick={onClose} autoFocus>
-          {t('help.close')}
-        </button>
-      </section>
-    </div>
-  );
 }

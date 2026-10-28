@@ -106,7 +106,7 @@ export class SimHost {
           this.delayMs = Math.max(0, request.delayMs);
           break;
         case 'save':
-          void this.save();
+          void this.save(request.fileName);
           break;
         case 'load':
           void this.load(request.bytes);
@@ -122,14 +122,14 @@ export class SimHost {
     }
   }
 
-  private async save(): Promise<void> {
+  private async save(requestedFileName?: string): Promise<void> {
     if (!this.world) return;
     const { planet } = this.world;
     try {
       const bytes = await compress(
         serializeGame({ scenario: this.scenario, settings: this.world.settings, planet }),
       );
-      const fileName = `planet-${Math.round(planet.globals.year)}.geogenesis`;
+      const fileName = requestedFileName ?? `planet-${Math.round(planet.globals.year)}.geogenesis`;
       this.post({ type: 'saved', bytes: bytes.buffer as ArrayBuffer, fileName }, [bytes.buffer]);
     } catch (error) {
       this.post({ type: 'error', message: String(error) }, []);

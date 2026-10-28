@@ -1,7 +1,26 @@
 import { useEffect, useRef } from 'react';
+import type { MessageKey } from '../i18n/i18n';
 
 /** Keyboard shortcuts: key (as in KeyboardEvent.key) to action. */
 export type Shortcuts = Record<string, () => void>;
+
+/** The single presentation table used by keyboard handling and the Help dialog. */
+export const SHORTCUT_DEFINITIONS: readonly { keys: string; label: MessageKey }[] = [
+  { keys: 'Space', label: 'help.keyPlay' },
+  { keys: 'S', label: 'help.keyStep' },
+  { keys: '1–9 / 0', label: 'help.keyLayer' },
+  { keys: 'G', label: 'help.keyView' },
+  { keys: 'W / C / P / T / N / I / V', label: 'help.keyOverlay' },
+  { keys: 'E / A / B / D', label: 'help.keyWindows' },
+  { keys: '+ / −', label: 'help.keyZoom' },
+  { keys: 'M', label: 'help.keyMinimap' },
+  { keys: 'Esc', label: 'help.keyEscape' },
+  { keys: '?', label: 'help.keyHelp' },
+];
+
+export function shortcutHelpItems() {
+  return SHORTCUT_DEFINITIONS.map((item) => ({ ...item }));
+}
 
 /**
  * Runs the action bound to a pressed key, unless the player is typing in a form
