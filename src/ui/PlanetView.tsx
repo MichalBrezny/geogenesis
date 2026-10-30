@@ -40,7 +40,6 @@ import {
 } from '../render/mapRenderer';
 import {
   clampViewport,
-  drawViewport,
   FULL_VIEW,
   MAX_ZOOM,
   panViewport,
@@ -65,6 +64,13 @@ import type { PlanetEvent } from '../sim/events';
 import { isTap, pinchGesture, type GesturePoint } from './mapGestures';
 import { useAccessibilitySettings } from './AccessibilitySettingsSection';
 import { BIOMES, type Biome } from '../sim/data/biomes';
+import {
+  drawTexturedViewport,
+  isTexturedLayer,
+  TILE_ANIMATION_MS,
+  tileAnimationPhase,
+  tileBlend,
+} from '../render/terrainTiles';
 
 /** Ways to look at the planet. */
 export const VIEWS = ['map', 'globe'] as const;
@@ -220,6 +226,7 @@ export function PlanetView({
   const isobarRef = useRef<HTMLCanvasElement>(null);
   const [overlaySize, setOverlaySize] = useState({ width: 0, height: 0 });
   const [reducedMotion] = useState(prefersReducedMotion);
+  const [terrainAnimationPhase, setTerrainAnimationPhase] = useState(0);
   const paletteMode = useAccessibilitySettings().palette;
   // The running particle animation: its layers and the current projection.
   const flow = useRef<{
@@ -373,8 +380,41 @@ export function PlanetView({
     const canvas = canvasRef.current;
     const source = mapSource.current;
     if (view !== 'map' || !canvas || !source) return;
-    drawViewport(canvas, source, mapView, overlaySize.width, overlaySize.height);
-  }, [frame, layer, temperatureMonth, view, mapView, overlaySize, paletteMode]);
+    drawTexturedViewport(
+      canvas,
+      source,
+      frame,
+      layer,
+      mapView,
+      overlaySize.width,
+      overlaySize.height,
+      reducedMotion ? 0 : terrainAnimationPhase,
+    );
+  }, [
+    frame,
+    layer,
+    temperatureMonth,
+    view,
+    mapView,
+    overlaySize,
+    paletteMode,
+    reducedMotion,
+    terrainAnimationPhase,
+  ]);
+
+  // Only water and lava motifs move, at a deliberately low cadence; reduced motion stays static.
+  useEffect(() => {
+    const cellPixels = Math.min(
+      (overlaySize.width * mapView.zoom) / width,
+      (overlaySize.height * mapView.zoom) / height,
+    );
+    if (reducedMotion || view !== 'map' || !isTexturedLayer(layer) || tileBlend(cellPixels) <= 0) {
+      return;
+    }
+    const update = () => setTerrainAnimationPhase(tileAnimationPhase(performance.now(), false));
+    const timer = window.setInterval(update, TILE_ANIMATION_MS);
+    return () => window.clearInterval(timer);
+  }, [height, layer, mapView.zoom, overlaySize, reducedMotion, view, width]);
 
   // Mouse-wheel zoom around the pointer; a native listener, so it can keep the page from scrolling.
   useEffect(() => {
