@@ -11,6 +11,7 @@ import {
   tileAnimationPhase,
   tileBlend,
 } from './terrainTiles';
+import { TERRAIN_SPRITES, terrainSpritePalette, terrainSpriteVariantCount } from './terrainSprites';
 
 function mapSource(): MapSource {
   const planet = createPlanet({ width: 4, height: 3 });
@@ -42,9 +43,10 @@ describe('pixel terrain pattern selection', () => {
   it('uses relief for alpine rock and drained seafloor patterns', () => {
     const state = mapSource();
     state.fields.elevation[5] = 3200;
+    state.fields.airTemperature[5] = -8;
     state.fields.elevation[6] = -5000;
     state.fields.elevation[7] = -500;
-    expect(terrainPatternAt(state, 'terrain', 1, 1)).toBe(TerrainPattern.Mountain);
+    expect(terrainPatternAt(state, 'terrain', 1, 1)).toBe(TerrainPattern.SnowMountain);
     expect(terrainPatternAt(state, 'seafloor', 2, 1)).toBe(TerrainPattern.Abyss);
     expect(terrainPatternAt(state, 'seafloor', 3, 1)).toBe(TerrainPattern.Shelf);
   });
@@ -57,6 +59,25 @@ describe('pixel terrain variants and cache', () => {
     const ocean = cellTileVariant(12, 7, TerrainPattern.DeepOcean, 0);
     expect(cellTileVariant(12, 7, TerrainPattern.DeepOcean, 1)).toBe((ocean + 1) % 4);
     expect(cellTileVariant(12, 7, TerrainPattern.DeepOcean, 0)).toBe(ocean);
+  });
+
+  it('provides two to four complete 16 px variants and a colour-blind palette', () => {
+    for (let pattern = 0; pattern < TerrainPattern.Count; pattern++) {
+      const sprite = TERRAIN_SPRITES[pattern as TerrainPattern]!;
+      expect(terrainSpriteVariantCount(pattern)).toBeGreaterThanOrEqual(2);
+      expect(terrainSpriteVariantCount(pattern)).toBeLessThanOrEqual(4);
+      for (const variant of sprite.variants) {
+        expect(variant).toHaveLength(16);
+        expect(variant.every((row) => row.length === 16)).toBe(true);
+        expect(variant.every((row) => /^[.dmla]{16}$/.test(row))).toBe(true);
+        expect(variant[0]).toBe('................');
+        expect(variant[15]).toBe('................');
+        expect(variant.every((row) => row[0] === '.' && row[15] === '.')).toBe(true);
+      }
+      expect(terrainSpritePalette(pattern, 'colourBlind')).not.toEqual(
+        terrainSpritePalette(pattern, 'default'),
+      );
+    }
   });
 
   it('reuses entries and bounds old tile sizes', () => {
@@ -73,16 +94,16 @@ describe('pixel terrain variants and cache', () => {
 
 describe('pixel terrain transition and animation timing', () => {
   it('fades smoothly from the unchanged flat map', () => {
-    expect(tileBlend(5)).toBe(0);
-    expect(tileBlend(6)).toBe(0.5);
-    expect(tileBlend(7)).toBe(1);
+    expect(tileBlend(9)).toBe(0);
+    expect(tileBlend(11.5)).toBe(0.5);
+    expect(tileBlend(14)).toBe(1);
   });
 
-  it('advances every 480 ms and stays still with reduced motion', () => {
+  it('advances every 500 ms and stays still with reduced motion', () => {
     expect(tileAnimationPhase(0, false)).toBe(0);
-    expect(tileAnimationPhase(479, false)).toBe(0);
-    expect(tileAnimationPhase(480, false)).toBe(1);
-    expect(tileAnimationPhase(1920, false)).toBe(0);
+    expect(tileAnimationPhase(499, false)).toBe(0);
+    expect(tileAnimationPhase(500, false)).toBe(1);
+    expect(tileAnimationPhase(2000, false)).toBe(0);
     expect(tileAnimationPhase(5000, true)).toBe(0);
   });
 });

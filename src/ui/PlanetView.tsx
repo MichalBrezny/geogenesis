@@ -411,7 +411,7 @@ export function PlanetView({
     terrainAnimationPhase,
   ]);
 
-  // Only water and lava motifs move, at a deliberately low cadence; reduced motion stays static.
+  // Only water motifs move, at a deliberately low cadence; reduced motion stays static.
   useEffect(() => {
     const cellPixels = Math.min(
       (overlaySize.width * mapView.zoom) / width,
