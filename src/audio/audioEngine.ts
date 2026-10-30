@@ -4,6 +4,8 @@ import type { AudioSettings } from './audioSettings';
 import { cueForEvent, type CueParameters } from './cues';
 import { musicParametersForEra } from './music';
 
+/** Music is switched off for now; only event cues play. The engine and settings stay in place. */
+export const MUSIC_ENABLED = false;
 const MUSIC_LEVEL = 0.6;
 const PAUSED_DUCKING = 0.28;
 const CROSSFADE_SECONDS = 2.5;
@@ -153,7 +155,7 @@ export class AudioEngine {
   private replaceMusicLayer(): void {
     const context = this.context;
     const destination = this.musicGain;
-    if (!context || !destination) return;
+    if (!MUSIC_ENABLED || !context || !destination) return;
     const previous = this.layer;
     const params = musicParametersForEra(this.era);
     const filter = context.createBiquadFilter();

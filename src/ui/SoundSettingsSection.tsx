@@ -1,5 +1,6 @@
 import { t } from '../i18n/i18n';
 import type { AudioSettings } from '../audio/audioSettings';
+import { MUSIC_ENABLED } from '../audio/audioEngine';
 import { useId } from 'react';
 
 interface Props {
@@ -33,7 +34,7 @@ export function SoundSettingsSection({ settings, onChange }: Props) {
         />
         {t('sound.mute')}
       </label>
-      {VOLUMES.map(({ key, label, hint }) => (
+      {VOLUMES.filter(({ key }) => MUSIC_ENABLED || key !== 'music').map(({ key, label, hint }) => (
         <label key={key} title={t(hint)}>
           <span>
             {t(label)} <output>{Math.round(settings[key] * 100)}%</output>

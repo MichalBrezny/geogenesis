@@ -1067,7 +1067,7 @@
   "tour.title.goal": "Follow the checklist",
   "tour.step.goal": "This card says what matters now. In goal scenarios, open the Goal tab for exact targets, progress, deadline and score. Meet all conditions to finish.",
   "sound.title": "Sound",
-  "sound.description": "Procedural music follows the planet's era. Defaults: master 70%, music 25%, effects 65%.",
+  "sound.description": "Short sound cues mark notable events. Defaults: master 70%, effects 65%.",
   "sound.mute": "Mute all sound",
   "sound.unmute": "Unmute sound",
   "sound.muteHint": "Mute all sound (U)",
