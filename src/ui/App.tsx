@@ -59,6 +59,7 @@ import {
 import { AudioEngine } from '../audio/audioEngine';
 import { loadAudioSettings, saveAudioSettings, type AudioSettings } from '../audio/audioSettings';
 import { copyText, decodePlanetHash, encodePlanetHash } from './planetShare';
+import { loadAmbientPreference, saveAmbientPreference } from '../render/ambientPreference';
 import {
   AccessibilitySettingsSection,
   useAccessibilitySettings,
@@ -402,11 +403,14 @@ export function App() {
   const [layer, setLayer] = useState<MapLayer>('terrain');
   const [view, setView] = useState<View>('map');
   const [temperatureMonth, setTemperatureMonth] = useState<TemperatureMonth>('annual');
-  const [overlays, setOverlays] = useState<Overlay[]>(['icons']);
+  const [overlays, setOverlays] = useState<Overlay[]>(() =>
+    loadAmbientPreference() ? ['icons', 'ambient'] : ['icons'],
+  );
   const toggleOverlay = (overlay: Overlay) =>
     setOverlays((current) =>
       current.includes(overlay) ? current.filter((o) => o !== overlay) : [...current, overlay],
     );
+  useEffect(() => saveAmbientPreference(overlays.includes('ambient')), [overlays]);
   /** Picking a flow or pressure layer also shows its matching overlay. */
   const chooseLayer = (next: MapLayer) => {
     setLayer(next);
@@ -590,7 +594,10 @@ export function App() {
       seed,
     );
     setLayer(SCENARIO_VIEW[scenario].layer);
-    setOverlays(SCENARIO_VIEW[scenario].overlays ?? []);
+    setOverlays((current) => [
+      ...(SCENARIO_VIEW[scenario].overlays ?? []),
+      ...(current.includes('ambient') ? (['ambient'] as const) : []),
+    ]);
     setError(null);
   };
 
@@ -640,7 +647,10 @@ export function App() {
         }
         if (lastScenario.current !== message.frame.scenario) {
           lastScenario.current = message.frame.scenario;
-          setOverlays(SCENARIO_VIEW[message.frame.scenario].overlays ?? []);
+          setOverlays((current) => [
+            ...(SCENARIO_VIEW[message.frame.scenario].overlays ?? []),
+            ...(current.includes('ambient') ? (['ambient'] as const) : []),
+          ]);
         }
         if (startupShareAccepted.current) {
           startupShareAccepted.current = false;
@@ -755,6 +765,16 @@ export function App() {
     }
     if (overlays.includes('isobars')) fields.add('pressure');
     if (overlays.includes('icons')) {
+      fields.add('civilization');
+      fields.add('dominantClass');
+    }
+    if (overlays.includes('ambient')) {
+      fields.add('elevation');
+      fields.add('iceCover');
+      fields.add('cloudCover');
+      fields.add('windU');
+      fields.add('windV');
+      fields.add('volcanicActivity');
       fields.add('civilization');
       fields.add('dominantClass');
     }

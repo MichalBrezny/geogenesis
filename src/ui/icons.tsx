@@ -326,6 +326,12 @@ export const DISASTER_ICONS: Record<keyof DisasterSettings, ReactNode> = {
 };
 
 export const OVERLAY_ICONS: Record<Overlay, ReactNode> = {
+  ambient: (
+    <Icon>
+      <path d="M3 16c3-3 6-3 9 0s6 3 9 0M6 9h.1M12 6h.1M18 10h.1" />
+      <path d="M15 19c0-3 3-3 3-6" />
+    </Icon>
+  ),
   wind: LAYER_ICONS.wind,
   currents: LAYER_ICONS.oceanCurrents,
   isobars: LAYER_ICONS.pressure,
