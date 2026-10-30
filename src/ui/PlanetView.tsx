@@ -21,6 +21,15 @@ import {
   type FlowLayer,
   type FlowStyle,
 } from '../render/particles';
+import {
+  createAmbientLayer,
+  drawAmbient,
+  setAmbientGlobeView,
+  setAmbientMapView,
+  updateAmbientLayer,
+  type AmbientLayer,
+} from '../render/ambient';
+import { systemPrefersReducedMotion } from '../render/ambientPreference';
 import { drawIsobars } from '../render/isobars';
 import { drawHotspots, mantleVelocityField } from '../render/mantleFlow';
 import { drawMapLabels } from '../render/mapLabels';
@@ -90,6 +99,7 @@ function loadMinimapPreference(): boolean {
 
 /** Vector fields that can be drawn over any layer: animated particles, or arrows for reduced motion. */
 export const OVERLAYS = [
+  'ambient',
   'wind',
   'currents',
   'isobars',
@@ -150,9 +160,6 @@ function overlayField(frame: Frame, overlay: FlowOverlay): VectorField {
 function isFlowOverlay(overlay: Overlay): overlay is FlowOverlay {
   return overlay === 'wind' || overlay === 'currents';
 }
-
-const prefersReducedMotion = () =>
-  typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
 /** Projection of the globe or the zoomed map onto `w` × `h` overlay pixels. */
 function projection(
@@ -216,11 +223,13 @@ export function PlanetView({
   particleDensity = 1,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const ambientRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const isobarRef = useRef<HTMLCanvasElement>(null);
   const [overlaySize, setOverlaySize] = useState({ width: 0, height: 0 });
-  const [reducedMotion] = useState(prefersReducedMotion);
+  const [reducedMotion] = useState(systemPrefersReducedMotion);
   const paletteMode = useAccessibilitySettings().palette;
+  const ambient = useRef<AmbientLayer | null>(null);
   // The running particle animation: its layers and the current projection.
   const flow = useRef<{
     layers: Map<FlowOverlay, FlowLayer>;
@@ -296,7 +305,7 @@ export function PlanetView({
     context.fillRect(0, 0, output.width, output.height);
     context.imageSmoothingEnabled = false;
     context.drawImage(base, 0, 0, width, mapHeight);
-    for (const overlay of [overlayRef.current, isobarRef.current]) {
+    for (const overlay of [ambientRef.current, overlayRef.current, isobarRef.current]) {
       if (overlay) context.drawImage(overlay, 0, 0, width, mapHeight);
     }
     if (caption) {
@@ -406,20 +415,39 @@ export function PlanetView({
 
   // Size the overlay to the screen and set its projection; this also clears the trails.
   useEffect(() => {
+    const ambientCanvas = ambientRef.current;
     const overlay = overlayRef.current;
     const isobars = isobarRef.current;
-    if (!overlay || !isobars) return;
+    if (!ambientCanvas || !overlay || !isobars) return;
     const ratio = window.devicePixelRatio || 1;
-    for (const canvas of [overlay, isobars]) {
+    for (const canvas of [ambientCanvas, overlay, isobars]) {
       canvas.width = Math.round(overlaySize.width * ratio);
       canvas.height = Math.round(overlaySize.height * ratio);
-      canvas.getContext('2d')?.scale(ratio, ratio);
+      const context = canvas.getContext('2d');
+      context?.scale(ratio, ratio);
+      if (context) context.imageSmoothingEnabled = false;
     }
     const { width: w, height: h } = overlaySize;
     flow.current.project = projection(w, h, view, globeView, mapView);
     flow.current.width = w;
     flow.current.height = h;
   }, [overlaySize, view, globeView, mapView]);
+
+  // Re-select sparse details only when simulation fields change; the frame loop just paints them.
+  useEffect(() => {
+    const now = performance.now();
+    if (ambient.current) updateAmbientLayer(ambient.current, frame, now);
+    else ambient.current = createAmbientLayer(frame, now);
+  }, [frame, paletteMode]);
+
+  // Projection changes are also kept outside the animation hot loop.
+  useEffect(() => {
+    const ambientLayer = ambient.current;
+    const { width: w, height: h } = overlaySize;
+    if (!ambientLayer) return;
+    if (view === 'map') setAmbientMapView(ambientLayer, mapView, w, h);
+    else setAmbientGlobeView(ambientLayer, projection(w, h, view, globeView, mapView), w, h);
+  }, [frame, overlaySize, view, globeView, mapView]);
 
   // Keep a particle layer per shown overlay, flowing along the newest fields.
   useEffect(() => {
@@ -579,6 +607,26 @@ export function PlanetView({
       });
     }
   }, [frame, overlays, view, globeView, mapView, overlaySize, reducedMotion]);
+
+  // Ambient pixels animate independently of flow trails; reduced motion paints one still frame.
+  useEffect(() => {
+    const canvas = ambientRef.current;
+    const ctx = canvas?.getContext('2d');
+    const ambientLayer = ambient.current;
+    if (!canvas || !ctx || !ambientLayer) return;
+    if (!overlays.includes('ambient')) {
+      ctx.clearRect(0, 0, ambientLayer.width, ambientLayer.height);
+      return;
+    }
+    let handle = 0;
+    const tick = (timestamp: number) => {
+      drawAmbient(ctx, ambientLayer, timestamp, reducedMotion);
+      if (!reducedMotion) handle = requestAnimationFrame(tick);
+    };
+    if (reducedMotion) tick(0);
+    else handle = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(handle);
+  }, [frame, overlays, view, globeView, mapView, overlaySize, reducedMotion, paletteMode]);
 
   /** Grid cell under the pointer on the map or the globe, or −1 off the planet. */
   const cellAtPoint = (clientX: number, clientY: number, canvas: HTMLCanvasElement): number => {
@@ -922,6 +970,7 @@ export function PlanetView({
         >
           {mapAlternative}
         </canvas>
+        <canvas ref={ambientRef} className="overlay-ambient" aria-hidden="true" />
         {cursorPoint && (
           <span
             className="keyboard-cursor"
