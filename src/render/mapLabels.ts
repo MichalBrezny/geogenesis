@@ -1,4 +1,5 @@
 import type { NamedMapFeature } from '../sim/mapNames';
+import type { City } from '../sim/core/planet';
 import type { Projection } from './arrows';
 
 interface LabelSource {
@@ -6,9 +7,10 @@ interface LabelSource {
   fields: { elevation: ArrayLike<number>; plateId: ArrayLike<number> };
   seaLevel: number;
   mapFeatures: readonly Omit<NamedMapFeature, 'footprint'>[];
+  civilization: { cities: readonly City[] };
 }
 
-interface Box {
+export interface LabelBox {
   left: number;
   top: number;
   right: number;
@@ -32,24 +34,57 @@ export function drawMapLabels(
   project: Projection,
   zoom: number,
 ): void {
-  const occupied: Box[] = [];
+  const occupied: LabelBox[] = [];
   const features = source.mapFeatures
     .filter((feature) => visibleAtZoom(feature, zoom))
     .sort(
-      (a, b) =>
-        LABEL_PRIORITY[a.kind] - LABEL_PRIORITY[b.kind] || b.size - a.size || a.id - b.id,
+      (a, b) => LABEL_PRIORITY[a.kind] - LABEL_PRIORITY[b.kind] || b.size - a.size || a.id - b.id,
     );
   ctx.save();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.lineJoin = 'round';
+  const cityLabels = source.civilization.cities
+    .filter((city) => cityLabelVisible(city, zoom))
+    .sort(
+      (a, b) =>
+        Number(b.capital) - Number(a.capital) ||
+        Number(a.abandonedYear !== null) - Number(b.abandonedYear !== null) ||
+        b.population - a.population ||
+        a.id - b.id,
+    )
+    .flatMap((city) => {
+      const point = projectCell(source.grid.width, source.grid.height, city.cell, project);
+      if (!point) return [];
+      const fontSize = cityLabelSize(city);
+      ctx.font = `${city.capital ? '700 ' : ''}${city.abandonedYear === null ? '' : 'italic '}${fontSize}px system-ui, sans-serif`;
+      const width = ctx.measureText(city.name).width + 8;
+      const markerSize = cityMarkerSize(city.population);
+      const y = point[1] - markerSize * 0.55 - fontSize * 0.7;
+      return [
+        {
+          value: { city, x: point[0], y, fontSize },
+          box: {
+            left: point[0] - width / 2,
+            right: point[0] + width / 2,
+            top: y - fontSize * 0.65,
+            bottom: y + fontSize * 0.65,
+          },
+        },
+      ];
+    });
+  for (const label of greedyLabelLayout(cityLabels, occupied)) {
+    const { city, x, y, fontSize } = label.value;
+    occupied.push(label.box);
+    ctx.font = `${city.capital ? '700 ' : ''}${city.abandonedYear === null ? '' : 'italic '}${fontSize}px system-ui, sans-serif`;
+    ctx.lineWidth = Math.max(2.5, fontSize * 0.24);
+    ctx.strokeStyle = 'rgba(13, 17, 22, 0.9)';
+    ctx.fillStyle = city.abandonedYear === null ? '#ffe7a0' : 'rgba(220, 213, 198, 0.7)';
+    ctx.strokeText(city.name, x, y);
+    ctx.fillText(city.name, x, y);
+  }
   for (const feature of features) {
-    const x = feature.cell % source.grid.width;
-    const y = Math.floor(feature.cell / source.grid.width);
-    const point = project(
-      90 - ((y + 0.5) * 180) / source.grid.height,
-      ((x + 0.5) * 360) / source.grid.width,
-    );
+    const point = projectCell(source.grid.width, source.grid.height, feature.cell, project);
     if (!point) continue;
     const fontSize = labelSize(feature, zoom);
     const italic = feature.kind === 'ocean' || feature.kind === 'river';
@@ -72,8 +107,38 @@ export function drawMapLabels(
   ctx.restore();
 }
 
+function projectCell(width: number, height: number, cell: number, project: Projection) {
+  const x = cell % width;
+  const y = Math.floor(cell / width);
+  return project(90 - ((y + 0.5) * 180) / height, ((x + 0.5) * 360) / width);
+}
+
+function cityLabelVisible(city: City, zoom: number): boolean {
+  if (city.abandonedYear !== null) return zoom >= 3;
+  if (city.capital || city.population >= 0.5) return true;
+  if (city.population >= 0.05) return zoom >= 1.5;
+  if (city.population >= 0.005) return zoom >= 2.25;
+  return zoom >= 3.5;
+}
+
+function cityLabelSize(city: City): number {
+  if (city.capital) return 15;
+  if (city.population >= 0.5) return 14;
+  if (city.population >= 0.05) return 13;
+  if (city.population >= 0.005) return 12;
+  return 11;
+}
+
+function cityMarkerSize(population: number): number {
+  if (population >= 0.5) return 24;
+  if (population >= 0.05) return 21;
+  if (population >= 0.005) return 18;
+  return 15;
+}
+
 function visibleAtZoom(feature: Omit<NamedMapFeature, 'footprint'>, zoom: number): boolean {
-  if (feature.kind === 'plate' || feature.kind === 'continent' || feature.kind === 'ocean') return true;
+  if (feature.kind === 'plate' || feature.kind === 'continent' || feature.kind === 'ocean')
+    return true;
   if (feature.kind === 'mountain') return zoom >= 1.3;
   if (feature.kind === 'island') return zoom >= 1.7 || feature.size >= 2e12;
   if (feature.kind === 'lake') return zoom >= 2;
@@ -86,7 +151,7 @@ function labelSize(feature: Omit<NamedMapFeature, 'footprint'>, zoom: number): n
   return Math.max(10, Math.min(22, 10 + areaScale * 2 + Math.log2(Math.max(1, zoom))));
 }
 
-function intersects(a: Box, b: Box): boolean {
+function intersects(a: LabelBox, b: LabelBox): boolean {
   const padding = 3;
   return !(
     a.right + padding < b.left ||
@@ -94,6 +159,21 @@ function intersects(a: Box, b: Box): boolean {
     a.bottom + padding < b.top ||
     a.top - padding > b.bottom
   );
+}
+
+/** Greedy collision helper; caller order is the label priority order. */
+export function greedyLabelLayout<T extends { box: LabelBox }>(
+  candidates: readonly T[],
+  initial: readonly LabelBox[] = [],
+): T[] {
+  const occupied = [...initial];
+  const placed: T[] = [];
+  for (const candidate of candidates) {
+    if (occupied.some((box) => intersects(candidate.box, box))) continue;
+    placed.push(candidate);
+    occupied.push(candidate.box);
+  }
+  return placed;
 }
 
 interface GeographicIndex {
@@ -136,7 +216,7 @@ function buildGeographicIndex(source: LabelSource): GeographicIndex {
         if (
           neighbor >= 0 &&
           region[neighbor]! < 0 &&
-          (source.fields.elevation[neighbor]! < source.seaLevel) === ocean
+          source.fields.elevation[neighbor]! < source.seaLevel === ocean
         ) {
           region[neighbor] = next;
           queue.push(neighbor);

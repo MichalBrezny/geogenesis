@@ -1818,6 +1818,20 @@ kbd {
   accent-color: var(--series-1);
 }
 
+.city-list ol {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.city-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .event-log {
   margin: 0;
   padding: 0;

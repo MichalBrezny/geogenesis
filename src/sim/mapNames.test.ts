@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { createPlanet } from './core/planet';
-import { generateFeatureName, isPronounceableName, updateMapNames } from './mapNames';
+import { SENTIENCE_POTENTIAL } from './data/civilization';
+import type { LifeClassKey } from './data/lifeClasses';
+import {
+  generateCityName,
+  generateFeatureName,
+  isPronounceableName,
+  updateMapNames,
+} from './mapNames';
 
 describe('map feature names', () => {
   it('is deterministic and always follows the pronounceability rules', () => {
@@ -41,5 +48,34 @@ describe('map feature names', () => {
     );
     expect(larger?.name).toBe(original.name);
     expect(smaller?.name).not.toBe(original.name);
+  });
+
+  it('generates deterministic, pronounceable names from each sentient species palette', () => {
+    const initials: Partial<Record<LifeClassKey, RegExp>> = {
+      arthropods: /^[KPTZ]/,
+      mollusks: /^[LMNV]/,
+      trichordates: /^[DLRT]/,
+      fish: /^[FLSV]/,
+      insects: /^[KPTV]/,
+      amphibians: /^[BGLM]/,
+      reptiles: /^[KRSZ]/,
+      dinosaurs: /^[DKRT]/,
+      avians: /^[LRSV]/,
+      mammals: /^[BDMNV]/,
+      cetaceans: /^[HLMNW]/,
+    };
+    const species = Object.keys(SENTIENCE_POTENTIAL) as LifeClassKey[];
+    const signatures = species.map((key) => {
+      const names = Array.from({ length: 40 }, (_, ordinal) =>
+        generateCityName(0x12345678, key, ordinal),
+      );
+      expect(names).toEqual(
+        Array.from({ length: 40 }, (_, ordinal) => generateCityName(0x12345678, key, ordinal)),
+      );
+      expect(names.every(isPronounceableName)).toBe(true);
+      expect(names.every((name) => initials[key]!.test(name))).toBe(true);
+      return names.join('|');
+    });
+    expect(new Set(signatures).size).toBe(species.length);
   });
 });

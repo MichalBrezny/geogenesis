@@ -8,6 +8,10 @@ import { EventIcon } from './icons';
 /** Status of the sentient species: tech age, progress towards the next, population. */
 export function CivilizationPanel({ civilization }: { civilization: Frame['civilization'] }) {
   const { species, age, progress, population, exodusYear } = civilization;
+  const largestCities = civilization.cities
+    .filter((city) => city.abandonedYear === null)
+    .sort((a, b) => b.population - a.population || a.id - b.id)
+    .slice(0, 6);
   return (
     <section aria-label={t('civ.title')}>
       {species === null ? (
@@ -34,6 +38,26 @@ export function CivilizationPanel({ civilization }: { civilization: Frame['civil
           <dt>{t('civ.population')}</dt>
           <dd>{formatPopulation(population)}</dd>
         </dl>
+      )}
+      {largestCities.length > 0 && (
+        <div className="city-list">
+          <h3>{t('civ.largestCities')}</h3>
+          <ol>
+            {largestCities.map((city) => (
+              <li key={city.id}>
+                <span>
+                  {city.name}{' '}
+                  {city.capital && (
+                    <span title={t('civ.capitalHint')} aria-label={t('civ.capital')}>
+                      ★
+                    </span>
+                  )}
+                </span>
+                <span className="muted">{formatPopulation(city.population)}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
       )}
     </section>
   );
@@ -109,5 +133,6 @@ export function describeEvent(event: Frame['events'][number]): string {
                   : subject
                     ? t(`lifeClass.${subject}` as MessageKey)
                     : '';
-  return t(`event.${event.key}`, { name });
+  const description = t(`event.${event.key}`, { name });
+  return event.detail ? description + t('event.cityLocation', { name: event.detail }) : description;
 }

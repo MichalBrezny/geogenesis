@@ -1,4 +1,5 @@
 import type { PlanetState } from './core/planet';
+import { nearestActiveCity } from './models/civilization/cities';
 
 /**
  * Notable moments in the planet's history, for the event log. `key` selects
@@ -11,6 +12,8 @@ export interface PlanetEvent {
   subject?: string;
   /** Grid cell where the event happened; absent for global events and old saves. */
   cell?: number;
+  /** Nearest inhabited city at the time of a located event. */
+  detail?: string;
 }
 
 export type EventKey =
@@ -72,6 +75,16 @@ export function recordEvent(
   year = state.globals.year,
   cell?: number,
 ): void {
-  state.events.push({ year, key, subject, ...(cell === undefined ? {} : { cell }) });
+  const detail =
+    cell !== undefined && cell >= 0 && cell < state.grid.cellCount
+      ? nearestActiveCity(state, cell)?.name
+      : undefined;
+  state.events.push({
+    year,
+    key,
+    subject,
+    ...(cell === undefined ? {} : { cell }),
+    ...(detail === undefined ? {} : { detail }),
+  });
   if (state.events.length > MAX_EVENTS) state.events.splice(0, state.events.length - MAX_EVENTS);
 }

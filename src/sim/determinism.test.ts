@@ -9,9 +9,9 @@ import { createRandomWorld, type World } from './world';
  * the received values).
  */
 const EXPECTED = {
-  young: '8c9a69e6',
-  quick: 'a617aa5d',
-  stoneAge: '3e6fdda7',
+  young: '4ef03679',
+  quick: '4aa4f4a6',
+  stoneAge: '77515c7e',
 };
 
 /** FNV-1a (32-bit) over the bytes of every field, the populations and key globals. */

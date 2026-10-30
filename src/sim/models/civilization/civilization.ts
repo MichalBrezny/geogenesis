@@ -22,6 +22,7 @@ import { classSuitability } from '../biosphere/life';
 import { disperse } from '../dispersal';
 import { isOcean } from '../geosphere/seaLevel';
 import { droughtFoodMultiplier } from '../disasters';
+import { abandonCivilizationCities } from './cities';
 
 export interface CivilizationOptions {
   /** Mean years for a fully established, most capable class to become sentient. */
@@ -584,7 +585,7 @@ function catastrophes(
   if (civ.age >= 1 && hazardOccurs(civ, 'plague', PLAGUE_RATE * medicine, dtYears)) {
     const survival = 1 - Math.min(0.5, 0.3 * medicine);
     for (let i = 0; i < density.length; i++) density[i] = density[i]! * survival;
-    recordEvent(state, 'plague');
+    recordEvent(state, 'plague', undefined, state.globals.year, cityEventCell(state));
   }
   const philosophy = 1.25 - 1.25 * (state.civPolicy.investment.philosophy / 100);
   const scarcity = Math.max(0, 1 - civ.fossilSupply) * (production.mix.fossil > 0.2 ? 1 : 0);
@@ -600,7 +601,7 @@ function catastrophes(
     // Nuclear winter: stratospheric soot, tau ~2 (Toon et al. 2007), injected at the
     // end of the step because this component runs after the dust model.
     addDustPulse(state, DUST_SOOT, NUCLEAR_SOOT_TAU, state.globals.year + dtYears);
-    recordEvent(state, 'nuclearWar');
+    recordEvent(state, 'nuclearWar', undefined, state.globals.year, cityEventCell(state));
   }
   civ.population = worldPopulation(state);
 }
@@ -658,7 +659,14 @@ function advanceTechnology(state: PlanetState, dtYears: number, policyPace = 1):
 
 function endCivilization(state: PlanetState, event: 'civilizationCollapsed' | 'exodus'): void {
   const civ = state.civilization;
-  recordEvent(state, event, civ.species === null ? undefined : LIFE_CLASSES[civ.species]!.key);
+  recordEvent(
+    state,
+    event,
+    civ.species === null ? undefined : LIFE_CLASSES[civ.species]!.key,
+    state.globals.year,
+    cityEventCell(state),
+  );
+  abandonCivilizationCities(state);
   civ.species = null;
   civ.age = 0;
   civ.progress = 0;
@@ -668,4 +676,9 @@ function endCivilization(state: PlanetState, event: 'civilizationCollapsed' | 'e
   civ.fossilSupply = 0;
   state.globals.civilizationCarbonEmissions = 0;
   state.fields.civilization.fill(0);
+}
+
+function cityEventCell(state: PlanetState): number | undefined {
+  const active = state.civilization.cities.filter((city) => city.abandonedYear === null);
+  return active.find((city) => city.capital)?.cell ?? active[0]?.cell;
 }
