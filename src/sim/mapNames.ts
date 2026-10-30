@@ -1,6 +1,7 @@
 import type { SimComponent } from './core/component';
 import type { Grid } from './core/grid';
 import type { PlanetState } from './core/planet';
+import type { LifeClassKey } from './data/lifeClasses';
 import { LakeType } from './models/geosphere/flowRouting';
 
 export const MAP_FEATURE_KINDS = [
@@ -73,6 +74,62 @@ export function generateFeatureName(seed: number, kind: MapFeatureKind, ordinal:
   return name[0]!.toUpperCase() + name.slice(1);
 }
 
+interface CityNamePalette {
+  onsets: readonly string[];
+  vowels: readonly string[];
+  codas: readonly string[];
+}
+
+/** Species-specific sound palettes; even unrelated civilizations remain recognisable by ear. */
+const CITY_NAME_PALETTES: Readonly<Record<LifeClassKey, CityNamePalette>> = {
+  prokaryotes: { onsets: ['b', 'g', 'm', 'n'], vowels: ['a', 'i', 'u'], codas: ['', 'm'] },
+  eukaryotes: { onsets: ['l', 'm', 'n', 'v'], vowels: ['e', 'i', 'o'], codas: ['', 'n'] },
+  plants: { onsets: ['f', 'l', 'm', 's'], vowels: ['a', 'e', 'o'], codas: ['', 'l'] },
+  radiates: { onsets: ['r', 's', 'v', 'z'], vowels: ['a', 'i', 'o'], codas: ['', 's'] },
+  arthropods: { onsets: ['k', 'p', 't', 'z'], vowels: ['a', 'i', 'u'], codas: ['', 'k', 't'] },
+  mollusks: { onsets: ['l', 'm', 'n', 'v'], vowels: ['a', 'o', 'u'], codas: ['', '', 'm'] },
+  trichordates: { onsets: ['d', 'l', 'r', 't'], vowels: ['a', 'e', 'i'], codas: ['', 'n'] },
+  fish: { onsets: ['f', 'l', 's', 'v'], vowels: ['a', 'i', 'u'], codas: ['', '', 's'] },
+  insects: { onsets: ['k', 'p', 't', 'v'], vowels: ['e', 'i', 'u'], codas: ['', 'k', 't'] },
+  amphibians: { onsets: ['b', 'g', 'l', 'm'], vowels: ['a', 'o', 'u'], codas: ['', 'm', 'n'] },
+  reptiles: { onsets: ['k', 'r', 's', 'z'], vowels: ['a', 'e', 'o'], codas: ['', 'r', 's'] },
+  dinosaurs: { onsets: ['d', 'k', 'r', 't'], vowels: ['a', 'o', 'u'], codas: ['', 'r', 'n'] },
+  avians: { onsets: ['l', 'r', 's', 'v'], vowels: ['a', 'e', 'i'], codas: ['', '', 'l'] },
+  mammals: { onsets: ['b', 'd', 'm', 'n', 'v'], vowels: ['a', 'e', 'o'], codas: ['', 'n', 'r'] },
+  cetaceans: {
+    onsets: ['h', 'l', 'm', 'n', 'w'],
+    vowels: ['a', 'e', 'i', 'o', 'u'],
+    codas: ['', '', '', 'l'],
+  },
+};
+
+const CITY_KIND_SALT = 0xc17a4e5d;
+
+/** Deterministic city name from the planet, a city salt, species and private ordinal. */
+export function generateCityName(seed: number, species: LifeClassKey, ordinal: number): string {
+  const palette = CITY_NAME_PALETTES[species];
+  let speciesSalt = 0x811c9dc5;
+  for (let index = 0; index < species.length; index++) {
+    speciesSalt ^= species.charCodeAt(index);
+    speciesSalt = Math.imul(speciesSalt, 0x01000193);
+  }
+  let state = mix32(
+    (seed ^ CITY_KIND_SALT ^ speciesSalt ^ Math.imul(ordinal + 1, 0x9e3779b1)) >>> 0,
+  );
+  const next = (limit: number) => {
+    state = mix32((state + 0x6d2b79f5) >>> 0);
+    return state % limit;
+  };
+  const syllables = 2 + next(2);
+  let name = '';
+  for (let index = 0; index < syllables; index++) {
+    name += palette.onsets[next(palette.onsets.length)]!;
+    name += palette.vowels[next(palette.vowels.length)]!;
+    name += palette.codas[next(palette.codas.length)]!;
+  }
+  return name[0]!.toUpperCase() + name.slice(1);
+}
+
 /** Rules intentionally kept simple enough that every generated name can be spoken at sight. */
 export function isPronounceableName(name: string): boolean {
   return (
@@ -116,7 +173,9 @@ export function updateMapNames(state: PlanetState): void {
   for (const candidate of candidates) {
     const exactPlate =
       candidate.kind === 'plate'
-        ? previous.find((feature) => feature.kind === 'plate' && feature.plateId === candidate.plateId)
+        ? previous.find(
+            (feature) => feature.kind === 'plate' && feature.plateId === candidate.plateId,
+          )
         : undefined;
     const matched = exactPlate ?? bestOverlap(candidate, previous, claimed);
     let feature: NamedMapFeature;
@@ -167,7 +226,10 @@ function bestOverlap(
     if (claimed.has(feature.id) || featureFamily(feature.kind) !== family) continue;
     let count = 0;
     for (const cell of feature.footprint) if (members.has(cell)) count++;
-    if (count > bestCount || (count === bestCount && count > 0 && feature.id < (best?.id ?? Infinity))) {
+    if (
+      count > bestCount ||
+      (count === bestCount && count > 0 && feature.id < (best?.id ?? Infinity))
+    ) {
       best = feature;
       bestCount = count;
     }
@@ -209,7 +271,8 @@ function collectCandidates(state: PlanetState): FeatureCandidate[] {
   const landArea = land.reduce((sum, region) => sum + region.area, 0);
   for (let index = 0; index < land.length; index++) {
     const region = land[index]!;
-    const continent = index < 7 && region.area >= Math.max(landArea * 0.035, planetArea(grid) * 0.004);
+    const continent =
+      index < 7 && region.area >= Math.max(landArea * 0.035, planetArea(grid) * 0.004);
     out.push({
       kind: continent ? 'continent' : 'island',
       cells: region.cells,
@@ -322,7 +385,10 @@ function representativeCell(grid: Grid, cells: readonly number[]): number {
 function sampleFootprint(cells: readonly number[]): number[] {
   const count = Math.min(128, cells.length);
   if (count === cells.length) return [...cells];
-  return Array.from({ length: count }, (_, index) => cells[Math.floor((index * cells.length) / count)]!);
+  return Array.from(
+    { length: count },
+    (_, index) => cells[Math.floor((index * cells.length) / count)]!,
+  );
 }
 
 /** Pure diagnostic component: it reads geography and writes only the saved naming state. */

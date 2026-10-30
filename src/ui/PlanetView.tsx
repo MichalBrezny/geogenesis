@@ -25,6 +25,7 @@ import { drawIsobars } from '../render/isobars';
 import { drawHotspots, mantleVelocityField } from '../render/mantleFlow';
 import { drawMapLabels } from '../render/mapLabels';
 import {
+  drawCityIcons,
   drawDeviceIcons,
   drawEventMarkers,
   drawLifeAndCityIcons,
@@ -509,7 +510,15 @@ export function PlanetView({
         project,
         projectedLonSpan: view === 'globe' ? 180 : bounds.lonSpan,
       });
-      visible = drawLifeAndCityIcons(ctx, frame, frame.civilization.age, samples);
+      visible = drawLifeAndCityIcons(ctx, frame, samples);
+      visible.cityAge = drawCityIcons(
+        ctx,
+        frame.civilization.cities,
+        frame.grid.width,
+        frame.grid.height,
+        project,
+        view === 'map' ? mapView.zoom : Math.max(1.4, w / 512),
+      );
     }
     onVisibleIconsChange?.(visible);
     drawDeviceIcons(ctx, frame.devices, frame.grid.width, frame.grid.height, project);

@@ -81,6 +81,17 @@ export function CellInspector({
   if (f.civilization[i]! > 0) {
     rows.push(['inspect.people', `${(f.civilization[i]! * PEOPLE_PER_KM2).toFixed(2)} / km²`]);
   }
+  const nearestCity = nearestCityToCell(frame, i);
+  if (nearestCity) {
+    rows.push([
+      'inspect.city',
+      t('inspect.cityValue', {
+        name: nearestCity.city.name,
+        population: formatCityPopulation(nearestCity.city.population),
+        distance: Math.round(nearestCity.distance / 1000).toLocaleString('en'),
+      }),
+    ]);
+  }
   const present = life && life.cell === i ? life.classes : [];
   return (
     <div className="inspector" style={{ left: cell.left, top: cell.top }} role="status">
@@ -157,4 +168,41 @@ function formatPosition(latitude: number, longitude: number): string {
   const lat = `${Math.abs(latitude).toFixed(0)}° ${latitude >= 0 ? 'N' : 'S'}`;
   const lon = longitude > 180 ? 360 - longitude : longitude;
   return `${lat}, ${lon.toFixed(0)}° ${longitude > 180 ? 'W' : 'E'}`;
+}
+
+function nearestCityToCell(frame: Frame, cell: number) {
+  let nearest: Frame['civilization']['cities'][number] | undefined;
+  let distance = Infinity;
+  for (const city of frame.civilization.cities) {
+    if (city.abandonedYear !== null) continue;
+    const candidateDistance = frameCellDistance(frame, cell, city.cell);
+    if (
+      candidateDistance < distance ||
+      (candidateDistance === distance && city.id < (nearest?.id ?? Infinity))
+    ) {
+      nearest = city;
+      distance = candidateDistance;
+    }
+  }
+  return nearest ? { city: nearest, distance } : undefined;
+}
+
+function frameCellDistance(frame: Frame, a: number, b: number): number {
+  const latitude = (cell: number) =>
+    ((90 - (Math.floor(cell / frame.grid.width) + 0.5) * (180 / frame.grid.height)) * Math.PI) /
+    180;
+  const longitude = (cell: number) =>
+    (((cell % frame.grid.width) + 0.5) * (2 * Math.PI)) / frame.grid.width;
+  const aLatitude = latitude(a);
+  const bLatitude = latitude(b);
+  const deltaLongitude = longitude(a) - longitude(b);
+  const cosine =
+    Math.sin(aLatitude) * Math.sin(bLatitude) +
+    Math.cos(aLatitude) * Math.cos(bLatitude) * Math.cos(deltaLongitude);
+  return Math.acos(Math.max(-1, Math.min(1, cosine))) * frame.planetParams.radius;
+}
+
+function formatCityPopulation(billions: number): string {
+  if (billions >= 1) return t('civ.billions', { value: billions.toFixed(2) });
+  return t('civ.millions', { value: (billions * 1000).toFixed(billions < 0.01 ? 2 : 0) });
 }

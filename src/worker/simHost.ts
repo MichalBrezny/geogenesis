@@ -375,7 +375,10 @@ export class SimHost {
       o2: planet.globals.atmosphere.o2,
       ch4: planet.globals.atmosphere.ch4,
       life: { cover: [...planet.biota.cover], appeared: [...planet.biota.appeared] },
-      civilization: { ...planet.civilization },
+      civilization: {
+        ...planet.civilization,
+        cities: planet.civilization.cities.map((city) => ({ ...city })),
+      },
       civPolicy: {
         energy: { ...planet.civPolicy.energy },
         investment: { ...planet.civPolicy.investment },

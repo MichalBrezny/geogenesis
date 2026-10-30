@@ -40,6 +40,7 @@ import { recordHistory } from './history';
 import { createSimulation, withMinInterval, type Simulation } from './simulation';
 import { energyIncome, STARTING_ENERGY } from './tools/tools';
 import { createCivilization } from './models/civilization/civilization';
+import { CITY_MODEL_INTERVAL_YEARS, cityModel } from './models/civilization/cities';
 import { eraStepYears, eraTracker, planetEra, type Era } from './eras';
 import { atmosphericEscape, planetaryEvolution } from './models/planetary';
 import { updateSurfacePressure } from './models/atmosphere/atmosphere';
@@ -228,6 +229,7 @@ export function randomWorldFromPlanet(
       ),
       resetCarbonBudget,
       createCivilization(),
+      withMinInterval(cityModel, CITY_MODEL_INTERVAL_YEARS),
       terraformDevices,
       clathrateModel,
       biogeochemistry,

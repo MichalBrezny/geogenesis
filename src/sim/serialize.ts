@@ -256,6 +256,18 @@ function hydrateAddedState(planet: PlanetState): void {
   );
   planet.civilization.energySupply ??= 1;
   planet.civilization.fossilSupply ??= 1;
+  planet.civilization.cities ??= [];
+  planet.civilization.nextCityId ??= planet.civilization.cities.reduce(
+    (maximum, city) => Math.max(maximum, city.id + 1),
+    1,
+  );
+  planet.civilization.nextCityNameOrdinal ??= planet.civilization.cities.length;
+  planet.civilization.citySpecies ??=
+    planet.civilization.species === null ? null : planet.civilization.species;
+  for (const city of planet.civilization.cities) {
+    city.abandonedYear ??= null;
+    city.age ??= planet.civilization.age;
+  }
   planet.disasters ??= { ...DEFAULT_DISASTERS };
   for (const key of Object.keys(DEFAULT_DISASTERS) as (keyof typeof DEFAULT_DISASTERS)[]) {
     planet.disasters[key] ??= DEFAULT_DISASTERS[key];

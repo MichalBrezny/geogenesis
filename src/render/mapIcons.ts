@@ -1,5 +1,6 @@
 import { TECH_AGES } from '../sim/data/civilization';
 import { LIFE_CLASS_KEYS } from '../sim/data/lifeClasses';
+import type { City } from '../sim/core/planet';
 import type { EventKey, PlanetEvent } from '../sim/events';
 import type { Device, DeviceKind } from '../sim/tools/devices';
 import type { Projection } from './arrows';
@@ -249,38 +250,94 @@ export interface VisibleMapIcons {
   cityAge: number | null;
 }
 
-/** Draws life or, where settlement is substantial, the civilization's current city. */
+/** Draws the life lattice, leaving settled samples clear for discrete city markers. */
 export function drawLifeAndCityIcons(
   ctx: CanvasRenderingContext2D,
   source: MapSource,
-  civilizationAge: number,
   samples: readonly IconSample[],
 ): VisibleMapIcons {
   const visible = new Set<number>();
-  let cityAge: number | null = null;
-  const city = TECH_AGES[civilizationAge];
   for (const sample of samples) {
     const density = source.fields.civilization[sample.cell]!;
-    if (city && density >= 1e-4) {
-      drawMapIcon(
-        ctx,
-        CITY_ICON_PATHS[city.key as keyof typeof CITY_ICON_PATHS],
-        sample.x,
-        sample.y,
-        {
-          fill: '#ffd978',
-          size: 19,
-        },
-      );
-      cityAge = civilizationAge;
-      continue;
-    }
+    if (density >= 1e-4) continue;
     const lifeClass = source.fields.dominantClass[sample.cell]!;
     if (lifeClass < 0 || lifeClass >= LIFE_CLASS_KEYS.length) continue;
     drawMapIcon(ctx, LIFE_ICON_PATHS[LIFE_CLASS_KEYS[lifeClass]!], sample.x, sample.y);
     visible.add(lifeClass);
   }
-  return { lifeClasses: [...visible].sort((a, b) => a - b), cityAge };
+  return { lifeClasses: [...visible].sort((a, b) => a - b), cityAge: null };
+}
+
+/** Draws population-tiered cities at a constant screen size; capitals receive a gold ring. */
+export function drawCityIcons(
+  ctx: CanvasRenderingContext2D,
+  cities: readonly City[],
+  width: number,
+  height: number,
+  project: Projection,
+  zoom: number,
+): number | null {
+  let visibleAge: number | null = null;
+  const ordered = [...cities].sort(
+    (a, b) =>
+      Number(a.abandonedYear !== null) - Number(b.abandonedYear !== null) ||
+      b.population - a.population ||
+      a.id - b.id,
+  );
+  for (const city of ordered) {
+    if (!cityVisibleAtZoom(city, zoom)) continue;
+    const point = cellPoint(city.cell, width, height, project);
+    if (!point) continue;
+    const age = TECH_AGES[Math.max(0, Math.min(TECH_AGES.length - 1, city.age))]!;
+    const ruin = city.abandonedYear !== null;
+    const size = cityMarkerSize(city.population);
+    if (city.capital && !ruin) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(point[0], point[1], size * 0.66, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(20, 18, 12, 0.78)';
+      ctx.fill();
+      ctx.strokeStyle = '#ffe27a';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      ctx.restore();
+    }
+    drawMapIcon(ctx, CITY_ICON_PATHS[age.key as keyof typeof CITY_ICON_PATHS], point[0], point[1], {
+      fill: ruin ? '#b8afa0' : '#ffd978',
+      outline: ruin ? 'rgba(30, 29, 28, 0.72)' : undefined,
+      alpha: ruin ? 0.42 : 1,
+      size,
+    });
+    if (ruin) {
+      ctx.save();
+      ctx.globalAlpha = 0.5;
+      ctx.strokeStyle = '#251f1a';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(point[0] - size * 0.32, point[1] + size * 0.32);
+      ctx.lineTo(point[0] + size * 0.32, point[1] - size * 0.32);
+      ctx.stroke();
+      ctx.restore();
+    } else {
+      visibleAge = Math.max(visibleAge ?? 0, city.age);
+    }
+  }
+  return visibleAge;
+}
+
+function cityMarkerSize(population: number): number {
+  if (population >= 0.5) return 24;
+  if (population >= 0.05) return 21;
+  if (population >= 0.005) return 18;
+  return 15;
+}
+
+function cityVisibleAtZoom(city: City, zoom: number): boolean {
+  if (city.abandonedYear !== null) return zoom >= 2.5;
+  if (city.capital || city.population >= 0.5) return true;
+  if (city.population >= 0.05) return zoom >= 1.25;
+  if (city.population >= 0.005) return zoom >= 2;
+  return zoom >= 3;
 }
 
 /** Device colours match the tool palette while their silhouettes show their function. */

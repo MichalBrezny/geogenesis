@@ -386,6 +386,21 @@ export interface Biota {
 }
 
 /** The planet's sentient species and its civilization (see models/civilization). */
+export interface City {
+  id: number;
+  /** Grid cell containing the current density maximum. */
+  cell: number;
+  name: string;
+  foundedYear: number;
+  /** Share of the settled world population assigned to this city, in billions. */
+  population: number;
+  capital: boolean;
+  /** Null while inhabited; the abandonment year while shown as a ruin. */
+  abandonedYear: number | null;
+  /** Technology age at the last inhabited update, retained by ruins for their marker. */
+  age: number;
+}
+
 export interface CivilizationState {
   /** Life class index of the sentient species, or null when there is none. */
   species: number | null;
@@ -403,6 +418,13 @@ export interface CivilizationState {
   energySupply: number;
   /** Share of requested fossil output actually supplied, 0..1. */
   fossilSupply: number;
+  /** Persistent inhabited cities and temporarily retained ruins. */
+  cities: City[];
+  /** Private counters keep city identities and deterministic names stable. */
+  nextCityId: number;
+  nextCityNameOrdinal: number;
+  /** Species owning the current active registry; null between civilizations. */
+  citySpecies: number | null;
 }
 
 export const ENERGY_SOURCE_KEYS = [
@@ -690,6 +712,10 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
       exodusYear: null,
       energySupply: 1,
       fossilSupply: 1,
+      cities: [],
+      nextCityId: 1,
+      nextCityNameOrdinal: 0,
+      citySpecies: null,
     },
     civPolicy: {
       energy: { ...DEFAULT_CIV_POLICY.energy },
