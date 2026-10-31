@@ -1066,9 +1066,7 @@ kbd {
 .start-grid button.selected {
   border-color: var(--series-1);
   background: var(--surface-control-hover);
-}
-.scenario-card.recommended {
-  box-shadow: inset 0 0 0 1px var(--series-1);
+  box-shadow: inset 0 0 0 2px var(--series-1);
 }
 .scenario-card .scenario-icon {
   grid-row: 1 / span 2;
