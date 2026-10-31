@@ -27,6 +27,7 @@ import { createLinearDiffuser } from './models/geosphere/diffusion';
 import { continentalCrustTarget, createPlateDrift } from './models/geosphere/drift';
 import { flowRouting } from './models/geosphere/flowRouting';
 import { impactModel } from './models/geosphere/impacts';
+import { anchorPlates } from './models/geosphere/plates';
 import {
   equilibriumSeaLevel,
   initializeWaterInventory,
@@ -51,6 +52,7 @@ import { disasterModel } from './models/disasters';
 import { mapNamingModel } from './mapNames';
 import { modelControlLag } from './controls';
 import { trendAlerts } from './trendAlerts';
+import { resampleTopography } from './data/topography';
 
 export interface WorldOptions extends PlanetOptions {
   /** Preset age and biosphere for a new random planet. Defaults to `young`. */
@@ -293,15 +295,27 @@ export function createPlanetPreset(preset: PlanetPreset, options: PlanetOptions 
   planet.geosphere.fixedObliquity = true;
   planet.globals.energy = STARTING_ENERGY;
   generateTectonicPlanet(planet, { oceanFraction: definition.oceanFraction });
-  initializeWaterInventory(planet);
+  planet.fields.elevation.set(resampleTopography(preset, planet.grid));
+  planet.fields.upliftRate.fill(0);
+  // Stagnant-lid worlds have one coherent crust rather than active oceanic and
+  // continental plates. This also prevents island-chain construction from
+  // clipping an existing real mountain whose generated crust type was oceanic.
+  planet.fields.crustType.fill(1);
+  anchorPlates(planet);
+  planet.geosphere.hotspots = definition.hotspots.map(([latitude, longitude], id) => ({
+    id,
+    position: unitVectorAt(latitude, longitude),
+    strength: 1,
+    birthYear: planet.globals.year,
+    deathYear: planet.globals.year + 800e6,
+  }));
   planet.globals.water = definition.planetParams.initialWaterGel!;
   planet.globals.initialWater = definition.planetParams.initialWaterGel!;
   planet.globals.escapedWater = 0;
   updateSurfacePressure(planet.globals);
-  // Re-reference the terrain to the small inventory's datum and open with its
-  // basin-filling sea; the dt = 0 step below does not move the sea level, so the
-  // Earth-sized sea of the generated terrain would otherwise flood the first frame.
-  seaLevelDatumModel.runOneStep(planet, 0, createRng(0));
+  // Keep the source's physical zero (areoid/reference sphere). Even a tiny water
+  // inventory therefore pools at the actual lowest points instead of redefining
+  // the terrain datum to put its sea surface at zero.
   planet.globals.seaLevel = equilibriumSeaLevel(planet);
   const world = randomWorldFromPlanet(planet, { continentalFraction: 0.28, start: 'quick' });
   world.simulation.step(planet, 0);
@@ -318,6 +332,7 @@ const PRESET_DEFINITIONS: Readonly<
       obliquity: number;
       oceanFraction: number;
       co2IceBar: number;
+      hotspots: readonly (readonly [latitude: number, longitude: number])[];
     }
   >
 > = {
@@ -342,6 +357,10 @@ const PRESET_DEFINITIONS: Readonly<
     obliquity: 25,
     oceanFraction: 0.65,
     co2IceBar: 0.0059,
+    hotspots: [
+      [18.6, 226], // Tharsis / Olympus Mons
+      [25, 147], // Elysium
+    ],
   },
   venus: {
     planetParams: {
@@ -361,8 +380,20 @@ const PRESET_DEFINITIONS: Readonly<
     obliquity: 3,
     oceanFraction: 0.7,
     co2IceBar: 0,
+    hotspots: [
+      [25.3, 282.8], // Beta Regio
+      [9, 200], // Atla Regio
+      [-37.5, 285], // Themis Regio
+    ],
   },
 };
+
+function unitVectorAt(latitudeDegrees: number, longitudeDegrees: number): [number, number, number] {
+  const latitude = (latitudeDegrees * Math.PI) / 180;
+  const longitude = (longitudeDegrees * Math.PI) / 180;
+  const radius = Math.cos(latitude);
+  return [radius * Math.cos(longitude), radius * Math.sin(longitude), Math.sin(latitude)];
+}
 
 /**
  * Lets the atmosphere settle into balance with the new planet without advancing
