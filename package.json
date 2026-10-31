@@ -1,6 +1,6 @@
 {
   "name": "geogenesis",
-  "version": "0.6.0-alpha",
+  "version": "0.7.0-alpha",
   "description": "Geogenesis: a planet simulation for the browser, inspired by SimEarth",
   "scripts": {
     "dev": "vite",
