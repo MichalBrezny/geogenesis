@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { newPlanetChoice, type NewPlanetForm } from './NewPlanetDialog';
+import { newPlanetChoice, SCENARIO_GROUPS, type NewPlanetForm } from './NewPlanetDialog';
 import { SCENARIO_IDS } from '../sim/scenarios';
 
 const form: NewPlanetForm = {
@@ -19,6 +19,12 @@ const form: NewPlanetForm = {
 };
 
 describe('new planet choices', () => {
+  it('offers every scenario once across the sandbox and challenge groups', () => {
+    const grouped = SCENARIO_GROUPS.flatMap((group) => group.scenarios);
+    expect(grouped).toHaveLength(SCENARIO_IDS.length);
+    expect(new Set(grouped)).toEqual(new Set(SCENARIO_IDS));
+  });
+
   it('preserves random-world settings and custom parameters', () => {
     expect(newPlanetChoice(form)).toEqual({
       scenario: 'random',

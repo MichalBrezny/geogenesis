@@ -7,6 +7,7 @@ import {
   type MessageKey,
 } from '../i18n/i18n';
 import { Dialog } from './Dialog';
+import { LanguageSelect } from './LanguageSelect';
 import { RESOLUTIONS } from './menuOptions';
 import { AUTOSAVE_INTERVALS, type DefaultSpeed, type Settings } from './settings';
 
@@ -89,24 +90,7 @@ function LanguageSettings({
     <section className="settings-section">
       <h3 title={t('settings.languageHint')}>{t('settings.language')}</h3>
       <div className="dialog-form-grid">
-        <label title={t('settings.languageHint')}>
-          {t('settings.language')}
-          <select
-            value={language}
-            onChange={(event) => setLanguage(event.target.value as LanguageChoice)}
-            title={t('settings.languageHint')}
-          >
-            <option value="auto" title={t('settings.languageAutoHint')}>
-              {t('settings.languageAuto')}
-            </option>
-            <option value="en" title={t('settings.languageEnglishHint')}>
-              English
-            </option>
-            <option value="cs" title={t('settings.languageCzechHint')}>
-              Čeština
-            </option>
-          </select>
-        </label>
+        <LanguageSelect value={language} onChange={setLanguage} />
       </div>
     </section>
   );

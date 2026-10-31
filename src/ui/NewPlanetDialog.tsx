@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { t, type MessageKey } from '../i18n/i18n';
 import type { Difficulty, PlanetParameters, StarType } from '../sim/core/planet';
 import { DIFFICULTIES } from '../sim/balance';
-import { SCENARIO_IDS, type ScenarioId } from '../sim/scenarios';
+import type { ScenarioId } from '../sim/scenarios';
 import { PLANET_STARTS, type PlanetStart } from '../sim/world';
 import { Dialog } from './Dialog';
 import { DICE_ICON, SCENARIO_ICONS, START_ICONS } from './icons';
@@ -72,6 +72,20 @@ const GOAL_SCENARIOS = new Set<ScenarioId>([
   'stoneAge',
 ]);
 
+export const SCENARIO_GROUPS: readonly {
+  title: MessageKey;
+  scenarios: readonly ScenarioId[];
+}[] = [
+  {
+    title: 'newPlanet.sandbox',
+    scenarios: ['random', 'aquarium', 'daisyworld', 'cambrian', 'mars', 'venus'],
+  },
+  {
+    title: 'newPlanet.challenges',
+    scenarios: ['brighteningSun', 'snowball', 'cradle', 'terraformMars', 'stoneAge'],
+  },
+];
+
 export function NewPlanetDialog({
   onClose,
   onCreate,
@@ -106,28 +120,36 @@ export function NewPlanetDialog({
         onSubmit={(event) => {
           event.preventDefault();
           onCreate(newPlanetChoice(form));
-          onClose();
         }}
       >
-        <div className="scenario-grid" role="radiogroup" aria-label={t('controls.scenario')}>
-          {SCENARIO_IDS.map((id) => (
-            <button
-              key={id}
-              type="button"
-              role="radio"
-              aria-checked={form.scenario === id}
-              className={`scenario-card ${form.scenario === id ? 'selected' : ''} ${id === 'random' ? 'recommended' : ''}`}
-              onClick={() => set('scenario', id)}
-              title={t(`scenarioHelp.${id}` as MessageKey)}
-            >
-              <span className="scenario-icon">{SCENARIO_ICONS[id]}</span>
-              <strong>{t(`scenario.${id}` as MessageKey)}</strong>
-              {GOAL_SCENARIOS.has(id) && <span className="goal-badge">{t('newPlanet.goal')}</span>}
-              {id === 'random' && (
-                <span className="recommended-badge">{t('newPlanet.recommended')}</span>
-              )}
-              <small>{t(`scenarioHelp.${id}` as MessageKey)}</small>
-            </button>
+        <div className="scenario-groups" role="radiogroup" aria-label={t('controls.scenario')}>
+          {SCENARIO_GROUPS.map((group) => (
+            <section key={group.title} className="scenario-group">
+              <h3>{t(group.title)}</h3>
+              <div className="scenario-grid">
+                {group.scenarios.map((id) => (
+                  <button
+                    key={id}
+                    type="button"
+                    role="radio"
+                    aria-checked={form.scenario === id}
+                    className={`scenario-card ${form.scenario === id ? 'selected' : ''} ${id === 'random' ? 'recommended' : ''}`}
+                    onClick={() => set('scenario', id)}
+                    title={t(`scenarioHelp.${id}` as MessageKey)}
+                  >
+                    <span className="scenario-icon">{SCENARIO_ICONS[id]}</span>
+                    <strong>{t(`scenario.${id}` as MessageKey)}</strong>
+                    {GOAL_SCENARIOS.has(id) && (
+                      <span className="goal-badge">{t('newPlanet.goal')}</span>
+                    )}
+                    {id === 'random' && (
+                      <span className="recommended-badge">{t('newPlanet.recommended')}</span>
+                    )}
+                    <small>{t(`scenarioHelp.${id}` as MessageKey)}</small>
+                  </button>
+                ))}
+              </div>
+            </section>
           ))}
         </div>
 

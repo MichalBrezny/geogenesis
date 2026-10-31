@@ -1060,6 +1060,95 @@ kbd {
   gap: 12px;
 }
 
+.welcome-dialog {
+  width: min(720px, calc(100vw - 32px));
+}
+.welcome-dialog .dialog-body {
+  display: grid;
+  gap: 14px;
+}
+.welcome-language {
+  display: flex;
+  justify-content: flex-end;
+}
+.welcome-language label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.welcome-startup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+.welcome-pitch {
+  margin: 0;
+  color: var(--text-primary);
+  line-height: 1.45;
+}
+.welcome-items {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.welcome-items li {
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  align-items: start;
+  gap: 8px;
+  line-height: 1.35;
+}
+.welcome-icon {
+  color: var(--series-1);
+}
+.welcome-icon svg {
+  width: 22px;
+  height: 22px;
+}
+.welcome-start {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--grid);
+  border-radius: 6px;
+  background: var(--surface-control);
+  line-height: 1.35;
+}
+.welcome-start span {
+  color: var(--text-secondary);
+}
+.welcome-privacy {
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+.welcome-privacy summary {
+  color: var(--text-primary);
+  cursor: pointer;
+  font-weight: 600;
+}
+.welcome-privacy p {
+  margin: 0.45rem 0 0;
+}
+.welcome-actions button:first-child {
+  color: var(--text-secondary);
+  border-color: transparent;
+  background: transparent;
+}
+
+.scenario-groups,
+.scenario-group {
+  display: grid;
+  gap: 7px;
+}
+.scenario-group h3 {
+  color: var(--text-secondary);
+}
+
 .scenario-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1476,6 +1565,12 @@ kbd {
   }
   .scenario-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .welcome-items {
+    grid-template-columns: 1fr;
+  }
+  .welcome-actions {
+    flex-wrap: wrap;
   }
   .start-grid,
   .dialog-form-grid {

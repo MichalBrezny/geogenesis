@@ -36,7 +36,7 @@ import { GoalOutcome, GoalPanel } from './GoalPanel';
 import type { VisibleMapIcons } from '../render/mapIcons';
 import { DisasterPanel } from './DisasterPanel';
 import { CivilizationControlsPanel } from './CivilizationControlsPanel';
-import type { NewPlanetChoice } from './NewPlanetDialog';
+import { NewPlanetDialog, type NewPlanetChoice } from './NewPlanetDialog';
 import { HelpDialog } from './HelpDialog';
 import { AutoPausePanel } from './AutoPausePanel';
 import { loadAutoPauseSettings, saveAutoPauseSettings } from './autoPauseSettings';
@@ -45,6 +45,8 @@ import { ToastStack } from './ToastStack';
 import { eventSignature, eventsAfter, mergeToastEvents, type EventToast } from './toastQueue';
 import { FirstGameTour } from './FirstGameTour';
 import { rememberTourComplete, shouldStartTour, TOUR_ANCHORS, type GuidePageId } from './guide';
+import { WelcomeDialog } from './WelcomeDialog';
+import { browserStorage, initialOnboarding, tourStartAfterWelcome } from './welcome';
 import { SettingsDialog } from './SettingsDialog';
 import { SoundSettingsSection } from './SoundSettingsSection';
 import { loadSettings, saveSettings, type Settings } from './settings';
@@ -440,13 +442,11 @@ export function App() {
   const [notice, setNotice] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [helpPage, setHelpPage] = useState<GuidePageId | undefined>();
-  const [tourOpen, setTourOpen] = useState(() => {
-    try {
-      return shouldStartTour(window.localStorage);
-    } catch {
-      return true;
-    }
-  });
+  const [onboarding] = useState(() => initialOnboarding(browserStorage()));
+  const [welcomeOpen, setWelcomeOpen] = useState(onboarding.welcome);
+  const [tourOpen, setTourOpen] = useState(onboarding.tour);
+  const [newPlanetOpen, setNewPlanetOpen] = useState(false);
+  const [newPlanetFromWelcome, setNewPlanetFromWelcome] = useState(false);
   const [selectedSideTab, setSelectedSideTab] = useState<string | undefined>();
   const [focusedChart, setFocusedChart] = useState<ChartSeries | null>(null);
   const [windowOpen, setWindowOpen] = useState<WindowOpenState>(loadWindowOpenState);
@@ -461,7 +461,7 @@ export function App() {
   const lastGoalStatus = useRef<string | null>(null);
   const lastScenario = useRef<ScenarioId | null>(null);
   const [dismissedOutcome, setDismissedOutcome] = useState<string | null>(null);
-  const [newPlanetRequest, setNewPlanetRequest] = useState(0);
+  const pendingOnboardingFrame = useRef<((frame: Frame) => boolean) | null>(null);
   const [centreRequest, setCentreRequest] = useState<{ cell: number; serial: number } | null>(null);
   const [visibleMapIcons, setVisibleMapIcons] = useState<VisibleMapIcons>({
     lifeClasses: [],
@@ -631,6 +631,10 @@ export function App() {
           worker.postMessage({ type: 'frameAck' } satisfies WorkerRequest),
         );
         setRunning(message.frame.running);
+        if (pendingOnboardingFrame.current?.(message.frame as Frame)) {
+          pendingOnboardingFrame.current = null;
+          setTourOpen(true);
+        }
         if (toastWorldRevision.current !== message.frame.worldRevision) {
           toastWorldRevision.current = message.frame.worldRevision;
           lastToastEvent.current = message.frame.events.at(-1)
@@ -811,6 +815,40 @@ export function App() {
     const bytes = save.bytes.slice(0);
     workerRef.current?.postMessage({ type: 'load', bytes } satisfies WorkerRequest, [bytes]);
     setContinueSave(null);
+  };
+
+  const finishWelcome = (exit: 'choose' | 'continue' | 'explore') => {
+    setWelcomeOpen(false);
+    const timing = tourStartAfterWelcome(exit, shouldStartTour(browserStorage()));
+    if (timing === 'now') setTourOpen(true);
+    return timing;
+  };
+
+  const choosePlanetFromWelcome = () => {
+    finishWelcome('choose');
+    setNewPlanetFromWelcome(true);
+    setNewPlanetOpen(true);
+  };
+
+  const continueFromWelcome = (save: StoredSave) => {
+    const timing = finishWelcome('continue');
+    if (timing === 'after-world-change') {
+      pendingOnboardingFrame.current = (next) =>
+        next.scenario === save.scenario && next.year === save.planetAge;
+    }
+    loadStoredSave(save);
+  };
+
+  const createFromDialog = (choice: NewPlanetChoice) => {
+    if (newPlanetFromWelcome && shouldStartTour(browserStorage())) {
+      pendingOnboardingFrame.current = (next) =>
+        next.creation.seed === choice.seed &&
+        next.creation.scenario === choice.scenario &&
+        next.creation.start === choice.start;
+    }
+    setNewPlanetOpen(false);
+    setNewPlanetFromWelcome(false);
+    newPlanet(choice);
   };
   const applySettings = (next: Settings) => {
     setSettings(next);
@@ -994,13 +1032,15 @@ export function App() {
           saveSettings(next);
           send({ type: 'pacing', adaptive: adaptivePacing });
         }}
-        onNewPlanet={newPlanet}
+        onOpenNewPlanet={() => {
+          setNewPlanetFromWelcome(false);
+          setNewPlanetOpen(true);
+        }}
         onSave={(fileName) => send({ type: 'save', fileName })}
         onLoad={(file) => void load(file)}
         onCopyShareLink={() => void copyShareLink()}
         onShowHelp={() => openHelp()}
         onShowSettings={() => setSettingsOpen(true)}
-        settings={settings}
         saves={browserSaves}
         latestAutosave={continueSave}
         onSaveSlot={(name, overwriteId) => requestBrowserSave('manual', name, overwriteId)}
@@ -1012,10 +1052,28 @@ export function App() {
           void saveStore.current.delete(id).then(refreshBrowserSaves);
         }}
         error={error}
-        newPlanetRequest={newPlanetRequest}
         soundSettings={soundSettings}
         onSoundSettingsChange={(settings: AudioSettings) => setSoundSettings(settings)}
       />
+      {welcomeOpen && (
+        <WelcomeDialog
+          latestAutosave={continueSave}
+          onChoosePlanet={choosePlanetFromWelcome}
+          onContinue={continueFromWelcome}
+          onExplore={() => finishWelcome('explore')}
+        />
+      )}
+      {newPlanetOpen && (
+        <NewPlanetDialog
+          settings={settings}
+          onCreate={createFromDialog}
+          onClose={() => {
+            setNewPlanetOpen(false);
+            if (newPlanetFromWelcome) setWelcomeOpen(true);
+            setNewPlanetFromWelcome(false);
+          }}
+        />
+      )}
       {frame && (
         <aside className="sidebar left" aria-label={t('sidebar.tools')}>
           <CurrentTaskPanel frame={frame} onHelp={openHelp} />
@@ -1262,6 +1320,11 @@ export function App() {
       {helpOpen && (
         <HelpDialog
           onClose={() => setHelpOpen(false)}
+          onShowWelcome={() => {
+            setHelpOpen(false);
+            setTourOpen(false);
+            setWelcomeOpen(true);
+          }}
           onRestartTour={() => {
             setHelpOpen(false);
             setTourOpen(true);
@@ -1293,7 +1356,8 @@ export function App() {
             }}
             onNewPlanet={() => {
               setDismissedOutcome(outcomeKey(frame.goal!));
-              setNewPlanetRequest((value) => value + 1);
+              setNewPlanetFromWelcome(false);
+              setNewPlanetOpen(true);
             }}
           />
         )}

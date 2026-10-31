@@ -11,6 +11,7 @@ import { Glossary, HelpNav, ModelGuide, type HelpSection } from './GuideContent'
 
 export function HelpDialog(props: {
   onClose: () => void;
+  onShowWelcome: () => void;
   onRestartTour: () => void;
   initialPage?: GuidePageId;
   availableLayers: readonly MapLayer[];
@@ -46,9 +47,14 @@ export function HelpDialog(props: {
             <h3>{t('help.howToPlay')}</h3>
             <p>{t('help.howToPlayText')}</p>
             <p className="muted">{t('help.mouse')}</p>
-            <button type="button" title={t('tour.restartHint')} onClick={props.onRestartTour}>
-              {t('tour.restart')}
-            </button>
+            <div className="actions help-intro-actions">
+              <button type="button" title={t('welcome.openHint')} onClick={props.onShowWelcome}>
+                {t('welcome.open')}
+              </button>
+              <button type="button" title={t('tour.restartHint')} onClick={props.onRestartTour}>
+                {t('tour.restart')}
+              </button>
+            </div>
           </section>
           <section>
             <h3>{t('help.about')}</h3>
@@ -64,6 +70,12 @@ export function HelpDialog(props: {
                 {t('help.repository')}
               </a>
             </p>
+          </section>
+          <section>
+            <h3>{t('privacy.title')}</h3>
+            <p>{t('privacy.summary')}</p>
+            <p>{t('privacy.preferences')}</p>
+            <p>{t('privacy.remove')}</p>
           </section>
         </>
       )}

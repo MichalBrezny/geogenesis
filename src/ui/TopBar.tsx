@@ -3,11 +3,9 @@ import { formatFixed, formatNumber, t, type MessageKey } from '../i18n/i18n';
 import type { Frame } from '../worker/protocol';
 import { formatGyr, formatPpm, formatStep } from './format';
 import { GaiaFace } from './GaiaFace';
-import { NewPlanetDialog, type NewPlanetChoice } from './NewPlanetDialog';
 import { SaveLoadDialog, type FileDialogMode } from './SaveLoadDialog';
 import { TOUR_ANCHORS } from './guide';
 import type { StoredSave } from './saveStore';
-import type { Settings } from './settings';
 import type { AudioSettings } from '../audio/audioSettings';
 import { SoundSettingsSection } from './SoundSettingsSection';
 export { RESOLUTIONS } from './menuOptions';
@@ -23,13 +21,12 @@ interface Props {
   speed: Speed;
   onSpeedChange: (speed: Speed) => void;
   onAdaptivePacingChange: (enabled: boolean) => void;
-  onNewPlanet: (choice: NewPlanetChoice) => void;
+  onOpenNewPlanet: () => void;
   onSave: (fileName: string) => void;
   onLoad: (file: File) => void;
   onCopyShareLink: () => void;
   onShowHelp: () => void;
   onShowSettings: () => void;
-  settings: Settings;
   saves: readonly StoredSave[];
   latestAutosave: StoredSave | null;
   onSaveSlot: (name: string, overwriteId?: string) => void;
@@ -37,7 +34,6 @@ interface Props {
   onRenameSlot: (id: string, name: string) => void;
   onDeleteSlot: (id: string) => void;
   error: string | null;
-  newPlanetRequest: number;
   soundSettings: AudioSettings;
   onSoundSettingsChange: (settings: AudioSettings) => void;
 }
@@ -45,15 +41,8 @@ interface Props {
 /** Time controls, the planet's vital signs and the planet menu. */
 export function TopBar(props: Props) {
   const { frame, running } = props;
-  const [newPlanetOpen, setNewPlanetOpen] = useState(false);
-  const [dismissedRequest, setDismissedRequest] = useState(0);
   const [fileDialog, setFileDialog] = useState<FileDialogMode | null>(null);
   const [soundOpen, setSoundOpen] = useState(false);
-  const requestedOpen = props.newPlanetRequest > dismissedRequest;
-  const closeNewPlanet = () => {
-    setNewPlanetOpen(false);
-    setDismissedRequest(props.newPlanetRequest);
-  };
 
   return (
     <>
@@ -156,7 +145,7 @@ export function TopBar(props: Props) {
               </div>
             )}
           </div>
-          <button onClick={() => setNewPlanetOpen(true)} title={t('controls.newPlanetHint')}>
+          <button onClick={props.onOpenNewPlanet} title={t('controls.newPlanetHint')}>
             {t('controls.newPlanet')}
           </button>
           <button
@@ -192,13 +181,6 @@ export function TopBar(props: Props) {
           </button>
         </div>
       </header>
-      {(newPlanetOpen || requestedOpen) && (
-        <NewPlanetDialog
-          onClose={closeNewPlanet}
-          onCreate={props.onNewPlanet}
-          settings={props.settings}
-        />
-      )}
       {fileDialog && (
         <SaveLoadDialog
           mode={fileDialog}
