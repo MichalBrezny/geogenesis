@@ -38,6 +38,12 @@ const POPULATION_DECLINE_TIME = 5e4;
  * of millions of years — slow enough to watch, fast against evolution.
  */
 const DISPERSAL_SPEED = 0.3;
+/**
+ * Front speed (m/yr) of the rare long-distance colonisation across water within a
+ * class's `seaCrossingReach`: a 1,000 km strait takes some millions of years, so
+ * land life reaches other continents without the sea ceasing to be a barrier.
+ */
+const SEA_CROSSING_SPEED = 0.03;
 /** Population below which a class is gone from a cell. */
 const EXTINCTION_THRESHOLD = 1e-3;
 /**
@@ -184,7 +190,8 @@ type Stressor = Exclude<ExtinctionCause, 'impact'>;
  * dust, ocean anoxia and nutrients, acidification, wildfires, CO₂ starvation and
  * rapid climate change), shared with rivals of its guild, in cells it holds, and
  * colonises neighbouring habitable cells at DISPERSAL_SPEED (independent of the
- * step length and grid), so it cannot cross oceans or land it cannot live on. Classes vanish where
+ * step length and grid), so it cannot cross land it cannot live on, and land classes cross
+ * seas only rarely, within their `seaCrossingReach`. Classes vanish where
  * conditions turn against them — mass extinctions follow climate catastrophes.
  *
  * A class that is not alive can evolve from its living ancestor; the chance
@@ -764,20 +771,23 @@ function growAndSpread(
       if (after < EXTINCTION_THRESHOLD) after = 0;
       populations[offset + i] = after;
     }
-    disperse(grid, {
+    const colonise = {
       dtYears,
-      speed: DISPERSAL_SPEED * recovery,
       rng,
-      isSource: (i) => populations[offset + i]! >= COLONISATION_THRESHOLD,
-      canEnter: (i) =>
+      isSource: (i: number) => populations[offset + i]! >= COLONISATION_THRESHOLD,
+      canEnter: (i: number) =>
         populations[offset + i] === 0 && suitability[offset + i]! > EXTINCTION_THRESHOLD,
-      settle: (i, remaining) => {
+      settle: (i: number, remaining: number) => {
         const capacity = suitability[offset + i]!;
         const grown =
           capacity * (1 - Math.exp((-remaining * dtYears * speed) / POPULATION_RESPONSE_TIME));
         populations[offset + i] = Math.max(grown, Math.min(capacity, COLONISATION_THRESHOLD));
       },
-    });
+    };
+    disperse(grid, { ...colonise, speed: DISPERSAL_SPEED * recovery });
+    // Spores, flight and rafting carry land life to other shores now and then.
+    const reach = LIFE_CLASSES[c]!.seaCrossingReach;
+    if (reach) disperse(grid, { ...colonise, speed: SEA_CROSSING_SPEED * recovery, reach });
   }
 }
 

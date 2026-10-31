@@ -39,6 +39,11 @@ export interface LifeClass {
   /** Needs land plants to exist (food and shelter on land). */
   needsPlants?: boolean;
   /**
+   * Widest stretch of water (m) a land class can rarely cross: spores and seeds on
+   * the wind, flight, or rafting on floating vegetation. Undefined: no crossing.
+   */
+  seaCrossingReach?: number;
+  /**
    * Share (0..1) of the class's food that comes from sunlight, directly or through
    * the food chain; atmospheric dust dims it by exp(−dust). Defaults to 1;
    * prokaryotes also live on chemosynthesis.
@@ -125,6 +130,8 @@ export const LIFE_CLASSES: readonly LifeClass[] = [
     // ~1 Gyr after the first eukaryotes); 0.7 Gyr leaves Quick starts time for land life.
     evolutionTime: 50,
     maxEvolutionRateFactor: 8,
+    // Spores and seeds ride the wind and currents.
+    seaCrossingReach: 2_000e3,
     tier: 'plants',
   },
   {
@@ -214,6 +221,8 @@ export const LIFE_CLASSES: readonly LifeClass[] = [
     minOxygen: 0.1,
     needsPlants: true,
     difficulty: 1.5,
+    // Blown on storms and carried on floating wood.
+    seaCrossingReach: 1_500e3,
     tier: 'landInvertebrates',
   },
   {
@@ -242,6 +251,8 @@ export const LIFE_CLASSES: readonly LifeClass[] = [
     // amphibian decline from stalling the whole land-vertebrate branch.
     difficulty: 0.15,
     guild: 'landVertebrates',
+    // Rafting on mats of vegetation (as iguanas reach islands).
+    seaCrossingReach: 800e3,
     tier: 'landVertebrates',
   },
   {
@@ -254,6 +265,7 @@ export const LIFE_CLASSES: readonly LifeClass[] = [
     needsPlants: true,
     difficulty: 0.25,
     guild: 'landVertebrates',
+    seaCrossingReach: 500e3,
     tier: 'landVertebrates',
   },
   {
@@ -266,6 +278,8 @@ export const LIFE_CLASSES: readonly LifeClass[] = [
     needsPlants: true,
     difficulty: 0.3,
     guild: 'landVertebrates',
+    // Flight.
+    seaCrossingReach: 4_000e3,
     tier: 'landVertebrates',
   },
   {
@@ -278,6 +292,8 @@ export const LIFE_CLASSES: readonly LifeClass[] = [
     needsPlants: true,
     difficulty: 0.2,
     guild: 'landVertebrates',
+    // Rafting, as monkeys and rodents crossed the young Atlantic.
+    seaCrossingReach: 500e3,
     tier: 'landVertebrates',
   },
   {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { cellIndex } from '../../core/grid';
 import { createPlanet, type PlanetState } from '../../core/planet';
 import { createRng } from '../../core/rng';
+import { Biome } from '../../data/biomes';
 import { LIFE_CLASSES, lifeClassIndex } from '../../data/lifeClasses';
 import { biogeochemistry, oxygenSink } from '../atmosphere/biogeochemistry';
 import {
@@ -82,6 +83,36 @@ describe('life', () => {
     expect(coarse).toBeGreaterThan(3);
     expect(coarse).toBeLessThan(200);
     expect(Math.abs(coarse - fine) / fine).toBeLessThan(0.35);
+  });
+
+  it('lets land plants cross a narrow sea now and then, but not an ocean', () => {
+    const planet = waterWorld();
+    const { grid } = planet;
+    const n = grid.cellCount;
+    // Low-latitude islands only (rows converge towards the poles): a second one
+    // cell of sea (≤ 1,250 km) east, a third some 9,000 km away.
+    for (let y = 0; y < 16; y++) {
+      const land = y >= 4 && y < 12;
+      planet.fields.elevation[cellIndex(grid, 10, y)] = land ? 200 : -3000;
+      planet.fields.elevation[cellIndex(grid, 12, y)] = land ? 200 : -3000;
+      planet.fields.elevation[cellIndex(grid, 24, y)] = land ? 200 : -3000;
+    }
+    planet.globals.atmosphere.o2 = 0.21;
+    for (let i = 0; i < n; i++)
+      if (planet.fields.elevation[i]! > 0) planet.fields.biome[i] = Biome.TemperateForest;
+    for (let y = 4; y < 12; y++)
+      planet.biota.populations[lifeClassIndex('plants') * n + cellIndex(grid, 10, y)] = 0.5;
+    const life = createLife({ mutationRate: 0 });
+    const stepRng = createRng(5);
+    for (let t = 0; t < 40e6; t += 1e6) life.runOneStep(planet, 1e6, stepRng);
+    const holds = (x: number) => {
+      let cells = 0;
+      for (let y = 0; y < 16; y++)
+        if (population(planet, 'plants', cellIndex(grid, x, y)) > 0) cells++;
+      return cells;
+    };
+    expect(holds(12)).toBeGreaterThan(0);
+    expect(holds(24)).toBe(0);
   });
 
   it('dies out where conditions become impossible', () => {
