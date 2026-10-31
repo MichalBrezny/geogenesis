@@ -3,8 +3,18 @@ import { LIFE_CLASS_KEYS } from '../sim/data/lifeClasses';
 import type { City } from '../sim/core/planet';
 import type { EventKey, PlanetEvent } from '../sim/events';
 import type { Device, DeviceKind } from '../sim/tools/devices';
+import type { PaletteMode } from './accessibilitySettings';
 import type { Projection } from './arrows';
 import type { MapSource } from './mapRenderer';
+import {
+  CAPITAL_PIXEL_ICON,
+  CITY_PIXEL_ICONS,
+  DEVICE_PIXEL_ICONS,
+  drawPixelIcon,
+  EVENT_PIXEL_ICONS,
+  LIFE_PIXEL_ICONS,
+  RUINS_PIXEL_ICON,
+} from './pixelIcons';
 
 /** Bold silhouettes on the same 24-unit grid as the React UI icons. */
 export const LIFE_ICON_PATHS = {
@@ -256,6 +266,7 @@ export function drawLifeAndCityIcons(
   ctx: CanvasRenderingContext2D,
   source: MapSource,
   samples: readonly IconSample[],
+  paletteMode: PaletteMode,
 ): VisibleMapIcons {
   const visible = new Set<number>();
   for (const sample of samples) {
@@ -263,7 +274,14 @@ export function drawLifeAndCityIcons(
     if (density >= 1e-4) continue;
     const lifeClass = source.fields.dominantClass[sample.cell]!;
     if (lifeClass < 0 || lifeClass >= LIFE_CLASS_KEYS.length) continue;
-    drawMapIcon(ctx, LIFE_ICON_PATHS[LIFE_CLASS_KEYS[lifeClass]!], sample.x, sample.y);
+    drawPixelIcon(
+      ctx,
+      LIFE_PIXEL_ICONS[LIFE_CLASS_KEYS[lifeClass]!],
+      sample.x,
+      sample.y,
+      18,
+      paletteMode,
+    );
     visible.add(lifeClass);
   }
   return { lifeClasses: [...visible].sort((a, b) => a - b), cityAge: null };
@@ -277,6 +295,7 @@ export function drawCityIcons(
   height: number,
   project: Projection,
   zoom: number,
+  paletteMode: PaletteMode,
 ): number | null {
   let visibleAge: number | null = null;
   const ordered = [...cities].sort(
@@ -292,34 +311,13 @@ export function drawCityIcons(
     const age = TECH_AGES[Math.max(0, Math.min(TECH_AGES.length - 1, city.age))]!;
     const ruin = city.abandonedYear !== null;
     const size = cityMarkerSize(city.population);
-    if (city.capital && !ruin) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(point[0], point[1], size * 0.66, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(20, 18, 12, 0.78)';
-      ctx.fill();
-      ctx.strokeStyle = '#ffe27a';
-      ctx.lineWidth = 2.5;
-      ctx.stroke();
-      ctx.restore();
-    }
-    drawMapIcon(ctx, CITY_ICON_PATHS[age.key as keyof typeof CITY_ICON_PATHS], point[0], point[1], {
-      fill: ruin ? '#b8afa0' : '#ffd978',
-      outline: ruin ? 'rgba(30, 29, 28, 0.72)' : undefined,
-      alpha: ruin ? 0.42 : 1,
-      size,
-    });
-    if (ruin) {
-      ctx.save();
-      ctx.globalAlpha = 0.5;
-      ctx.strokeStyle = '#251f1a';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(point[0] - size * 0.32, point[1] + size * 0.32);
-      ctx.lineTo(point[0] + size * 0.32, point[1] - size * 0.32);
-      ctx.stroke();
-      ctx.restore();
-    } else {
+    const key = ruin
+      ? RUINS_PIXEL_ICON
+      : city.capital
+        ? CAPITAL_PIXEL_ICON
+        : CITY_PIXEL_ICONS[age.key as keyof typeof CITY_PIXEL_ICONS];
+    drawPixelIcon(ctx, key, point[0], point[1], size, paletteMode, ruin ? 0.62 : 1);
+    if (!ruin) {
       visibleAge = Math.max(visibleAge ?? 0, city.age);
     }
   }
@@ -341,15 +339,6 @@ function cityVisibleAtZoom(city: City, zoom: number): boolean {
   return zoom >= 3;
 }
 
-/** Device colours match the tool palette while their silhouettes show their function. */
-const DEVICE_COLORS: Record<DeviceKind, string> = {
-  co2Generator: '#f2a541',
-  n2Generator: '#7fb4ff',
-  o2Generator: '#7be0d6',
-  co2Scrubber: '#d8d8d8',
-  biomeFactory: '#7ed957',
-};
-
 function cellPoint(cell: number, width: number, height: number, project: Projection) {
   const x = cell % width;
   const y = Math.floor(cell / width);
@@ -362,39 +351,23 @@ export function drawDeviceIcons(
   width: number,
   height: number,
   project: Projection,
+  paletteMode: PaletteMode,
 ): void {
   for (const device of devices) {
     const point = cellPoint(device.cell, width, height, project);
     if (!point) continue;
-    drawMapIcon(ctx, DEVICE_ICON_PATHS[device.kind], point[0], point[1], {
-      fill: DEVICE_COLORS[device.kind],
-      size: 17,
-    });
+    drawPixelIcon(ctx, DEVICE_PIXEL_ICONS[device.kind], point[0], point[1], 17, paletteMode);
   }
 }
 
-const EVENT_COLORS: Partial<Record<EventKey, string>> = {
-  impact: '#ffad66',
-  meteor: '#ff875f',
-  iceMeteor: '#9de4ff',
-  largeEruption: '#ff9361',
-  largeIgneousProvince: '#e86f51',
-  sentience: '#fff09a',
-  monolith: '#d7c0ff',
-  deviceDestroyed: '#ff7777',
-  earthquake: '#ffb066',
-  tsunami: '#70c9ea',
-  cyclone: '#a9d4e8',
-  drought: '#d9b35f',
-};
-
-/** Recent located events, oldest and faintest first, with a contrasting ring. */
+/** Recent located events, oldest and faintest first. */
 export function drawEventMarkers(
   ctx: CanvasRenderingContext2D,
   events: readonly PlanetEvent[],
   width: number,
   height: number,
   project: Projection,
+  paletteMode: PaletteMode,
   options: { limit?: number; fade?: boolean } = {},
 ): void {
   const all = events.filter((event) => event.cell !== undefined);
@@ -403,20 +376,6 @@ export function drawEventMarkers(
     const point = cellPoint(event.cell!, width, height, project);
     if (!point) return;
     const alpha = options.fade === false ? 1 : 0.3 + (0.7 * (index + 1)) / located.length;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.beginPath();
-    ctx.arc(point[0], point[1], 11, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(18, 21, 28, 0.72)';
-    ctx.fill();
-    ctx.strokeStyle = '#fff7d6';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.restore();
-    drawMapIcon(ctx, EVENT_ICON_PATHS[event.key], point[0], point[1], {
-      fill: EVENT_COLORS[event.key] ?? '#f4e9cb',
-      size: 14,
-      alpha,
-    });
+    drawPixelIcon(ctx, EVENT_PIXEL_ICONS[event.key], point[0], point[1], 14, paletteMode, alpha);
   });
 }
