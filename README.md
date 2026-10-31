@@ -165,6 +165,11 @@ push and pull request.
 
 ## References
 
+Topography data used by the planet presets is public domain:
+
+- Mars: MGS MOLA MEGDR, NASA PDS Geosciences Node.
+- Venus: Magellan GTDR, USGS Astrogeology.
+
 - Watson, A. J., & Lovelock, J. E. (1983). Biological homeostasis of the global environment: the
   parable of Daisyworld. _Tellus B_, 35(4), 284–289.
 - North, G. R., Cahalan, R. F., & Coakley, J. A. (1981). Energy balance climate models. _Reviews of

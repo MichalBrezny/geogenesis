@@ -6,6 +6,7 @@ import {
   type RenderedField,
   type TemperatureMonth,
 } from '../render/mapRenderer';
+import { isTexturedLayer, TERRAIN_TILE_FIELDS } from '../render/terrainTiles';
 import type { Frame, WorkerRequest, WorkerResponse } from '../worker/protocol';
 import type { PlanetCreation } from '../worker/protocol';
 import type { ScenarioId } from '../sim/scenarios';
@@ -763,6 +764,7 @@ export function App() {
       fields.add('oceanCurrentU');
       fields.add('oceanCurrentV');
     }
+    if (isTexturedLayer(shownLayer)) for (const field of TERRAIN_TILE_FIELDS) fields.add(field);
     if (overlays.includes('isobars')) fields.add('pressure');
     if (overlays.includes('icons')) {
       fields.add('civilization');

@@ -1,7 +1,7 @@
 import { Biome } from '../sim/data/biomes';
 import { LakeType } from '../sim/models/geosphere/flowRouting';
 import { getAccessibilitySettings, type PaletteMode } from './accessibilitySettings';
-import type { MapLayer, MapSource } from './mapRenderer';
+import type { MapLayer, MapSource, RenderedField } from './mapRenderer';
 import { paintTerrainSprite, TerrainPattern, terrainSpriteVariantCount } from './terrainSprites';
 import { drawViewport, type MapViewport, viewBounds } from './viewport';
 
@@ -26,6 +26,18 @@ export function tileBlend(cellPixels: number): number {
 export function tileAnimationPhase(timeMs: number, reducedMotion: boolean): number {
   return reducedMotion ? 0 : Math.floor(Math.max(0, timeMs) / TILE_ANIMATION_MS) % TILE_VARIANTS;
 }
+
+/** Fields terrainPatternAt reads; the worker must send them whenever tiles can show. */
+export const TERRAIN_TILE_FIELDS: readonly RenderedField[] = [
+  'elevation',
+  'iceCover',
+  'co2Ice',
+  'biome',
+  'lakeType',
+  'vegetation',
+  'airTemperature',
+  'volcanicActivity',
+];
 
 export function isTexturedLayer(layer: MapLayer): boolean {
   return layer === 'terrain' || layer === 'biomes' || layer === 'seafloor';
