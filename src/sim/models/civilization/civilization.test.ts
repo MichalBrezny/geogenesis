@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createPlanet, DEFAULT_CIV_POLICY, type PlanetState } from '../../core/planet';
 import { createRng } from '../../core/rng';
-import { SENTIENCE_POTENTIAL, TECH_AGES } from '../../data/civilization';
+import { EXODUS_MIN_POPULATION, SENTIENCE_POTENTIAL, TECH_AGES } from '../../data/civilization';
 import { LIFE_CLASS_COUNT, lifeClassIndex } from '../../data/lifeClasses';
 import { Biome } from '../../data/biomes';
 import { eraStepYears } from '../../eras';
@@ -13,6 +13,7 @@ import {
   occupiedHabitatShare,
   POLLUTION_RESIDENCE_TIME,
   SENTIENCE_TIME,
+  technologyPopulationPace,
   updatePollution,
 } from './civilization';
 import { createCarbonCycle } from '../atmosphere/carbon';
@@ -40,6 +41,14 @@ function mammalWorld(): PlanetState {
 }
 
 describe('civilization', () => {
+  it('scales technology pace more steeply while retaining bounded progress', () => {
+    expect(technologyPopulationPace(0, 7)).toBe(0.25);
+    expect(technologyPopulationPace(0.7, 7)).toBeCloseTo(0.1 ** 0.35);
+    expect(technologyPopulationPace(7, 7)).toBe(1);
+    expect(technologyPopulationPace(21, 7)).toBeCloseTo(3 ** 0.35);
+    expect(technologyPopulationPace(700, 7)).toBe(2);
+  });
+
   it('keeps marine sentience possible but secondary to land vertebrates', () => {
     const potential = (['arthropods', 'mollusks', 'trichordates', 'fish'] as const).reduce(
       (sum, key) => sum + (SENTIENCE_POTENTIAL[key] ?? 0),
@@ -114,6 +123,34 @@ describe('civilization', () => {
     expect(planet.globals.fossilCarbon).toBeLessThan(fossilBefore);
     // Settlements are cleared when the civilization leaves.
     expect(Math.max(...planet.fields.civilization)).toBe(0);
+  });
+
+  it('holds completed Nanotech until the population can support Exodus', () => {
+    const planet = mammalWorld();
+    makeSentient(planet, lifeClassIndex('mammals'), 0);
+    planet.civilization.age = TECH_AGES.length - 1;
+    planet.civilization.progress = 0.99;
+    planet.fields.civilization.fill(0);
+    planet.fields.civilization[0] = 0.001;
+    planet.civilization.population = 0.001;
+    const civilization = createCivilization();
+
+    civilization.runOneStep(planet, 5, createRng(17));
+    civilization.runOneStep(planet, 5, createRng(17));
+
+    expect(planet.civilization.progress).toBe(1);
+    expect(planet.civilization.exodusYear).toBeNull();
+    expect(planet.events.filter((event) => event.key === 'exodusPopulationTooLow')).toHaveLength(1);
+
+    planet.civilization.progress = 0.5;
+    civilization.runOneStep(planet, 5, createRng(17));
+    expect(planet.civilization.progress).toBe(1);
+    expect(planet.events.filter((event) => event.key === 'exodusPopulationTooLow')).toHaveLength(1);
+
+    planet.fields.civilization.fill(0.1);
+    planet.civilization.population = EXODUS_MIN_POPULATION;
+    civilization.runOneStep(planet, 5, createRng(17));
+    expect(planet.civilization.exodusYear).not.toBeNull();
   });
 
   it('clears vegetation where it settles', () => {

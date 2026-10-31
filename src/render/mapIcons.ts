@@ -78,6 +78,7 @@ export const EVENT_ICON_PATHS: Record<EventKey, string> = {
   energyTransition: EVENT_GROUP_PATHS.civilization,
   pollutionCrisis: EVENT_GROUP_PATHS.climate,
   civilizationCollapsed: 'M3 21V8h5l2 4 3-8 3 7h5v10h-6l-2-5-3 5Z',
+  exodusPopulationTooLow: EVENT_GROUP_PATHS.civilization,
   exodus: 'M12 2c4 3 5 8 3 12l-3 7-3-7c-2-4-1-9 3-12Zm-4 12-5 4h6Zm8 0 5 4h-6Z',
   meteor: 'M3 20a5 5 0 1 1 7-7l11-11 1 1-9 13c0 3-3 6-6 6Z',
   largeEruption: EVENT_GROUP_PATHS.geology,

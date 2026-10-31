@@ -31,10 +31,7 @@ describe('balance settings', () => {
     for (let step = 0; step < 10; step++) {
       modelControlLag.runOneStep(split, 1e5, createRng(1));
     }
-    expect(split.effectiveControls.solarFactor).toBeCloseTo(
-      one.effectiveControls.solarFactor,
-      12,
-    );
+    expect(split.effectiveControls.solarFactor).toBeCloseTo(one.effectiveControls.solarFactor, 12);
   });
 
   it('prices target movement and leaves experimental mode to the host', () => {
@@ -74,7 +71,63 @@ describe('untouched goal regressions', () => {
     }
     expect(world.planet.goal?.status).toBe('lost');
     expect(world.planet.goal?.outcomeReason).toBe('timeExpired');
-  });
+  }, 30_000);
+
+  it('wins Stone age with active science and agriculture policy', () => {
+    const world = createScenario('stoneAge', {
+      seed: 2,
+      width: 64,
+      height: 32,
+      start: 'quick',
+    });
+    world.planet.civPolicy.energy = {
+      biomass: 100,
+      fossil: 0,
+      nuclear: 0,
+      solarWind: 0,
+      hydroGeothermal: 0,
+    };
+    world.planet.civPolicy.investment = {
+      science: 70,
+      agriculture: 20,
+      medicine: 0,
+      philosophy: 5,
+      culture: 5,
+    };
+    while (world.planet.goal?.status === 'active') {
+      const age = world.planet.civilization.age;
+      if (age >= 2 && age < 6) {
+        world.planet.civPolicy.investment = {
+          science: 45,
+          agriculture: 40,
+          medicine: 5,
+          philosophy: 5,
+          culture: 5,
+        };
+      }
+      if (age >= 3) {
+        world.planet.civPolicy.energy = {
+          biomass: 0,
+          fossil: age < 5 ? 100 : 0,
+          nuclear: 0,
+          solarWind: age >= 5 ? 100 : 0,
+          hydroGeothermal: 0,
+        };
+      }
+      if (age === 6) {
+        world.planet.civPolicy.investment = {
+          science: 0,
+          agriculture: 80,
+          medicine: 10,
+          philosophy: 5,
+          culture: 5,
+        };
+      }
+      world.simulation.step(world.planet, world.stepYears(world.planet));
+    }
+    expect(world.planet.goal?.status).toBe('won');
+    expect(world.planet.goal?.outcomeReason).toBe('exodus');
+  }, 30_000);
 
   it('does not win Brightening Sun without intervention', () => {
     const world = createScenario('brighteningSun', {
@@ -92,4 +145,3 @@ describe('untouched goal regressions', () => {
     expect(world.planet.goal?.score).toBeLessThan(1000);
   }, 15_000);
 });
-

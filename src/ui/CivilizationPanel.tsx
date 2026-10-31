@@ -1,5 +1,5 @@
 import { t, type MessageKey } from '../i18n/i18n';
-import { TECH_AGES } from '../sim/data/civilization';
+import { EXODUS_MIN_POPULATION, TECH_AGES } from '../sim/data/civilization';
 import { LIFE_CLASSES } from '../sim/data/lifeClasses';
 import type { Frame } from '../worker/protocol';
 import { formatGyr, formatYear } from './format';
@@ -37,6 +37,17 @@ export function CivilizationPanel({ civilization }: { civilization: Frame['civil
           </dd>
           <dt>{t('civ.population')}</dt>
           <dd>{formatPopulation(population)}</dd>
+          {age === TECH_AGES.length - 1 && (
+            <>
+              <dt>{t('civ.exodus')}</dt>
+              <dd>
+                {t('civ.exodusRequirement', {
+                  required: formatPopulation(EXODUS_MIN_POPULATION),
+                  current: formatPopulation(population),
+                })}
+              </dd>
+            </>
+          )}
         </dl>
       )}
       {largestCities.length > 0 && (

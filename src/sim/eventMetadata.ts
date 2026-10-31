@@ -21,6 +21,7 @@ export const EVENT_IMPORTANCE = {
   energyTransition: 'important',
   pollutionCrisis: 'critical',
   civilizationCollapsed: 'critical',
+  exodusPopulationTooLow: 'important',
   exodus: 'critical',
   meteor: 'important',
   largeEruption: 'important',

@@ -31,6 +31,7 @@ export type EventKey =
   | 'energyTransition'
   | 'pollutionCrisis'
   | 'civilizationCollapsed'
+  | 'exodusPopulationTooLow'
   | 'exodus'
   | 'meteor'
   | 'largeEruption'

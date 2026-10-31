@@ -20,7 +20,10 @@ const DEFAULT_POLICY: CivilizationPolicy = {
   investment: { science: 20, agriculture: 20, medicine: 20, philosophy: 20, culture: 20 },
 };
 
-/** SimEarth's technology ages, in order; reaching the end of Nanotech means Exodus. */
+/** Population in billions required to turn completed Nanotech into an Exodus. */
+export const EXODUS_MIN_POPULATION = 1;
+
+/** SimEarth's technology ages, in order; Nanotech can culminate in Exodus. */
 export interface TechAge {
   key: string;
   /** Typical length of the age in years at its expected population. */
@@ -39,7 +42,7 @@ export interface TechAge {
   emissions: number;
   /** Yearly chance of nuclear war per civilization, once weapons exist. */
   warRisk: number;
-  /** Can cross narrow seas (boats). */
+  /** Can cross ocean passages (boats). */
   seafaring: boolean;
   /** Speed at which settlement spreads into new land, m/yr (walking, then roads, then rail). */
   spreadSpeed: number;

@@ -11,7 +11,7 @@ import { createRandomWorld, type World } from './world';
 const EXPECTED = {
   young: '4ef03679',
   quick: '4aa4f4a6',
-  stoneAge: '77515c7e',
+  stoneAge: 'da84c5b0',
 };
 
 /** FNV-1a (32-bit) over the bytes of every field, the populations and key globals. */
