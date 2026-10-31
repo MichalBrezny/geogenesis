@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { t, type MessageKey } from '../i18n/i18n';
+import { formatFixed, formatNumber, t, type MessageKey } from '../i18n/i18n';
 import {
   buildGlobeLookup,
   dragGlobe,
@@ -964,10 +964,10 @@ export function PlanetView({
           position: formatMapPosition(inspected.latitude, inspected.longitude),
           biome: t(`biome.${biome.key}` as MessageKey),
           elevation: t(relativeElevation < 0 ? 'map.oceanDepth' : 'map.landElevation', {
-            value: Math.round(Math.abs(relativeElevation)).toLocaleString('en'),
+            value: formatNumber(Math.round(Math.abs(relativeElevation))),
           }),
           temperature: t('map.temperatureValue', {
-            value: frame.fields.airTemperature[inspected.index]!.toFixed(1),
+            value: formatFixed(frame.fields.airTemperature[inspected.index]!, 1),
           }),
         });
       })()
@@ -975,7 +975,7 @@ export function PlanetView({
   const mapAlternative = t('map.textAlternative', {
     view: t(`view.${view}`),
     layer: t(`layer.${layer}`),
-    age: t('map.ageGyr', { value: (frame.year / 1e9).toFixed(3) }),
+    age: t('map.ageGyr', { value: formatFixed(frame.year / 1e9, 3) }),
     cell: cellAlternative,
   });
 
@@ -1154,9 +1154,10 @@ function bearingBetweenCells(start: number, end: number, width: number, height: 
 function formatMapPosition(latitude: number, longitude: number): string {
   const wrappedLongitude = ((longitude % 360) + 360) % 360;
   return t('map.positionValue', {
-    latitude: Math.abs(latitude).toFixed(0),
+    latitude: formatFixed(Math.abs(latitude), 0),
     northSouth: t(latitude >= 0 ? 'map.north' : 'map.south'),
-    longitude: Math.abs(wrappedLongitude > 180 ? 360 - wrappedLongitude : wrappedLongitude).toFixed(
+    longitude: formatFixed(
+      Math.abs(wrappedLongitude > 180 ? 360 - wrappedLongitude : wrappedLongitude),
       0,
     ),
     eastWest: t(wrappedLongitude > 180 ? 'map.west' : 'map.east'),

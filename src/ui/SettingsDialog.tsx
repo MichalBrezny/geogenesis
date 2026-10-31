@@ -1,5 +1,11 @@
 import { useState, type ComponentType, type ReactNode } from 'react';
-import { t, type MessageKey } from '../i18n/i18n';
+import {
+  getLanguageChoice,
+  saveLanguageChoice,
+  t,
+  type LanguageChoice,
+  type MessageKey,
+} from '../i18n/i18n';
 import { Dialog } from './Dialog';
 import { RESOLUTIONS } from './menuOptions';
 import { AUTOSAVE_INTERVALS, type DefaultSpeed, type Settings } from './settings';
@@ -33,6 +39,7 @@ export function SettingsDialog({
   children?: ReactNode;
 }) {
   const [draft, setDraft] = useState(settings);
+  const [language, setLanguage] = useState(getLanguageChoice());
   const set = <K extends keyof Settings>(key: K, value: Settings[K]) =>
     setDraft((current) => ({ ...current, [key]: value }));
 
@@ -41,8 +48,11 @@ export function SettingsDialog({
       <form
         onSubmit={(event) => {
           event.preventDefault();
+          const languageChanged = language !== getLanguageChoice();
+          const languageSaved = saveLanguageChoice(language);
           onSave(draft);
           onClose();
+          if (languageChanged && languageSaved) window.location.reload();
         }}
       >
         {SECTIONS.map(({ id, label, component: Section }) => (
@@ -53,6 +63,7 @@ export function SettingsDialog({
             </div>
           </section>
         ))}
+        <LanguageSettings language={language} setLanguage={setLanguage} />
         {children}
         <div className="actions">
           <button type="button" onClick={onClose} title={t('controls.cancel')}>
@@ -64,6 +75,40 @@ export function SettingsDialog({
         </div>
       </form>
     </Dialog>
+  );
+}
+
+function LanguageSettings({
+  language,
+  setLanguage,
+}: {
+  language: LanguageChoice;
+  setLanguage: (language: LanguageChoice) => void;
+}) {
+  return (
+    <section className="settings-section">
+      <h3 title={t('settings.languageHint')}>{t('settings.language')}</h3>
+      <div className="dialog-form-grid">
+        <label title={t('settings.languageHint')}>
+          {t('settings.language')}
+          <select
+            value={language}
+            onChange={(event) => setLanguage(event.target.value as LanguageChoice)}
+            title={t('settings.languageHint')}
+          >
+            <option value="auto" title={t('settings.languageAutoHint')}>
+              {t('settings.languageAuto')}
+            </option>
+            <option value="en" title={t('settings.languageEnglishHint')}>
+              English
+            </option>
+            <option value="cs" title={t('settings.languageCzechHint')}>
+              Čeština
+            </option>
+          </select>
+        </label>
+      </div>
+    </section>
   );
 }
 

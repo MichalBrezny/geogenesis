@@ -1,4 +1,4 @@
-import { t, type MessageKey } from '../i18n/i18n';
+import { formatNumber, t, type MessageKey } from '../i18n/i18n';
 import {
   FRESH_LAKE_COLOR,
   lifeTierColor,
@@ -227,7 +227,7 @@ function LayerLegend({ layer }: { layer: MapLayer }) {
             key={tick}
             style={{ left: `${((tick - scale.min) / (scale.max - scale.min)) * 100}%` }}
           >
-            {tick.toLocaleString('en')}
+            {formatNumber(tick)}
           </span>
         ))}
       </div>

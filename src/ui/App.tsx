@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { t, type MessageKey } from '../i18n/i18n';
+import { formatNumber, t, type MessageKey } from '../i18n/i18n';
 import {
   LAYER_FIELDS,
   type MapLayer,
@@ -1027,7 +1027,7 @@ export function App() {
                 <span className="energy">
                   {frame.unlimitedEnergy
                     ? t('tools.unlimited')
-                    : t('tools.energy', { value: Math.floor(frame.energy) })}
+                    : t('tools.energy', { value: formatNumber(Math.floor(frame.energy)) })}
                 </span>
               </>
             }

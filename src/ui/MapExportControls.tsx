@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { t, type MessageKey } from '../i18n/i18n';
+import { formatNumber, t, tp, type MessageKey } from '../i18n/i18n';
 import type { MapLayer } from '../render/mapRenderer';
 import type { Frame } from '../worker/protocol';
 import { EXPORT_ICONS } from './icons';
@@ -70,7 +70,7 @@ export function MapExportControls({
   }, [capture, frame, interval, recording]);
 
   const exportPng = async () => {
-    const caption = `${t('share.seed')}: ${frame.creation.seed}  •  ${t('stat.age')}: ${formatGyr(frame.year)}  •  ${t('export.layer')}: ${t(`layer.${layer}` as MessageKey)}`;
+    const caption = `${t('share.seed')}: ${formatNumber(frame.creation.seed)}  •  ${t('stat.age')}: ${formatGyr(frame.year)}  •  ${t('export.layer')}: ${t(`layer.${layer}` as MessageKey)}`;
     const canvas = capture(caption);
     if (!canvas) return;
     const blob = await canvasBlob(canvas, 'image/png');
@@ -141,7 +141,7 @@ export function MapExportControls({
         >
           {FRAME_INTERVALS.map((value) => (
             <option key={value} value={value}>
-              {t('export.everyFrames', { count: value })}
+              {tp('export.everyFrames', value)}
             </option>
           ))}
         </select>

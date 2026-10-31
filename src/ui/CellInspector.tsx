@@ -1,4 +1,4 @@
-import { t, type MessageKey } from '../i18n/i18n';
+import { formatFixed, formatNumber, t, type MessageKey } from '../i18n/i18n';
 import { BIOMES, type Biome } from '../sim/data/biomes';
 import { PEOPLE_PER_KM2 } from '../sim/data/civilization';
 import { LIFE_CLASSES, LIFE_TIERS } from '../sim/data/lifeClasses';
@@ -40,12 +40,21 @@ export function CellInspector({
   const tier = f.lifeTier[i]!;
   const rows: [MessageKey, string][] = [
     ['inspect.position', formatPosition(cell.latitude, cell.longitude)],
-    [ocean ? 'inspect.depth' : 'inspect.elevation', `${Math.round(height).toLocaleString('en')} m`],
-    ['inspect.temperature', `${f.airTemperature[i]!.toFixed(1)} °C`],
-    ['inspect.warmestMonth', `${(f.airTemperature[i]! + f.seasonalAmplitude[i]!).toFixed(1)} °C`],
-    ['inspect.coldestMonth', `${(f.airTemperature[i]! - f.seasonalAmplitude[i]!).toFixed(1)} °C`],
-    ['inspect.precipitation', `${Math.round(f.precipitation[i]!).toLocaleString('en')} mm/yr`],
-    ['inspect.volcanism', `${f.volcanicActivity[i]!.toFixed(2)} × Earth mean`],
+    [ocean ? 'inspect.depth' : 'inspect.elevation', `${formatNumber(Math.round(height))} m`],
+    ['inspect.temperature', `${formatFixed(f.airTemperature[i]!, 1)} °C`],
+    [
+      'inspect.warmestMonth',
+      `${formatFixed(f.airTemperature[i]! + f.seasonalAmplitude[i]!, 1)} °C`,
+    ],
+    [
+      'inspect.coldestMonth',
+      `${formatFixed(f.airTemperature[i]! - f.seasonalAmplitude[i]!, 1)} °C`,
+    ],
+    [
+      'inspect.precipitation',
+      `${formatNumber(Math.round(f.precipitation[i]!))} ${t('unit.mmPerYear')}`,
+    ],
+    ['inspect.volcanism', `${formatFixed(f.volcanicActivity[i]!, 2)} ${t('unit.earthMean')}`],
     ['inspect.wind', formatWind(f.windU[i]!, f.windV[i]!)],
     ['inspect.clouds', `${Math.round(f.cloudCover[i]! * 100)}%`],
     ['inspect.biome', t(`biome.${BIOMES[f.biome[i] as Biome].key}` as MessageKey)],
@@ -53,13 +62,14 @@ export function CellInspector({
   ];
   const plateName = plateNameAtCell(frame, i);
   const geographicName = geographicNameAtCell(frame, i);
-  if (geographicName) rows.splice(1, 0, [ocean ? 'inspect.ocean' : 'inspect.landmass', geographicName]);
+  if (geographicName)
+    rows.splice(1, 0, [ocean ? 'inspect.ocean' : 'inspect.landmass', geographicName]);
   if (plateName) rows.splice(1, 0, ['inspect.plate', plateName]);
   if (f.co2Ice[i]! > 0) {
-    rows.splice(5, 0, ['inspect.co2Ice', `${(f.co2Ice[i]! * 1000).toFixed(2)} mbar`]);
+    rows.splice(5, 0, ['inspect.co2Ice', `${formatFixed(f.co2Ice[i]! * 1000, 2)} mbar`]);
   }
   if (frame.scenario !== 'daisyworld') {
-    rows.splice(3, 0, ['inspect.pressure', `${f.pressure[i]!.toFixed(0)} hPa`]);
+    rows.splice(3, 0, ['inspect.pressure', `${formatFixed(f.pressure[i]!, 0)} hPa`]);
   }
   const lake = f.lakeType[i]!;
   if (lake === LakeType.Fresh || lake === LakeType.Salt) {
@@ -67,7 +77,7 @@ export function CellInspector({
       'inspect.lake',
       t('inspect.lakeValue', {
         kind: t(lake === LakeType.Fresh ? 'lake.fresh' : 'lake.salt'),
-        depth: Math.round(f.lakeDepth[i]!).toLocaleString('en'),
+        depth: formatNumber(Math.round(f.lakeDepth[i]!)),
       }),
     ]);
   } else if (lake === LakeType.SaltFlat) {
@@ -75,11 +85,11 @@ export function CellInspector({
   }
   if (!ocean && f.discharge[i]! >= RIVER_MIN_DISCHARGE) {
     const perSecond = f.discharge[i]! / SECONDS_PER_YEAR;
-    rows.push(['inspect.river', `${Math.round(perSecond).toLocaleString('en')} m³/s`]);
+    rows.push(['inspect.river', `${formatNumber(Math.round(perSecond))} m³/s`]);
   }
   if (!ocean) rows.push(['inspect.plants', `${Math.round(f.vegetation[i]! * 100)}%`]);
   if (f.civilization[i]! > 0) {
-    rows.push(['inspect.people', `${(f.civilization[i]! * PEOPLE_PER_KM2).toFixed(2)} / km²`]);
+    rows.push(['inspect.people', `${formatFixed(f.civilization[i]! * PEOPLE_PER_KM2, 2)} / km²`]);
   }
   const nearestCity = nearestCityToCell(frame, i);
   if (nearestCity) {
@@ -88,7 +98,7 @@ export function CellInspector({
       t('inspect.cityValue', {
         name: nearestCity.city.name,
         population: formatCityPopulation(nearestCity.city.population),
-        distance: Math.round(nearestCity.distance / 1000).toLocaleString('en'),
+        distance: formatNumber(Math.round(nearestCity.distance / 1000)),
       }),
     ]);
   }
@@ -152,7 +162,16 @@ export function lineage(index: number): string {
 }
 
 const SECONDS_PER_YEAR = 365.25 * 86_400;
-const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] as const;
+const COMPASS = [
+  'direction.n',
+  'direction.ne',
+  'direction.e',
+  'direction.se',
+  'direction.s',
+  'direction.sw',
+  'direction.w',
+  'direction.nw',
+] as const satisfies readonly MessageKey[];
 
 /** Wind speed and the direction it blows from, e.g. "6 m/s from E". */
 function formatWind(u: number, v: number): string {
@@ -161,13 +180,13 @@ function formatWind(u: number, v: number): string {
   // Meteorological convention: the direction the wind comes from, clockwise from north.
   const from = (Math.atan2(-u, -v) * 180) / Math.PI;
   const sector = Math.round((((from % 360) + 360) % 360) / 45) % 8;
-  return t('inspect.windValue', { speed: speed.toFixed(0), from: COMPASS[sector]! });
+  return t('inspect.windValue', { speed: formatFixed(speed, 0), from: t(COMPASS[sector]!) });
 }
 
 function formatPosition(latitude: number, longitude: number): string {
-  const lat = `${Math.abs(latitude).toFixed(0)}° ${latitude >= 0 ? 'N' : 'S'}`;
+  const lat = `${formatFixed(Math.abs(latitude), 0)}° ${t(latitude >= 0 ? 'direction.n' : 'direction.s')}`;
   const lon = longitude > 180 ? 360 - longitude : longitude;
-  return `${lat}, ${lon.toFixed(0)}° ${longitude > 180 ? 'W' : 'E'}`;
+  return `${lat}, ${formatFixed(lon, 0)}° ${t(longitude > 180 ? 'direction.w' : 'direction.e')}`;
 }
 
 function nearestCityToCell(frame: Frame, cell: number) {
@@ -203,6 +222,8 @@ function frameCellDistance(frame: Frame, a: number, b: number): number {
 }
 
 function formatCityPopulation(billions: number): string {
-  if (billions >= 1) return t('civ.billions', { value: billions.toFixed(2) });
-  return t('civ.millions', { value: (billions * 1000).toFixed(billions < 0.01 ? 2 : 0) });
+  if (billions >= 1) return t('civ.billions', { value: formatFixed(billions, 2) });
+  return t('civ.millions', {
+    value: formatFixed(billions * 1000, billions < 0.01 ? 2 : 0),
+  });
 }

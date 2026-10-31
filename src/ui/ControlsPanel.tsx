@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { t, type MessageKey } from '../i18n/i18n';
+import { formatFixed, t, type MessageKey } from '../i18n/i18n';
 import type { ModelControls } from '../sim/core/planet';
 import type { ControlKey } from '../sim/goals/goals';
 
@@ -127,10 +127,10 @@ function SliderControl(props: {
         <span
           className="control-effective"
           title={t('controlsPanel.effectiveHint', {
-            value: props.effectiveValue.toFixed(digits),
+            value: formatFixed(props.effectiveValue, digits),
           })}
         >
-          {t('controlsPanel.effective', { value: props.effectiveValue.toFixed(digits) })}
+          {t('controlsPanel.effective', { value: formatFixed(props.effectiveValue, digits) })}
         </span>
       )}
       {modified && (

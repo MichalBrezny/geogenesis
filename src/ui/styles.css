@@ -94,6 +94,11 @@ body {
   margin-left: auto;
 }
 
+.topbar .group {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
 .vitals {
   display: flex;
   flex-wrap: wrap;
@@ -104,6 +109,7 @@ body {
 
 .vitals div {
   display: flex;
+  min-width: 0;
   gap: 5px;
   cursor: help;
 }
@@ -616,6 +622,13 @@ body {
   gap: 8px;
 }
 
+.layerbar button,
+.tabbed .tabs button,
+.topbar button {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .temperature-month {
   display: inline-flex;
   align-items: center;
@@ -829,6 +842,7 @@ button.primary:hover:not(:disabled) {
 
 .tabbed .tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 2px;
   border-bottom: 1px solid var(--grid);
   margin-bottom: 10px;

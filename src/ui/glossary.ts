@@ -1,4 +1,4 @@
-import type { MessageKey } from '../i18n/i18n';
+import { getActiveLocale, t, type MessageKey } from '../i18n/i18n';
 
 export const GLOSSARY_TERMS = [
   'abiogenesis',
@@ -42,8 +42,20 @@ export function glossaryTermKey(term: GlossaryTerm): MessageKey {
 }
 
 export function searchGlossary(query: string): GlossaryTerm[] {
-  const normalized = query.trim().toLocaleLowerCase('en');
+  const normalized = normalizeSearchText(query);
   return normalized
-    ? GLOSSARY_TERMS.filter((term) => term.toLocaleLowerCase('en').includes(normalized))
+    ? GLOSSARY_TERMS.filter((term) =>
+        normalizeSearchText(`${term} ${t(glossaryTermKey(term))} ${t(glossaryKey(term))}`).includes(
+          normalized,
+        ),
+      )
     : [...GLOSSARY_TERMS];
+}
+
+export function normalizeSearchText(value: string): string {
+  return value
+    .trim()
+    .toLocaleLowerCase(getActiveLocale())
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '');
 }

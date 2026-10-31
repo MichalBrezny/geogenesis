@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { t, type MessageKey } from '../i18n/i18n';
+import { formatFixed, formatNumber, t, type MessageKey } from '../i18n/i18n';
 import type { Frame } from '../worker/protocol';
 import { formatGyr, formatPpm, formatStep } from './format';
 import { GaiaFace } from './GaiaFace';
@@ -221,8 +221,7 @@ export function TopBar(props: Props) {
 /** The planet's vital signs; each explains itself on hover. */
 function Vitals({ frame }: { frame: Frame }) {
   const stepTime = Object.values(frame.timings).reduce((sum, ms) => sum + ms, 0);
-  const age =
-    frame.stepYears >= 1e5 ? formatGyr(frame.year) : Math.round(frame.year).toLocaleString('en');
+  const age = frame.stepYears >= 1e5 ? formatGyr(frame.year) : formatNumber(Math.round(frame.year));
   const items: [MessageKey, MessageKey, string, boolean?][] = [
     ...(frame.era
       ? [
@@ -235,29 +234,29 @@ function Vitals({ frame }: { frame: Frame }) {
       : []),
     ['stat.age', 'stat.ageHint', age],
     ['stat.step', 'stat.stepHint', formatStep(frame.stepYears)],
-    ['stat.temperature', 'stat.temperatureHint', `${frame.meanTemperature.toFixed(1)} °C`],
+    ['stat.temperature', 'stat.temperatureHint', `${formatFixed(frame.meanTemperature, 1)} °C`],
     ['stat.co2', 'stat.co2Hint', `${formatPpm(frame.co2)} ppm`],
-    ['stat.pressure', 'stat.pressureHint', `${frame.surfacePressure.toFixed(2)} bar`],
+    ['stat.pressure', 'stat.pressureHint', `${formatFixed(frame.surfacePressure, 2)} bar`],
     [
       'stat.o2',
       'stat.o2Hint',
-      `${(frame.o2 * 100).toFixed(1)}% / ${frame.o2Pressure.toFixed(2)} bar`,
+      `${formatFixed(frame.o2 * 100, 1)}% / ${formatFixed(frame.o2Pressure, 2)} bar`,
     ],
     ['stat.life', 'stat.lifeHint', t(`biosignature.${frame.biosignature}`)],
-    ['stat.ice', 'stat.iceHint', `${(frame.iceFraction * 100).toFixed(0)}%`],
-    ['stat.seaLevel', 'stat.seaLevelHint', `${frame.seaLevel.toFixed(0)} m`],
-    ['stat.sun', 'stat.sunHint', `${(frame.solarInput * 100).toFixed(1)}%`],
+    ['stat.ice', 'stat.iceHint', `${formatFixed(frame.iceFraction * 100, 0)}%`],
+    ['stat.seaLevel', 'stat.seaLevelHint', `${formatFixed(frame.seaLevel, 0)} m`],
+    ['stat.sun', 'stat.sunHint', `${formatFixed(frame.solarInput * 100, 1)}%`],
     ...(frame.civilization.species !== null || frame.fossilCarbon > 0
       ? [
           [
             'stat.fossilCarbon',
             'stat.fossilCarbonHint',
-            `${frame.fossilCarbon.toFixed(0)} Gt C`,
+            `${formatFixed(frame.fossilCarbon, 0)} Gt C`,
           ] as [MessageKey, MessageKey, string],
           [
             'stat.pollution',
             'stat.pollutionHint',
-            frame.pollution.toFixed(2),
+            formatFixed(frame.pollution, 2),
             frame.pollution >= 1,
           ] as [MessageKey, MessageKey, string, boolean],
         ]
@@ -265,7 +264,7 @@ function Vitals({ frame }: { frame: Frame }) {
     [
       'stat.runawayMargin',
       'stat.runawayMarginHint',
-      `${frame.runawayMargin.toFixed(0)} W/m2`,
+      `${formatFixed(frame.runawayMargin, 0)} W/m²`,
       frame.runawayMargin < 15,
     ],
     [
@@ -273,7 +272,7 @@ function Vitals({ frame }: { frame: Frame }) {
       'stat.energyHint',
       frame.unlimitedEnergy
         ? '∞'
-        : `${Math.floor(frame.energy).toLocaleString('en')}/${Math.floor(frame.energyCap).toLocaleString('en')}`,
+        : `${formatNumber(Math.floor(frame.energy))}/${formatNumber(Math.floor(frame.energyCap))}`,
     ],
   ];
   return (
@@ -297,7 +296,7 @@ function Vitals({ frame }: { frame: Frame }) {
       ))}
       <div className="muted" title={t('stat.computeHint')}>
         <dt>{t('stat.compute')}</dt>
-        <dd>{stepTime.toFixed(0)} ms</dd>
+        <dd>{formatFixed(stepTime, 0)} ms</dd>
       </div>
     </dl>
   );

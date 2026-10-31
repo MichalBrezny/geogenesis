@@ -1,4 +1,4 @@
-import { t, type MessageKey } from '../i18n/i18n';
+import { formatFixed, t, type MessageKey } from '../i18n/i18n';
 import type { FrameGoal } from '../worker/protocol';
 import { formatStep } from './format';
 import { GOAL_ICON } from './icons';
@@ -12,7 +12,7 @@ function formatCondition(value: number, unit: string): string {
   const digits =
     unit === 'goal.unit.celsius' ? 1 : Number.isInteger(value) ? 0 : value < 10 ? 2 : 1;
   const suffix = unit ? t(unit as MessageKey) : '';
-  return `${value.toFixed(digits)}${suffix ? ` ${suffix}` : ''}`;
+  return `${formatFixed(value, digits)}${suffix ? ` ${suffix}` : ''}`;
 }
 
 function deadline(goal: FrameGoal): number | null {
@@ -49,7 +49,7 @@ export function GoalPanel({ goal, year }: { goal: FrameGoal; year: number }) {
       </ul>
       <dl className="goal-stats">
         <dt>{t('goal.score')}</dt>
-        <dd>{goal.score.toFixed(1)}</dd>
+        <dd>{formatFixed(goal.score, 1)}</dd>
         <dt>{t('goal.elapsed')}</dt>
         <dd>{formatStep(elapsed)}</dd>
         {remaining !== null && (
@@ -79,7 +79,9 @@ export function GoalOutcome(props: {
     >
       <div className="goal-outcome-icon">{GOAL_ICON}</div>
       <p>{reason}</p>
-      <p className="goal-outcome-score">{t('goal.finalScore', { value: goal.score.toFixed(1) })}</p>
+      <p className="goal-outcome-score">
+        {t('goal.finalScore', { value: formatFixed(goal.score, 1) })}
+      </p>
       <GoalPanel goal={goal} year={goal.outcomeYear ?? goal.startYear} />
       <div className="actions">
         <button type="button" title={t('goal.keepPlayingHint')} onClick={props.onKeepPlaying}>

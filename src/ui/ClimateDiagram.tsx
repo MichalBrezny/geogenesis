@@ -1,4 +1,4 @@
-import { t } from '../i18n/i18n';
+import { formatFixed, formatNumber, t } from '../i18n/i18n';
 import type { MonthlyClimate } from '../sim/models/atmosphere/climateDiagram';
 
 const WIDTH = 220;
@@ -50,8 +50,8 @@ export function ClimateDiagram({ climate, elevation, latitude }: Props) {
   const annualTemperature = climate.temperature.reduce((sum, value) => sum + value, 0) / 12;
   const annualPrecipitation = climate.precipitation.reduce((sum, value) => sum + value, 0);
   const label = t('climate.aria', {
-    temperature: annualTemperature.toFixed(1),
-    precipitation: Math.round(annualPrecipitation),
+    temperature: formatFixed(annualTemperature, 1),
+    precipitation: formatNumber(Math.round(annualPrecipitation)),
   });
   const line = (points: Point[]) => points.map((point) => `${point.x},${y(point.y)}`).join(' ');
 
@@ -76,9 +76,9 @@ export function ClimateDiagram({ climate, elevation, latitude }: Props) {
       </defs>
       <text x={WIDTH / 2} y="9" textAnchor="middle" className="climate-header">
         {t('climate.header', {
-          elevation: Math.round(elevation),
-          temperature: annualTemperature.toFixed(1),
-          precipitation: Math.round(annualPrecipitation),
+          elevation: formatNumber(Math.round(elevation)),
+          temperature: formatFixed(annualTemperature, 1),
+          precipitation: formatNumber(Math.round(annualPrecipitation)),
         })}
       </text>
 

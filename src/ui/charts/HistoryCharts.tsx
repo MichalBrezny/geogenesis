@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
-import { t, type MessageKey } from '../../i18n/i18n';
+import { formatFixed, formatNumber, t, type MessageKey } from '../../i18n/i18n';
 import type { HistorySeries } from '../../sim/history';
 import { ERAS, type Era } from '../../sim/eras';
 import type { PlanetEvent } from '../../sim/events';
@@ -22,7 +22,7 @@ interface ChartSpec {
   series: Exclude<HistorySeries, 'year' | 'era'>;
   title: MessageKey;
   hint: MessageKey;
-  unit: string;
+  unit: MessageKey;
   family: SeriesFamily;
   scale?: number;
   format: (value: number) => string;
@@ -35,31 +35,31 @@ const CHARTS: readonly ChartSpec[] = [
     series: 'runawayMargin',
     title: 'chart.runawayMargin',
     hint: 'chartHint.runawayMargin',
-    unit: 'W/m²',
+    unit: 'chartUnit.wattsPerSquareMetre',
     family: 'climate',
-    format: (v) => `${v.toFixed(1)} W/m²`,
+    format: (v) => `${formatFixed(v, 1)} ${t('chartUnit.wattsPerSquareMetre')}`,
   },
   {
     series: 'meanTemperature',
     title: 'chart.temperature',
     hint: 'chartHint.temperature',
-    unit: '°C',
+    unit: 'chartUnit.celsius',
     family: 'climate',
-    format: (v) => `${v.toFixed(1)} °C`,
+    format: (v) => `${formatFixed(v, 1)} ${t('chartUnit.celsius')}`,
   },
   {
     series: 'biodiversity',
     title: 'chart.biodiversity',
     hint: 'chartHint.biodiversity',
-    unit: 'index',
+    unit: 'chartUnit.index',
     family: 'life',
-    format: (v) => v.toFixed(2),
+    format: (v) => formatFixed(v, 2),
   },
   {
     series: 'co2',
     title: 'chart.co2',
     hint: 'chartHint.co2',
-    unit: 'ppm',
+    unit: 'chartUnit.ppm',
     family: 'atmosphere',
     format: (v) => `${formatPpm(v)} ppm`,
     logFloor: 0.01,
@@ -68,25 +68,25 @@ const CHARTS: readonly ChartSpec[] = [
     series: 'co2Ice',
     title: 'chart.co2Ice',
     hint: 'chartHint.co2Ice',
-    unit: 'mbar',
+    unit: 'chartUnit.mbar',
     family: 'atmosphere',
     scale: 1000,
-    format: (v) => `${v.toFixed(2)} mbar`,
+    format: (v) => `${formatFixed(v, 2)} ${t('chartUnit.mbar')}`,
   },
   {
     series: 'surfacePressure',
     title: 'chart.surfacePressure',
     hint: 'chartHint.surfacePressure',
-    unit: 'bar',
+    unit: 'chartUnit.bar',
     family: 'atmosphere',
-    format: (v) => `${v.toPrecision(3)} bar`,
+    format: (v) => `${formatNumber(v, { maximumSignificantDigits: 3 })} ${t('chartUnit.bar')}`,
     logFloor: 1e-9,
   },
   {
     series: 'water',
     title: 'chart.water',
     hint: 'chartHint.water',
-    unit: 'm GEL',
+    unit: 'chartUnit.mGel',
     family: 'climate',
     format: (v) => `${formatAxisNumber(v)} m GEL`,
   },
@@ -94,25 +94,25 @@ const CHARTS: readonly ChartSpec[] = [
     series: 'iceFraction',
     title: 'chart.ice',
     hint: 'chartHint.ice',
-    unit: '%',
+    unit: 'chartUnit.percent',
     family: 'climate',
     scale: 100,
-    format: (v) => `${v.toFixed(1)}%`,
+    format: (v) => `${formatFixed(v, 1)}%`,
   },
   {
     series: 'landFraction',
     title: 'chart.land',
     hint: 'chartHint.land',
-    unit: '%',
+    unit: 'chartUnit.percent',
     family: 'climate',
     scale: 100,
-    format: (v) => `${v.toFixed(1)}%`,
+    format: (v) => `${formatFixed(v, 1)}%`,
   },
   {
     series: 'seaLevel',
     title: 'chart.seaLevel',
     hint: 'chartHint.seaLevel',
-    unit: 'm',
+    unit: 'chartUnit.metres',
     family: 'climate',
     format: (v) => `${formatAxisNumber(v)} m`,
   },
@@ -120,25 +120,25 @@ const CHARTS: readonly ChartSpec[] = [
     series: 'solarInput',
     title: 'chart.sun',
     hint: 'chartHint.sun',
-    unit: '% present Sun',
+    unit: 'chartUnit.percentPresentSun',
     family: 'climate',
     scale: 100,
-    format: (v) => `${v.toFixed(1)}%`,
+    format: (v) => `${formatFixed(v, 1)}%`,
   },
   {
     series: 'o2',
     title: 'chart.o2',
     hint: 'chartHint.o2',
-    unit: '%',
+    unit: 'chartUnit.percent',
     family: 'atmosphere',
     scale: 100,
-    format: (v) => `${v.toFixed(2)}%`,
+    format: (v) => `${formatFixed(v, 2)}%`,
   },
   {
     series: 'ch4',
     title: 'chart.ch4',
     hint: 'chartHint.ch4',
-    unit: 'ppm',
+    unit: 'chartUnit.ppm',
     family: 'atmosphere',
     format: (v) => `${formatPpm(v)} ppm`,
     logFloor: 0.01,
@@ -147,41 +147,41 @@ const CHARTS: readonly ChartSpec[] = [
     series: 'livingClasses',
     title: 'chart.livingClasses',
     hint: 'chartHint.livingClasses',
-    unit: 'classes',
+    unit: 'chartUnit.classes',
     family: 'life',
-    format: (v) => v.toFixed(0),
+    format: (v) => formatFixed(v, 0),
   },
   {
     series: 'dust',
     title: 'chart.dust',
     hint: 'chartHint.dust',
-    unit: 'optical depth',
+    unit: 'chartUnit.opticalDepth',
     family: 'atmosphere',
-    format: (v) => v.toFixed(3),
+    format: (v) => formatFixed(v, 3),
   },
   {
     series: 'oceanAcidity',
     title: 'chart.oceanAcidity',
     hint: 'chartHint.oceanAcidity',
-    unit: 'milli-pH',
+    unit: 'chartUnit.milliPh',
     family: 'life',
     scale: 1000,
-    format: (v) => `${v.toFixed(1)} milli-pH`,
+    format: (v) => `${formatFixed(v, 1)} ${t('chartUnit.milliPh')}`,
   },
   {
     series: 'meanOceanOxygen',
     title: 'chart.meanOceanOxygen',
     hint: 'chartHint.meanOceanOxygen',
-    unit: '% saturation',
+    unit: 'chartUnit.percentSaturation',
     family: 'life',
     scale: 100,
-    format: (v) => `${v.toFixed(1)}% saturation`,
+    format: (v) => `${formatFixed(v, 1)} ${t('chartUnit.percentSaturation')}`,
   },
   {
     series: 'clathrateMethane',
     title: 'chart.clathrateMethane',
     hint: 'chartHint.clathrateMethane',
-    unit: 'Gt C',
+    unit: 'chartUnit.gtCarbon',
     family: 'climate',
     format: (v) => `${formatAxisNumber(v)} Gt C`,
   },
@@ -189,7 +189,7 @@ const CHARTS: readonly ChartSpec[] = [
     series: 'fossilCarbon',
     title: 'chart.fossilCarbon',
     hint: 'chartHint.fossilCarbon',
-    unit: 'Gt C',
+    unit: 'chartUnit.gtCarbon',
     family: 'civilization',
     format: (v) => `${formatAxisNumber(v)} Gt C`,
     logFloor: 0.1,
@@ -198,87 +198,89 @@ const CHARTS: readonly ChartSpec[] = [
     series: 'population',
     title: 'chart.population',
     hint: 'chartHint.population',
-    unit: 'billion',
+    unit: 'chartUnit.billion',
     family: 'civilization',
     format: (v) =>
-      v < 1 ? `${formatAxisNumber(v * 1000)} million` : `${formatAxisNumber(v)} billion`,
+      v < 1
+        ? t('civ.millions', { value: formatAxisNumber(v * 1000) })
+        : t('civ.billions', { value: formatAxisNumber(v) }),
     logFloor: 0.000001,
   },
   {
     series: 'pollution',
     title: 'chart.pollution',
     hint: 'chartHint.pollution',
-    unit: 'index',
+    unit: 'chartUnit.index',
     family: 'civilization',
-    format: (v) => v.toFixed(2),
+    format: (v) => formatFixed(v, 2),
   },
   {
     series: 'carbonOutgassing',
     title: 'chart.carbonOutgassing',
     hint: 'chartHint.carbonOutgassing',
-    unit: 'µbar/yr',
+    unit: 'chartUnit.microbarPerYear',
     family: 'atmosphere',
-    format: (v) => `${v.toFixed(3)} microbar/yr`,
+    format: (v) => `${formatFixed(v, 3)} ${t('chartUnit.microbarPerYear')}`,
   },
   {
     series: 'carbonWeathering',
     title: 'chart.carbonWeathering',
     hint: 'chartHint.carbonWeathering',
-    unit: 'µbar/yr',
+    unit: 'chartUnit.microbarPerYear',
     family: 'atmosphere',
-    format: (v) => `${v.toFixed(3)} microbar/yr`,
+    format: (v) => `${formatFixed(v, 3)} ${t('chartUnit.microbarPerYear')}`,
   },
   {
     series: 'carbonBurial',
     title: 'chart.carbonBurial',
     hint: 'chartHint.carbonBurial',
-    unit: 'µbar/yr',
+    unit: 'chartUnit.microbarPerYear',
     family: 'atmosphere',
-    format: (v) => `${v.toFixed(3)} microbar/yr`,
+    format: (v) => `${formatFixed(v, 3)} ${t('chartUnit.microbarPerYear')}`,
   },
   {
     series: 'carbonNet',
     title: 'chart.carbonNet',
     hint: 'chartHint.carbonNet',
-    unit: 'µbar/yr',
+    unit: 'chartUnit.microbarPerYear',
     family: 'atmosphere',
-    format: (v) => `${v.toFixed(3)} microbar/yr`,
+    format: (v) => `${formatFixed(v, 3)} ${t('chartUnit.microbarPerYear')}`,
   },
   {
     series: 'forestFraction',
     title: 'chart.forest',
     hint: 'chartHint.forest',
-    unit: '% surface',
+    unit: 'chartUnit.percentSurface',
     family: 'life',
     scale: 100,
-    format: (v) => `${v.toFixed(1)}%`,
+    format: (v) => `${formatFixed(v, 1)}%`,
   },
   {
     series: 'desertFraction',
     title: 'chart.desert',
     hint: 'chartHint.desert',
-    unit: '% surface',
+    unit: 'chartUnit.percentSurface',
     family: 'climate',
     scale: 100,
-    format: (v) => `${v.toFixed(1)}%`,
+    format: (v) => `${formatFixed(v, 1)}%`,
   },
   {
     series: 'whiteDaisies',
     title: 'chart.whiteDaisies',
     hint: 'chartHint.whiteDaisies',
-    unit: '% surface',
+    unit: 'chartUnit.percentSurface',
     family: 'life',
     scale: 100,
-    format: (v) => `${v.toFixed(1)}%`,
+    format: (v) => `${formatFixed(v, 1)}%`,
   },
   {
     series: 'blackDaisies',
     title: 'chart.blackDaisies',
     hint: 'chartHint.blackDaisies',
-    unit: '% surface',
+    unit: 'chartUnit.percentSurface',
     family: 'life',
     scale: 100,
-    format: (v) => `${v.toFixed(1)}%`,
+    format: (v) => `${formatFixed(v, 1)}%`,
   },
 ];
 
@@ -439,7 +441,7 @@ function ChartShell({
         <span className="chart-heading">
           <span className="chart-title-icon">{CHART_ICONS[spec.series]}</span>
           <span className="chart-title">
-            {t(spec.title)} <small>({spec.unit})</small>
+            {t(spec.title)} <small>({t(spec.unit)})</small>
           </span>
         </span>
         {value && <span className="chart-value">{value}</span>}
@@ -521,7 +523,7 @@ function PlottedChart({
             values: (u, ticks) => {
               const unit = selectTimeUnit((u.scales.x!.max ?? 0) - (u.scales.x!.min ?? 0));
               return ticks.map((value) =>
-                (value / unit.divisor).toLocaleString('en-US', {
+                formatNumber(value / unit.divisor, {
                   maximumFractionDigits: unit.decimals,
                 }),
               );
@@ -605,7 +607,7 @@ function PlottedChart({
       </div>
       <div className="chart-plot-wrap">
         <div ref={containerRef} className="chart-plot" />
-        <span className="chart-time-unit">{timeUnit.label}</span>
+        <span className="chart-time-unit">{t(`timeUnit.${timeUnit.label}` as MessageKey)}</span>
       </div>
     </ChartShell>
   );

@@ -43,7 +43,8 @@ are coupled by Gaia-style feedbacks, so life changes the climate that shapes lif
 - **Views**: map layers (terrain and rivers, plates, temperature, precipitation, wind, ocean
   currents, biomes, life, civilization, daisies) on a flat map or an optional rotating globe,
   with animated wind and current particles over any layer; a cell inspector; history
-  charts; an event log.
+  charts; an event log; and an English or Czech interface (with automatic browser-language
+  selection).
 - **Save and load**: the whole planet in a compact binary file; the same seed always replays the
   same history.
 

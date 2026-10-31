@@ -1,4 +1,4 @@
-import { t } from '../i18n/i18n';
+import { formatFixed, formatNumber, t } from '../i18n/i18n';
 import type { Frame } from '../worker/protocol';
 
 /** Compact read-only summary of the physical planet and star parameters. */
@@ -11,12 +11,12 @@ export function PlanetPanel({
 }) {
   const p = frame.planetParams;
   const rows = [
-    [t('share.seed'), frame.creation.seed.toLocaleString('en')],
-    [t('planet.radius'), `${(p.radius / 1000).toLocaleString('en')} km`],
-    [t('planet.gravity'), `${p.surfaceGravity.toFixed(2)} m/s²`],
-    [t('planet.orbit'), `${p.orbitalDistanceAu.toFixed(3)} AU`],
+    [t('share.seed'), formatNumber(frame.creation.seed)],
+    [t('planet.radius'), `${formatNumber(p.radius / 1000)} km`],
+    [t('planet.gravity'), `${formatFixed(p.surfaceGravity, 2)} m/s²`],
+    [t('planet.orbit'), `${formatFixed(p.orbitalDistanceAu, 3)} AU`],
     [t('planet.star'), p.starType],
-    [t('planet.day'), `${p.rotationPeriodHours.toLocaleString('en')} h`],
+    [t('planet.day'), `${formatNumber(p.rotationPeriodHours)} h`],
     [t('planet.tidalLock'), t(p.tidallyLocked ? 'planet.yes' : 'planet.no')],
     [t('planet.magneticField'), `${Math.round(frame.magneticField * 100)}%`],
     [t('planet.tectonics'), t(`planet.${frame.tectonicRegime}`)],

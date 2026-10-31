@@ -1,3 +1,4 @@
+import { formatNumber } from '../../i18n/i18n';
 import type { ChartSeries } from './HistoryCharts';
 
 export interface TimeUnit {
@@ -27,7 +28,7 @@ export function formatAxisNumber(value: number): string {
   ];
   for (const [threshold, suffix] of suffixes) {
     if (absolute >= threshold)
-      return `${(value / threshold).toLocaleString('en-US', { maximumFractionDigits: 1 })}${suffix}`;
+      return `${formatNumber(value / threshold, { maximumFractionDigits: 1 })}${suffix}`;
   }
   const smallSuffixes: readonly [number, string][] = [
     [1e-3, 'm'],
@@ -37,10 +38,10 @@ export function formatAxisNumber(value: number): string {
   if (absolute > 0 && absolute < 0.1) {
     for (const [threshold, suffix] of smallSuffixes) {
       if (absolute >= threshold)
-        return `${(value / threshold).toLocaleString('en-US', { maximumFractionDigits: 1 })}${suffix}`;
+        return `${formatNumber(value / threshold, { maximumFractionDigits: 1 })}${suffix}`;
     }
   }
-  return value.toLocaleString('en-US', {
+  return formatNumber(value, {
     maximumFractionDigits: absolute < 1 ? 3 : absolute < 10 ? 2 : 1,
   });
 }

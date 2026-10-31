@@ -1,4 +1,4 @@
-import { t, type MessageKey } from '../i18n/i18n';
+import { formatFixed, t, type MessageKey } from '../i18n/i18n';
 import { EXODUS_MIN_POPULATION, TECH_AGES } from '../sim/data/civilization';
 import { LIFE_CLASSES } from '../sim/data/lifeClasses';
 import type { Frame } from '../worker/protocol';
@@ -33,7 +33,7 @@ export function CivilizationPanel({ civilization }: { civilization: Frame['civil
               value={progress}
               aria-label={t('civ.progress')}
             />
-            <span className="muted"> {(progress * 100).toFixed(0)}%</span>
+            <span className="muted"> {formatFixed(progress * 100, 0)}%</span>
           </dd>
           <dt>{t('civ.population')}</dt>
           <dd>{formatPopulation(population)}</dd>
@@ -75,8 +75,10 @@ export function CivilizationPanel({ civilization }: { civilization: Frame['civil
 }
 
 function formatPopulation(billions: number): string {
-  if (billions >= 1) return t('civ.billions', { value: billions.toFixed(2) });
-  return t('civ.millions', { value: (billions * 1000).toFixed(billions < 0.01 ? 2 : 0) });
+  if (billions >= 1) return t('civ.billions', { value: formatFixed(billions, 2) });
+  return t('civ.millions', {
+    value: formatFixed(billions * 1000, billions < 0.01 ? 2 : 0),
+  });
 }
 
 /** The most recent notable events, newest first. */

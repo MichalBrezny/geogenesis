@@ -1,4 +1,4 @@
-import { t, type MessageKey } from '../i18n/i18n';
+import { formatFixed, t, type MessageKey } from '../i18n/i18n';
 import { ENERGY_SOURCE_KEYS, INVESTMENT_KEYS, type CivilizationPolicy } from '../sim/core/planet';
 import {
   energySourceUnlocked,
@@ -21,13 +21,13 @@ export function CivilizationControlsPanel(props: {
     <div className="civilization-controls">
       <dl className="civ-stats">
         <dt>{t('civ.energySupply')}</dt>
-        <dd>{(props.energySupply * 100).toFixed(0)}%</dd>
+        <dd>{formatFixed(props.energySupply * 100, 0)}%</dd>
         <dt>{t('civ.fossilSupply')}</dt>
-        <dd>{(props.fossilSupply * 100).toFixed(0)}%</dd>
+        <dd>{formatFixed(props.fossilSupply * 100, 0)}%</dd>
         <dt>{t('civ.fossilCarbon')}</dt>
-        <dd>{props.fossilCarbon.toFixed(0)} Gt C</dd>
+        <dd>{formatFixed(props.fossilCarbon, 0)} Gt C</dd>
         <dt>{t('civ.pollution')}</dt>
-        <dd>{props.pollution.toFixed(2)}</dd>
+        <dd>{formatFixed(props.pollution, 2)}</dd>
       </dl>
       <PolicyGroup title="civ.energyMix">
         {ENERGY_SOURCE_KEYS.map((key) => {
@@ -97,7 +97,7 @@ function PolicySlider(props: {
         title={title}
         onChange={(event) => props.onChange(Number(event.target.value))}
       />
-      <output htmlFor={props.id}>{props.value.toFixed(0)}%</output>
+      <output htmlFor={props.id}>{formatFixed(props.value, 0)}%</output>
     </div>
   );
 }

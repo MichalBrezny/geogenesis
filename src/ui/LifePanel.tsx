@@ -1,4 +1,4 @@
-import { t, type MessageKey } from '../i18n/i18n';
+import { formatFixed, t, type MessageKey } from '../i18n/i18n';
 import { LIFE_CLASSES } from '../sim/data/lifeClasses';
 import type { Frame } from '../worker/protocol';
 import { formatGyr } from './format';
@@ -34,7 +34,7 @@ export function LifePanel({ life }: { life: Frame['life'] }) {
               <tr key={lifeClass.key} className={cover > 0 ? undefined : 'muted'}>
                 <th scope="row">{t(`lifeClass.${lifeClass.key}`)}</th>
                 <td>{t(status)}</td>
-                <td className="numeric">{cover > 0 ? `${(cover * 100).toFixed(1)}%` : '–'}</td>
+                <td className="numeric">{cover > 0 ? `${formatFixed(cover * 100, 1)}%` : '–'}</td>
                 <td className="numeric">{appeared === null ? '–' : formatGyr(appeared)}</td>
               </tr>
             );

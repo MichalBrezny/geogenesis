@@ -1,4 +1,4 @@
-import { t, type MessageKey } from '../i18n/i18n';
+import { formatFixed, t, type MessageKey } from '../i18n/i18n';
 import type { Frame } from '../worker/protocol';
 import { selectCarbonSentence, selectEnergySentence } from './diagnosticReadouts';
 import { GaiaFace } from './GaiaFace';
@@ -16,7 +16,10 @@ function DiagnosticBars({ data }: { data: readonly BarDatum[] }) {
       {data.map((item) => (
         <div
           key={item.key}
-          title={t('diagnostic.barHint', { name: t(item.key), value: item.value.toFixed(3) })}
+          title={t('diagnostic.barHint', {
+            name: t(item.key),
+            value: formatFixed(item.value, 3),
+          })}
         >
           <span>{t(item.key)}</span>
           <i>
@@ -25,7 +28,7 @@ function DiagnosticBars({ data }: { data: readonly BarDatum[] }) {
               style={{ width: `${(100 * Math.abs(item.value)) / maximum}%` }}
             />
           </i>
-          <output>{item.value.toFixed(Math.abs(item.value) < 0.1 ? 3 : 1)}</output>
+          <output>{formatFixed(item.value, Math.abs(item.value) < 0.1 ? 3 : 1)}</output>
         </div>
       ))}
     </div>
@@ -89,8 +92,8 @@ export function AtmosphereDiagnostics({ frame }: { frame: Frame }) {
             {carbon.net.microbarPerYear > 0 ? '↑' : carbon.net.microbarPerYear < 0 ? '↓' : '→'}
           </span>{' '}
           {t('diagnostic.carbonNet', {
-            value: carbon.net.microbarPerYear.toFixed(3),
-            gt: carbon.net.gtCarbonPerYear.toFixed(3),
+            value: formatFixed(carbon.net.microbarPerYear, 3),
+            gt: formatFixed(carbon.net.gtCarbonPerYear, 3),
           })}
         </p>
         <DiagnosticBars data={[...sources, ...sinks]} />
@@ -100,9 +103,9 @@ export function AtmosphereDiagnostics({ frame }: { frame: Frame }) {
         <h3 id="energy-balance-heading">{t('diagnostic.energyTitle')}</h3>
         <p className="muted" title={t('diagnostic.energyFluxHint')}>
           {t('diagnostic.energyFlux', {
-            absorbed: energy.absorbedSunlight.toFixed(1),
-            outgoing: energy.outgoingLongwave.toFixed(1),
-            margin: energy.runawayMargin.toFixed(1),
+            absorbed: formatFixed(energy.absorbedSunlight, 1),
+            outgoing: formatFixed(energy.outgoingLongwave, 1),
+            margin: formatFixed(energy.runawayMargin, 1),
           })}
         </p>
         <DiagnosticBars
@@ -132,7 +135,7 @@ export function AtmosphereDiagnostics({ frame }: { frame: Frame }) {
             },
           ]}
         />
-        <p>{t(energySentence.key, { value: energySentence.value.toFixed(1) })}</p>
+        <p>{t(energySentence.key, { value: formatFixed(energySentence.value, 1) })}</p>
       </section>
     </div>
   );

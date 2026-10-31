@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { t, type MessageKey } from '../i18n/i18n';
+import { getNumberLocale, t, type MessageKey } from '../i18n/i18n';
 import type { Frame } from '../worker/protocol';
 import { formatGyr } from './format';
 import { Dialog } from './Dialog';
@@ -239,7 +239,7 @@ function SaveList({
                 <small>
                   {t(`scenario.${save.scenario}` as MessageKey)} · {formatGyr(save.planetAge)} ·{' '}
                   {save.era ? t(`eraName.${save.era}`) : t('saves.noEra')} ·{' '}
-                  {new Date(save.savedAt).toLocaleString()}
+                  {new Date(save.savedAt).toLocaleString(getNumberLocale())}
                 </small>
               </div>
               <div className="save-slot-actions">

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { t, type MessageKey } from '../i18n/i18n';
+import { t, tp, type MessageKey } from '../i18n/i18n';
 import type { MapLayer } from '../render/mapRenderer';
 import { chartMessageKey, type ChartSeries } from './charts/HistoryCharts';
 import { glossaryKey, glossaryTermKey, searchGlossary, type GlossaryTerm } from './glossary';
@@ -130,7 +130,7 @@ export function Glossary({ initialTerm }: { initialTerm?: GlossaryTerm }) {
         onChange={(event) => setQuery(event.target.value)}
       />
       <p className="muted" aria-live="polite">
-        {t('glossary.results', { count: terms.length })}
+        {tp('glossary.results', terms.length)}
       </p>
       <dl>
         {terms.map((term) => (
