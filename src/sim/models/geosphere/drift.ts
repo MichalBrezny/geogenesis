@@ -71,10 +71,12 @@ const SHELF_ACCRETION_TIME = 10e6;
 /** Shelf cells shallower than this (m) next to a continent can accrete. */
 const SHELF_DEPTH = -3000;
 /**
- * Detached crust below 200,000 km² is a terrane, not an independent plate.
+ * Detached crust below 1 % of the planet's surface (about 5 million km² on Earth,
+ * an Arabian-plate size) is a terrane that rides with its neighbour, not an
+ * independent plate; smaller plates would sail through their neighbours' ocean.
  * Larger detached bodies rift into a new plate when a stable slot is available.
  */
-export const MIN_INDEPENDENT_PLATE_AREA = 200_000 * 1e6;
+const MIN_INDEPENDENT_PLATE_SHARE = 0.01;
 /** Component cleanup cadence in plate time; an accumulator makes it step-length independent. */
 const PLATE_CLEANUP_INTERVAL = 5e6;
 /** Narrow tendrils evolve more slowly than detached raster crumbs. */
@@ -870,6 +872,7 @@ export function cleanupPlateFragments(state: PlanetState, rng: Rng): boolean {
   // making the O(cells × plates) compositor steadily more expensive. The count
   // also never exceeds twice the generated plate count on small test worlds.
   const capacity = Math.max(initialCount, Math.min(initialCount * 2, initialCount + 4));
+  const minIndependentArea = MIN_INDEPENDENT_PLATE_SHARE * 4 * Math.PI * grid.radius * grid.radius;
   let changed = false;
 
   // Work from a snapshot: transfers are composed together after this pass.
@@ -881,7 +884,7 @@ export function cleanupPlateFragments(state: PlanetState, rng: Rng): boolean {
     const totalArea = pieces.reduce((sum, piece) => sum + componentArea(grid, piece), 0);
 
     const totalCells = pieces.reduce((sum, piece) => sum + piece.length, 0);
-    if (totalCells <= MAX_SPECK_CELLS || totalArea < MIN_INDEPENDENT_PLATE_AREA) {
+    if (totalCells <= MAX_SPECK_CELLS || totalArea < minIndependentArea) {
       const cells = pieces.flat();
       const receiverId = surroundingPlate(grid, snapshot, cells, plate.id);
       const receiver = plates[receiverId];
@@ -894,7 +897,7 @@ export function cleanupPlateFragments(state: PlanetState, rng: Rng): boolean {
       const receiver = plates[receiverId];
       if (!receiver) continue;
       const area = componentArea(grid, piece);
-      if (piece.length > MAX_SPECK_CELLS && area >= MIN_INDEPENDENT_PLATE_AREA) {
+      if (piece.length > MAX_SPECK_CELLS && area >= minIndependentArea) {
         const target = plateSlotForRift(state, plate, rng, capacity);
         if (target) {
           const selected = cellMask(grid.cellCount, piece);

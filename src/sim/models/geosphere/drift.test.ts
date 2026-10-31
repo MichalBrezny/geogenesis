@@ -265,20 +265,21 @@ describe('plateDrift', () => {
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) planet.fields.plateId[y * width + x] = x < width / 2 ? 0 : 1;
     }
-    const row = Math.floor(height / 2);
-    // Four cells exceed the explicit 1-3-cell speck threshold as well as the
-    // physical terrane-area threshold, so this is a genuine daughter plate.
-    for (let x = 90; x < 94; x++) {
-      const i = row * width + x;
-      planet.fields.plateId[i] = 0;
-      planet.fields.crustType[i] = 1;
+    // A 10×10 equatorial block exceeds 1 % of the surface, the terrane-area
+    // threshold, so this is a genuine daughter plate.
+    for (let y = height / 2 - 5; y < height / 2 + 5; y++) {
+      for (let x = 88; x < 98; x++) {
+        const i = y * width + x;
+        planet.fields.plateId[i] = 0;
+        planet.fields.crustType[i] = 1;
+      }
     }
     anchorPlates(planet);
     expect(cleanupPlateFragments(planet, createRng(3))).toBe(true);
     expect(planet.plates.length).toBe(3);
     expect(
       planet.plates[2]!.crust.owned.reduce((sum, value) => sum + value, 0),
-    ).toBeGreaterThanOrEqual(4);
+    ).toBeGreaterThanOrEqual(100);
     expect(planet.plates[2]!.eulerPole).not.toEqual(planet.plates[0]!.eulerPole);
   });
 });

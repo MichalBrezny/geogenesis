@@ -9,8 +9,8 @@ import { createRandomWorld, type World } from './world';
  * the received values).
  */
 const EXPECTED = {
-  young: 'cce5a048',
-  quick: '6852cb58',
+  young: '21e4e616',
+  quick: '6341f8ff',
   stoneAge: '7c93899f',
 };
 
