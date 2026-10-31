@@ -201,6 +201,10 @@ function hydrateAddedState(planet: PlanetState): void {
     sliverCleanupElapsedYears: 0,
     plateSpeedMantleFactor: 1,
     plateRngState: (planet.seed ^ 0x7f4a7c15) >>> 0,
+    continentalSutures: [],
+    continentalCollisionCount: 0,
+    continentalCollisionPairs: [],
+    maxContinentalCollisionPenetration: 0,
     impactHeat: 0,
     impactCount: 0,
     abiogenesisSuppressedUntil: 0,
@@ -212,6 +216,14 @@ function hydrateAddedState(planet: PlanetState): void {
   planet.geosphere.sliverCleanupElapsedYears ??= 0;
   planet.geosphere.plateSpeedMantleFactor ??= 1;
   planet.geosphere.plateRngState ??= (planet.seed ^ 0x7f4a7c15) >>> 0;
+  planet.geosphere.continentalSutures ??= [];
+  planet.geosphere.continentalCollisionCount ??= 0;
+  planet.geosphere.continentalCollisionPairs ??= planet.geosphere.continentalSutures.map(
+    (suture) =>
+      `${Math.min(suture.plateA, suture.plateB)}:${Math.max(suture.plateA, suture.plateB)}`,
+  );
+  planet.geosphere.maxContinentalCollisionPenetration ??= 0;
+  for (const plate of planet.plates ?? []) plate.targetEulerPole ??= [...plate.eulerPole];
   planet.geosphere.impactHeat ??= 0;
   planet.geosphere.impactCount ??= 0;
   planet.geosphere.abiogenesisSuppressedUntil ??= 0;

@@ -14,6 +14,7 @@ export function randomPlate(rng: Rng, id: number, grid: Grid): Plate {
     id,
     eulerPole: [0, 0, 1],
     angularSpeed: 0,
+    targetEulerPole: [0, 0, 1],
     targetSpeed: 0,
     rotation: [...IDENTITY],
     crust: {
@@ -31,6 +32,7 @@ export function randomizeMotion(plate: Plate, rng: Rng, radius: number): void {
   const pole = randomUnitVector(rng);
   const speed = MIN_PLATE_SPEED + rng.next() * (MAX_PLATE_SPEED - MIN_PLATE_SPEED);
   plate.eulerPole = pole;
+  plate.targetEulerPole = [...pole];
   plate.angularSpeed = speed / radius;
   plate.targetSpeed = plate.angularSpeed;
 }
@@ -84,6 +86,7 @@ export function orientMotionAcrossPlate(plate: Plate, grid: Grid): void {
     tangentLength = Math.hypot(tx, ty, tz);
   }
   plate.eulerPole = [tx / tangentLength, ty / tangentLength, tz / tangentLength];
+  plate.targetEulerPole = [...plate.eulerPole];
 }
 
 export function randomUnitVector(rng: Rng): [number, number, number] {

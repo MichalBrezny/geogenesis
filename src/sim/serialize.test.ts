@@ -70,6 +70,8 @@ describe('save files', () => {
 
   it('hydrates atmosphere, water, seasons, ice, sea level, lakes and history from an older shape', () => {
     const planet = createRandomWorld({ seed: 7, width: 32, height: 16 }).planet;
+    const platePoles = planet.plates.map((plate) => [...plate.eulerPole]);
+    for (const plate of planet.plates) delete (plate as Partial<typeof plate>).targetEulerPole;
     delete (planet.globals.atmosphere as Partial<typeof planet.globals.atmosphere>).n2;
     delete (planet.globals.atmosphere as Partial<typeof planet.globals.atmosphere>).inert;
     delete (planet.globals.atmosphere as Partial<typeof planet.globals.atmosphere>).waterVapor;
@@ -111,6 +113,11 @@ describe('save files', () => {
     delete (planet.globals as Partial<typeof planet.globals>).escapedAtmosphere;
     delete (planet.geosphere as Partial<typeof planet.geosphere>).plateRngState;
     delete (planet.geosphere as Partial<typeof planet.geosphere>).sliverCleanupElapsedYears;
+    delete (planet.geosphere as Partial<typeof planet.geosphere>).continentalSutures;
+    delete (planet.geosphere as Partial<typeof planet.geosphere>).continentalCollisionCount;
+    delete (planet.geosphere as Partial<typeof planet.geosphere>).continentalCollisionPairs;
+    delete (planet.geosphere as Partial<typeof planet.geosphere>)
+      .maxContinentalCollisionPenetration;
     delete (planet as Partial<typeof planet>).goal;
     delete (planet as Partial<typeof planet>).disasters;
     delete (planet as Partial<typeof planet>).disasterRngState;
@@ -164,6 +171,11 @@ describe('save files', () => {
     );
     expect(loaded.planet.geosphere.plateRngState).toBe((planet.seed ^ 0x7f4a7c15) >>> 0);
     expect(loaded.planet.geosphere.sliverCleanupElapsedYears).toBe(0);
+    expect(loaded.planet.geosphere.continentalSutures).toEqual([]);
+    expect(loaded.planet.geosphere.continentalCollisionCount).toBe(0);
+    expect(loaded.planet.geosphere.continentalCollisionPairs).toEqual([]);
+    expect(loaded.planet.geosphere.maxContinentalCollisionPenetration).toBe(0);
+    expect(loaded.planet.plates.map((plate) => plate.targetEulerPole)).toEqual(platePoles);
     expect(loaded.planet.goal).toBeNull();
     expect(Object.values(loaded.planet.disasters).every(Boolean)).toBe(true);
     expect(loaded.planet.disasterRngState).toBe((planet.seed ^ 0x64697361) >>> 0);

@@ -6,7 +6,7 @@ import {
   resolutionScale,
   type Grid,
 } from '../../core/grid';
-import type { PlanetState, Plate } from '../../core/planet';
+import type { ContinentalSuture, PlanetState, Plate } from '../../core/planet';
 import { createRng, type Rng } from '../../core/rng';
 import { mantleHeat } from '../atmosphere/carbon';
 import {
@@ -15,7 +15,6 @@ import {
   orientMotionAcrossPlate,
   randomPlate,
   randomUnitVector,
-  randomizeMotion,
   referenceCell,
   rotatePlate,
   surroundingPlate,
@@ -44,7 +43,7 @@ const RIDGE_DEPTH = -2600;
 /** E-folding time (years) for young ocean floor to cool and sink to abyssal depth. */
 const OCEAN_FLOOR_COOLING_TIME = 60e6;
 /** Elevation (m) added to the overriding plate per consumed cell of continental crust. */
-const CONTINENTAL_COLLISION_UPLIFT = 500;
+const CONTINENTAL_COLLISION_UPLIFT = 2500;
 // Collision thickening is a height per consumed cell. Finer grids consume more, smaller cells
 // for the same plate motion, so the volume added per km of plate boundary is the same at any
 // resolution; spreadThickening keeps the belt width the same in kilometres.
@@ -53,9 +52,17 @@ const SUBDUCTION_UPLIFT = 40;
 /** Cap on cell-mean elevation (m); a ~300 km cell averages far below the highest peaks. */
 const MAX_ELEVATION = 6500;
 /** E-folding time (years) over which colliding continents bring both plates to a halt. */
-const COLLISION_STALL_TIME = 30e6;
+const COLLISION_STALL_TIME = 3e6;
+/** Fast enough to settle a suture, but below a visible 30° jump between geological steps. */
+const MAX_COLLISION_TURN_RATE = (14 * Math.PI) / 180 / 1e6;
 /** E-folding time (years) for a plate freed from a collision to regain its target speed. */
 const SPEED_RECOVERY_TIME = 80e6;
+/** A suture is forgotten after this long without adjacent continental margins. */
+const SUTURE_QUIET_TIME = 30e6;
+/** Isostatic recovery time for coherent continental crust pushed below sea level. */
+const CONTINENTAL_ISOSTASY_TIME = 20e6;
+/** Largest direction turn applied by one regional plate reorganization. */
+const MAX_REORGANIZATION_TURN = (35 * Math.PI) / 180;
 /**
  * Years for a reference-grid shelf cell to accrete into continent when crust is fully
  * depleted. Finer grids have more, smaller coastal cells, so each accretes faster.
@@ -106,13 +113,13 @@ export function continentalCrustTarget(ageYears: number, matureLandFraction = 0.
  * - No plate over a cell (divergence): new ocean floor forms at ridge depth and
  *   is split between the nearest plates bordering the gap.
  *
- * Ocean floor cools and sinks with age. Occasionally plates reorganize: all
- * get new motions and the largest plate may split, which keeps the plate
- * count up and lets supercontinents break apart.
+ * Ocean floor cools and sinks with age. Occasionally one or two plates turn
+ * by a bounded angle; oversized plates also rift, which keeps the plate count
+ * up and lets supercontinents break apart.
  */
 export function createPlateDrift(options: DriftOptions = {}): SimComponent {
   const speedFactor = options.speedFactor ?? 1;
-  const reorganizationInterval = options.reorganizationInterval ?? 300e6;
+  const reorganizationInterval = options.reorganizationInterval ?? 500e6;
   const maxUpliftRate = options.maxUpliftRate ?? DEFAULT_MAX_UPLIFT_RATE;
   const continentalFraction = options.continentalFraction ?? 0.28;
 
@@ -149,6 +156,7 @@ export function createPlateDrift(options: DriftOptions = {}): SimComponent {
     adjustPlateSpeedsForMantle(state, ageYears);
     coolOceanFloor(state, dtYears);
     accreteContinents(state, dtYears, continentalCrustTarget(ageYears, continentalFraction), rng);
+    supportContinentalCrust(state, dtYears);
     // Persist erosion, uplift etc. from the last step into the plates before moving them.
     writeBackToPlates(state);
 
@@ -158,17 +166,20 @@ export function createPlateDrift(options: DriftOptions = {}): SimComponent {
     if (speed > 0)
       for (const plate of state.plates) rotatePlate(plate, plate.angularSpeed * speed * dtYears);
     fillPlateHoles(state);
+    accumulateSuturePenetration(state, dtYears);
     let collisions = composePlates(state, rng);
     state.geosphere.cleanupElapsedYears += dtYears;
     if (state.geosphere.cleanupElapsedYears >= PLATE_CLEANUP_INTERVAL) {
       state.geosphere.cleanupElapsedYears %= PLATE_CLEANUP_INTERVAL;
       // Rifting can expose tiny pieces, so it must happen before the cleanup
       // passes rather than creating fragments after the final pass.
-      if (splitOversizedPlate(state, rng)) collisions = composePlates(state, rng);
+      if (splitOversizedPlate(state, rng)) {
+        collisions = mergeCollisions(collisions, composePlates(state, rng));
+      }
       // A transfer can expose a previously hidden overlap. A few bounded passes
       // settle those secondary crumbs at the same physical cleanup time.
       for (let pass = 0; pass < 3 && cleanupPlateFragments(state, rng); pass++) {
-        collisions = composePlates(state, rng);
+        collisions = mergeCollisions(collisions, composePlates(state, rng));
       }
     }
     state.geosphere.sliverCleanupElapsedYears += dtYears;
@@ -180,20 +191,14 @@ export function createPlateDrift(options: DriftOptions = {}): SimComponent {
         resolutionScale(state.grid) >= 0.75 &&
         cleanupThinSlivers(state, Int32Array.from(state.fields.plateId))
       ) {
-        collisions = composePlates(state, rng);
+        collisions = mergeCollisions(collisions, composePlates(state, rng));
         for (let pass = 0; pass < 3 && cleanupPlateFragments(state, rng); pass++) {
-          collisions = composePlates(state, rng);
+          collisions = mergeCollisions(collisions, composePlates(state, rng));
         }
       }
     }
-    for (const plate of state.plates) {
-      if (collisions[plate.id]) {
-        plate.angularSpeed *= Math.exp(-dtYears / COLLISION_STALL_TIME);
-      } else {
-        const recovery = 1 - Math.exp(-dtYears / SPEED_RECOVERY_TIME);
-        plate.angularSpeed += (plate.targetSpeed - plate.angularSpeed) * recovery;
-      }
-    }
+    const sutured = updateContinentalSutures(state, collisions, dtYears);
+    updatePlateMotions(state, sutured, dtYears);
     updateUplift(state, maxUpliftRate);
   }
 }
@@ -205,34 +210,25 @@ export function createPlateDrift(options: DriftOptions = {}): SimComponent {
  * Several planet cells can sample the same reference cell, so elevation is
  * written as the average change of those cells, not as "last write wins";
  * otherwise peaks and eroded valleys would randomly be lost on every step.
+ *
+ * Plates neither move nor change their rasters between a composition and the
+ * next write-back, so the composed value is read back from the plate itself.
+ * That keeps a loaded game on exactly the path of the game that was saved.
  */
 function writeBackToPlates(state: PlanetState): void {
   const { grid, plates } = state;
   const { elevation, plateId, crustType } = state.fields;
   const n = grid.cellCount;
-  const buffers = composeBuffers(grid, plates.length);
-  if (!buffers.composedValid) {
-    // No composition to compare against yet (fresh or loaded planet): copy values.
-    for (let i = 0; i < n; i++) {
-      const plate = plates[plateId[i]!]!;
-      const r = referenceCell(grid, plate, i);
-      if (!plate.crust.owned[r]) continue;
-      plate.crust.elevation[r] = elevation[i]!;
-      plate.crust.type[r] = crustType[i]!;
-    }
-    return;
-  }
-
-  const { refs, composed, deltaSum, deltaCount, touched } = buffers;
+  const { deltaSum, deltaCount, touched } = composeBuffers(grid, plates.length);
   let touchedCount = 0;
   for (let d = 0; d < n; d++) {
     const k = plateId[d]!;
-    const r = refs[d * plates.length + k]!;
+    const r = referenceCell(grid, plates[k]!, d);
     const crust = plates[k]!.crust;
     if (!crust.owned[r]) continue;
     const slot = k * n + r;
     if (deltaCount[slot] === 0) touched[touchedCount++] = slot;
-    deltaSum[slot] = deltaSum[slot]! + (elevation[d]! - composed[d]!);
+    deltaSum[slot] = deltaSum[slot]! + (elevation[d]! - crust.elevation[r]!);
     deltaCount[slot] = deltaCount[slot]! + 1;
     if (crustType[d]) crust.type[r] = 1;
   }
@@ -280,6 +276,28 @@ function accreteContinents(state: PlanetState, dtYears: number, target: number, 
   }
 }
 
+/**
+ * Thick continental crust remains buoyant after a collision instead of silently
+ * becoming a broad drowned shelf. Leave isolated edge cells as realistic shelves,
+ * while coherent crust relaxes toward a modest freeboard above the current sea.
+ */
+function supportContinentalCrust(state: PlanetState, dtYears: number): void {
+  const { grid } = state;
+  const { neighbors } = getTopology(grid);
+  const { elevation, crustType } = state.fields;
+  const floor = state.globals.seaLevel + 100;
+  const recovery = 1 - Math.exp(-dtYears / CONTINENTAL_ISOSTASY_TIME);
+  for (let cell = 0; cell < grid.cellCount; cell++) {
+    if (!crustType[cell] || elevation[cell]! >= floor) continue;
+    let support = 0;
+    for (let direction = 0; direction < NEIGHBOR_COUNT; direction += 2) {
+      const neighbor = neighbors[cell * NEIGHBOR_COUNT + direction]!;
+      if (neighbor >= 0 && crustType[neighbor]) support++;
+    }
+    if (support >= 3) elevation[cell] = elevation[cell]! + (floor - elevation[cell]!) * recovery;
+  }
+}
+
 /** Keeps stored plate velocities on the mantle-cooling curve without step-size drift. */
 function adjustPlateSpeedsForMantle(state: PlanetState, ageYears: number): void {
   const desired = mantleHeat(ageYears, state.planetParams.radius);
@@ -294,8 +312,19 @@ function adjustPlateSpeedsForMantle(state: PlanetState, ageYears: number): void 
   state.geosphere.plateSpeedMantleFactor = desired;
 }
 
-/** Rebuilds the planet fields from the plates. Returns, per plate, whether it had a continental collision. */
-function composePlates(state: PlanetState, rng: Rng): Uint8Array {
+interface CollisionContact {
+  plateA: number;
+  plateB: number;
+  contact: [number, number, number];
+}
+
+interface CollisionResult {
+  plates: Uint8Array;
+  contacts: CollisionContact[];
+}
+
+/** Rebuilds the planet fields and reports continental overlaps consumed during composition. */
+function composePlates(state: PlanetState, rng: Rng): CollisionResult {
   const { grid, plates } = state;
   const { elevation, plateId, crustType } = state.fields;
   const n = grid.cellCount;
@@ -306,7 +335,7 @@ function composePlates(state: PlanetState, rng: Rng): Uint8Array {
   // cells can sample the same reference cell, so crust is only consumed if it is
   // hidden everywhere; otherwise plate edges would erode from resampling alone.
   const buffers = composeBuffers(grid, plateCount);
-  const { refs, visible, winners, thickening, composed, fresh, plateAreas, collided } = buffers;
+  const { refs, visible, winners, thickening, fresh, plateAreas, collided } = buffers;
   collided.fill(0);
   visible.fill(0);
   thickening.fill(0);
@@ -320,6 +349,7 @@ function composePlates(state: PlanetState, rng: Rng): Uint8Array {
     boundingCap(grid, plate, buffers.ownedCells, plate.id * n, buffers.ownedCounts),
   );
   const pos = grid.cellPosition;
+  const contactSums = new Map<string, [number, number, number, number, number, number]>();
 
   for (let d = 0; d < n; d++) {
     const px = pos[d * 3]!;
@@ -382,6 +412,21 @@ function composePlates(state: PlanetState, rng: Rng): Uint8Array {
         thickening[d] = thickening[d]! + CONTINENTAL_COLLISION_UPLIFT;
         collided[k] = 1;
         collided[winner] = 1;
+        const plateA = Math.min(k, winner);
+        const plateB = Math.max(k, winner);
+        const key = `${plateA}:${plateB}`;
+        const contact: [number, number, number] = [pos[d * 3]!, pos[d * 3 + 1]!, pos[d * 3 + 2]!];
+        const relative = relativeVelocity(
+          plates[plateA]!,
+          plates[plateB]!,
+          contact,
+          false,
+          grid.radius,
+        );
+        const relativeSpeed = Math.hypot(...relative);
+        if (relativeSpeed > (contactSums.get(key)?.[5] ?? -1)) {
+          contactSums.set(key, [plateA, plateB, ...contact, relativeSpeed]);
+        }
       } else if (top.type[topRef]) {
         thickening[d] = thickening[d]! + SUBDUCTION_UPLIFT;
       }
@@ -395,11 +440,340 @@ function composePlates(state: PlanetState, rng: Rng): Uint8Array {
     plateId[d] = winner;
     elevation[d] = crust.elevation[r]!;
     crustType[d] = crust.type[r]!;
-    composed[d] = elevation[d]!;
   }
-  buffers.composedValid = true;
   spreadThickening(state, thickening);
-  return collided;
+  const contacts = [...contactSums.values()]
+    .sort((a, b) => a[0] - b[0] || a[1] - b[1])
+    .map(([plateA, plateB, x, y, z]) => ({
+      plateA,
+      plateB,
+      contact: normalizeVector(x, y, z),
+    }));
+  return { plates: Uint8Array.from(collided), contacts };
+}
+
+function mergeCollisions(a: CollisionResult, b: CollisionResult): CollisionResult {
+  for (let id = 0; id < b.plates.length; id++) if (b.plates[id]) a.plates[id] = 1;
+  const known = new Set(a.contacts.map((contact) => sutureKey(contact.plateA, contact.plateB)));
+  for (const contact of b.contacts) {
+    const key = sutureKey(contact.plateA, contact.plateB);
+    if (!known.has(key)) {
+      a.contacts.push(contact);
+      known.add(key);
+    }
+  }
+  return a;
+}
+
+interface ContinentalContact {
+  contact: [number, number, number];
+  /** Tangent normal pointing from the lower plate id toward the higher id. */
+  normal: [number, number, number];
+}
+
+/** Adds the relative shortening completed during this move to saved diagnostics. */
+function accumulateSuturePenetration(state: PlanetState, dtYears: number): void {
+  for (const suture of state.geosphere.continentalSutures) {
+    const plateA = state.plates[suture.plateA];
+    const plateB = state.plates[suture.plateB];
+    if (!plateA || !plateB) continue;
+    const relative = relativeVelocity(plateA, plateB, suture.contact, false, state.grid.radius);
+    const convergence = dot(relative, suture.convergence);
+    if (convergence <= 0) continue;
+    suture.penetration += convergence * dtYears;
+    state.geosphere.maxContinentalCollisionPenetration = Math.max(
+      state.geosphere.maxContinentalCollisionPenetration,
+      suture.penetration,
+    );
+  }
+}
+
+/**
+ * Keeps a collision stalled between raster overlap samples. A suture remains active
+ * only while its continental margins touch and their target relative velocity points
+ * into the boundary normal. Separating motion releases it immediately; loss of contact
+ * releases it after a quiet interval so one-cell sampling gaps cannot restart grinding.
+ */
+function updateContinentalSutures(
+  state: PlanetState,
+  collisions: CollisionResult,
+  dtYears: number,
+): Uint8Array {
+  const contacts = continentalContacts(state);
+  const collisionKeys = new Set<string>();
+  const sutures = state.geosphere.continentalSutures;
+  const byKey = new Map(sutures.map((suture) => [sutureKey(suture.plateA, suture.plateB), suture]));
+
+  for (const collision of collisions.contacts) {
+    const key = sutureKey(collision.plateA, collision.plateB);
+    collisionKeys.add(key);
+    const plateA = state.plates[collision.plateA]!;
+    const plateB = state.plates[collision.plateB]!;
+    const margin = nearestContact(contacts.get(key), collision.contact);
+    let convergence = margin?.normal;
+    if (!convergence) {
+      convergence = normalizeVector(
+        ...relativeVelocity(plateA, plateB, collision.contact, false, state.grid.radius),
+      );
+    }
+    const relative = relativeVelocity(plateA, plateB, collision.contact, false, state.grid.radius);
+    if (dot(relative, convergence) < 0) convergence = scaleVector(convergence, -1);
+    const targetRelative = relativeVelocity(
+      plateA,
+      plateB,
+      margin?.contact ?? collision.contact,
+      true,
+      state.grid.radius,
+    );
+    if (dot(targetRelative, convergence) <= 0) continue;
+    const existing = byKey.get(key);
+    if (existing) {
+      existing.contact = margin?.contact ?? collision.contact;
+      existing.convergence = convergence;
+      existing.quietYears = 0;
+    } else {
+      const suture: ContinentalSuture = {
+        plateA: collision.plateA,
+        plateB: collision.plateB,
+        contact: margin?.contact ?? collision.contact,
+        convergence,
+        quietYears: 0,
+        penetration: 0,
+      };
+      sutures.push(suture);
+      byKey.set(key, suture);
+      if (!state.geosphere.continentalCollisionPairs.includes(key)) {
+        state.geosphere.continentalCollisionPairs.push(key);
+        state.geosphere.continentalCollisionCount++;
+      }
+    }
+  }
+
+  const activePlate = new Uint8Array(state.plates.length);
+  const retained: ContinentalSuture[] = [];
+  for (const suture of sutures) {
+    const key = sutureKey(suture.plateA, suture.plateB);
+    const margin = nearestContact(contacts.get(key), suture.contact);
+    if (margin) {
+      suture.contact = margin.contact;
+      suture.convergence = margin.normal;
+      suture.quietYears = 0;
+    } else if (!collisionKeys.has(key)) {
+      suture.quietYears += dtYears;
+    }
+    const plateA = state.plates[suture.plateA];
+    const plateB = state.plates[suture.plateB];
+    if (!plateA || !plateB || suture.quietYears >= SUTURE_QUIET_TIME) continue;
+    const targetRelative = relativeVelocity(
+      plateA,
+      plateB,
+      suture.contact,
+      true,
+      state.grid.radius,
+    );
+    if (dot(targetRelative, suture.convergence) <= 0) continue;
+    retained.push(suture);
+    activePlate[suture.plateA] = 1;
+    activePlate[suture.plateB] = 1;
+  }
+  state.geosphere.continentalSutures = retained;
+  return activePlate;
+}
+
+/** Finds adjacent continental margins and their physical boundary normals. */
+function continentalContacts(state: PlanetState): Map<string, ContinentalContact[]> {
+  const { grid } = state;
+  const { neighbors } = getTopology(grid);
+  const { plateId, crustType } = state.fields;
+  const positions = grid.cellPosition;
+  const result = new Map<string, ContinentalContact[]>();
+  for (let cell = 0; cell < grid.cellCount; cell++) {
+    if (!crustType[cell]) continue;
+    for (const direction of [2, 4]) {
+      const neighbor = neighbors[cell * NEIGHBOR_COUNT + direction]!;
+      if (neighbor < 0 || !crustType[neighbor] || plateId[cell] === plateId[neighbor]) continue;
+      const plateA = Math.min(plateId[cell]!, plateId[neighbor]!);
+      const plateB = Math.max(plateId[cell]!, plateId[neighbor]!);
+      const sign = plateId[cell] === plateA ? 1 : -1;
+      const key = sutureKey(plateA, plateB);
+      const margins = result.get(key) ?? [];
+      margins.push({
+        contact: normalizeVector(
+          positions[cell * 3]! + positions[neighbor * 3]!,
+          positions[cell * 3 + 1]! + positions[neighbor * 3 + 1]!,
+          positions[cell * 3 + 2]! + positions[neighbor * 3 + 2]!,
+        ),
+        normal: normalizeVector(
+          (positions[neighbor * 3]! - positions[cell * 3]!) * sign,
+          (positions[neighbor * 3 + 1]! - positions[cell * 3 + 1]!) * sign,
+          (positions[neighbor * 3 + 2]! - positions[cell * 3 + 2]!) * sign,
+        ),
+      });
+      result.set(key, margins);
+    }
+  }
+  return result;
+}
+
+function nearestContact(
+  contacts: ContinentalContact[] | undefined,
+  position: readonly [number, number, number],
+): ContinentalContact | undefined {
+  let nearest: ContinentalContact | undefined;
+  let nearestDot = -Infinity;
+  for (const contact of contacts ?? []) {
+    const similarity = dot(contact.contact, position);
+    if (similarity > nearestDot) {
+      nearest = contact;
+      nearestDot = similarity;
+    }
+  }
+  return nearestDot >= Math.cos((20 * Math.PI) / 180) ? nearest : undefined;
+}
+
+function relativeVelocity(
+  plateA: Plate,
+  plateB: Plate,
+  position: readonly [number, number, number],
+  target: boolean,
+  radius: number,
+): [number, number, number] {
+  const velocityA = surfaceVelocity(plateA, position, target, radius);
+  const velocityB = surfaceVelocity(plateB, position, target, radius);
+  return [velocityA[0] - velocityB[0], velocityA[1] - velocityB[1], velocityA[2] - velocityB[2]];
+}
+
+function surfaceVelocity(
+  plate: Plate,
+  [x, y, z]: readonly [number, number, number],
+  target: boolean,
+  radius: number,
+): [number, number, number] {
+  const speed = (target ? plate.targetSpeed : plate.angularSpeed) * radius;
+  const [px, py, pz] = target ? plate.targetEulerPole : plate.eulerPole;
+  return [(py * z - pz * y) * speed, (pz * x - px * z) * speed, (px * y - py * x) * speed];
+}
+
+function sutureKey(plateA: number, plateB: number): string {
+  return `${Math.min(plateA, plateB)}:${Math.max(plateA, plateB)}`;
+}
+
+function dot(a: readonly number[], b: readonly number[]): number {
+  return a[0]! * b[0]! + a[1]! * b[1]! + a[2]! * b[2]!;
+}
+
+function normalizeVector(x: number, y: number, z: number): [number, number, number] {
+  const length = Math.hypot(x, y, z);
+  return length > 1e-12 ? [x / length, y / length, z / length] : [0, 0, 0];
+}
+
+function scaleVector(
+  [x, y, z]: readonly [number, number, number],
+  scale: number,
+): [number, number, number] {
+  return [x * scale, y * scale, z * scale];
+}
+
+/** Damps only convergence normal to each suture, retaining tangential plate motion. */
+function updatePlateMotions(state: PlanetState, sutured: Uint8Array, dtYears: number): void {
+  const count = state.plates.length;
+  const areas = new Float64Array(count);
+  const { plateId } = state.fields;
+  for (let cell = 0; cell < state.grid.cellCount; cell++) {
+    const row = Math.floor(cell / state.grid.width);
+    areas[plateId[cell]!]! += state.grid.rowCellArea[row]!;
+  }
+  const motions = state.plates.map((plate) => scaleVector(plate.eulerPole, plate.angularSpeed));
+  // Repeated projections settle networks of three or more sutures without making
+  // the result depend on plate id order. Split the exact exponential across passes.
+  const passes = 4;
+  const damping = 1 - Math.exp(-dtYears / (COLLISION_STALL_TIME * passes));
+  for (let pass = 0; pass < passes; pass++) {
+    for (const suture of state.geosphere.continentalSutures) {
+      const motionA = motions[suture.plateA]!;
+      const motionB = motions[suture.plateB]!;
+      const relativeOmega: [number, number, number] = [
+        motionA[0] - motionB[0],
+        motionA[1] - motionB[1],
+        motionA[2] - motionB[2],
+      ];
+      const [x, y, z] = suture.contact;
+      const relativeVelocity: [number, number, number] = [
+        (relativeOmega[1] * z - relativeOmega[2] * y) * state.grid.radius,
+        (relativeOmega[2] * x - relativeOmega[0] * z) * state.grid.radius,
+        (relativeOmega[0] * y - relativeOmega[1] * x) * state.grid.radius,
+      ];
+      const convergence = dot(relativeVelocity, suture.convergence);
+      if (convergence <= 0) continue;
+      const areaA = areas[suture.plateA] || 1;
+      const areaB = areas[suture.plateB] || 1;
+      const area = areaA + areaB;
+      const correctionAxis: [number, number, number] = [
+        y * suture.convergence[2] - z * suture.convergence[1],
+        z * suture.convergence[0] - x * suture.convergence[2],
+        x * suture.convergence[1] - y * suture.convergence[0],
+      ];
+      const correction = (convergence * damping) / state.grid.radius;
+      for (let axis = 0; axis < 3; axis++) {
+        motionA[axis] = motionA[axis]! - correctionAxis[axis]! * correction * (areaB / area);
+        motionB[axis] = motionB[axis]! + correctionAxis[axis]! * correction * (areaA / area);
+      }
+    }
+  }
+
+  const recovery = 1 - Math.exp(-dtYears / SPEED_RECOVERY_TIME);
+  for (const plate of state.plates) {
+    let next = motions[plate.id]!;
+    if (!sutured[plate.id]) {
+      const target = scaleVector(plate.targetEulerPole, plate.targetSpeed);
+      next[0] += (target[0] - next[0]) * recovery;
+      next[1] += (target[1] - next[1]) * recovery;
+      next[2] += (target[2] - next[2]) * recovery;
+    } else {
+      next = limitMotionTurn(plate.eulerPole, next, MAX_COLLISION_TURN_RATE * dtYears);
+    }
+    setPlateMotion(plate, next);
+  }
+}
+
+function limitMotionTurn(
+  current: readonly [number, number, number],
+  vector: readonly [number, number, number],
+  maximum: number,
+): [number, number, number] {
+  const speed = Math.hypot(...vector);
+  if (speed <= 1e-20) return [0, 0, 0];
+  const target = scaleVector(vector, 1 / speed);
+  const angle = Math.acos(Math.max(-1, Math.min(1, dot(current, target))));
+  if (angle <= maximum) return [vector[0], vector[1], vector[2]];
+  const fraction = maximum / angle;
+  const sine = Math.sin(angle);
+  if (sine < 1e-9) {
+    return scaleVector(
+      normalizeVector(
+        current[0] * (1 - fraction) + target[0] * fraction,
+        current[1] * (1 - fraction) + target[1] * fraction,
+        current[2] * (1 - fraction) + target[2] * fraction,
+      ),
+      speed,
+    );
+  }
+  const fromWeight = Math.sin((1 - fraction) * angle) / sine;
+  const toWeight = Math.sin(fraction * angle) / sine;
+  return scaleVector(
+    normalizeVector(
+      current[0] * fromWeight + target[0] * toWeight,
+      current[1] * fromWeight + target[1] * toWeight,
+      current[2] * fromWeight + target[2] * toWeight,
+    ),
+    speed,
+  );
+}
+
+function setPlateMotion(plate: Plate, vector: readonly [number, number, number]): void {
+  const speed = Math.hypot(...vector);
+  plate.angularSpeed = speed;
+  if (speed > 1e-20) plate.eulerPole = scaleVector(vector, 1 / speed);
 }
 
 /**
@@ -755,18 +1129,22 @@ function plateSlotForRift(
     state.plates.push(target);
   }
   if (!target || target === parent) return undefined;
+  state.geosphere.continentalSutures = state.geosphere.continentalSutures.filter(
+    (suture) => suture.plateA !== target!.id && suture.plateB !== target!.id,
+  );
   target.rotation = [...parent.rotation];
   target.crust.owned.fill(0);
   // A small seeded pole perturbation gives the daughter a separating motion.
-  const [x, y, z] = parent.eulerPole;
+  const [x, y, z] = parent.targetEulerPole;
   const scale = 0.12;
   const px = x + (rng.next() * 2 - 1) * scale;
   const py = y + (rng.next() * 2 - 1) * scale;
   const pz = z + (rng.next() * 2 - 1) * scale;
   const length = Math.hypot(px, py, pz);
-  target.eulerPole = [px / length, py / length, pz / length];
+  target.targetEulerPole = [px / length, py / length, pz / length];
+  target.eulerPole = [...parent.eulerPole];
   target.targetSpeed = parent.targetSpeed * (0.9 + rng.next() * 0.2);
-  target.angularSpeed = target.targetSpeed;
+  target.angularSpeed = parent.angularSpeed;
   return target;
 }
 
@@ -894,10 +1272,6 @@ interface ComposeBuffers {
   visible: Uint8Array;
   winners: Int32Array;
   thickening: Float32Array;
-  /** Elevation of every planet cell right after the last composition. */
-  composed: Float32Array;
-  /** Whether `refs` and `composed` describe the planet's current composition. */
-  composedValid: boolean;
   /** fresh[k * n + r]: plate k's reference cell r was created by hole filling this step. */
   fresh: Uint8Array;
   /** Per plate and reference cell: summed elevation change and number of samples. */
@@ -933,8 +1307,6 @@ function composeBuffers(grid: Grid, plateCount: number): ComposeBuffers {
       visible: new Uint8Array(n * plateCount),
       winners: new Int32Array(n),
       thickening: new Float32Array(n),
-      composed: new Float32Array(n),
-      composedValid: false,
       fresh: new Uint8Array(n * plateCount),
       deltaSum: new Float32Array(n * plateCount),
       deltaCount: new Uint16Array(n * plateCount),
@@ -1049,17 +1421,55 @@ function coolOceanFloor(state: PlanetState, dtYears: number): void {
   }
 }
 
-/**
- * Gives every non-empty plate a new motion. Empty ids stay available for a later
- * physically detected continental rift.
- */
+/** Turns one or occasionally two active plates without globally scrambling all motions. */
 function reorganizePlates(state: PlanetState, rng: Rng): void {
-  for (const plate of state.plates) {
-    if (plate.crust.owned.some((value) => value === 1)) {
-      randomizeMotion(plate, rng, state.grid.radius);
-      orientMotionAcrossPlate(plate, state.grid);
-      plate.angularSpeed *= state.geosphere.plateSpeedMantleFactor;
-      plate.targetSpeed *= state.geosphere.plateSpeedMantleFactor;
-    }
+  const candidates = state.plates.filter((plate) => plate.crust.owned.some((value) => value === 1));
+  const count = Math.min(candidates.length, 1 + (rng.next() < 0.35 ? 1 : 0));
+  for (let selected = 0; selected < count; selected++) {
+    const index = Math.floor(rng.next() * candidates.length);
+    const plate = candidates.splice(index, 1)[0]!;
+    const currentPole = plate.eulerPole;
+    plate.eulerPole = [...plate.targetEulerPole];
+    orientMotionAcrossPlate(plate, state.grid);
+    const centre = currentPlateCentroid(plate, state.grid);
+    const turn = (rng.next() * 2 - 1) * MAX_REORGANIZATION_TURN;
+    plate.targetEulerPole = rotateVector(plate.targetEulerPole, centre, turn);
+    plate.eulerPole = currentPole;
+    plate.targetSpeed *= 0.85 + rng.next() * 0.3;
   }
+}
+
+function currentPlateCentroid(plate: Plate, grid: Grid): [number, number, number] {
+  const positions = grid.cellPosition;
+  let x = 0;
+  let y = 0;
+  let z = 0;
+  for (let cell = 0; cell < grid.cellCount; cell++) {
+    if (!plate.crust.owned[cell]) continue;
+    x += positions[cell * 3]!;
+    y += positions[cell * 3 + 1]!;
+    z += positions[cell * 3 + 2]!;
+  }
+  const reference = normalizeVector(x, y, z);
+  const m = plate.rotation;
+  return normalizeVector(
+    m[0]! * reference[0] + m[1]! * reference[1] + m[2]! * reference[2],
+    m[3]! * reference[0] + m[4]! * reference[1] + m[5]! * reference[2],
+    m[6]! * reference[0] + m[7]! * reference[1] + m[8]! * reference[2],
+  );
+}
+
+function rotateVector(
+  [x, y, z]: readonly [number, number, number],
+  [ax, ay, az]: readonly [number, number, number],
+  angle: number,
+): [number, number, number] {
+  const cosine = Math.cos(angle);
+  const sine = Math.sin(angle);
+  const projection = ax * x + ay * y + az * z;
+  return normalizeVector(
+    x * cosine + (ay * z - az * y) * sine + ax * projection * (1 - cosine),
+    y * cosine + (az * x - ax * z) * sine + ay * projection * (1 - cosine),
+    z * cosine + (ax * y - ay * x) * sine + az * projection * (1 - cosine),
+  );
 }

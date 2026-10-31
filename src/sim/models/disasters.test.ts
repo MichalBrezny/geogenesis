@@ -18,6 +18,7 @@ function plate(state: PlanetState, id: number, angularSpeed: number): Plate {
     id,
     eulerPole: [0, 0, 1],
     angularSpeed,
+    targetEulerPole: [0, 0, 1],
     targetSpeed: angularSpeed,
     rotation: [1, 0, 0, 0, 1, 0, 0, 0, 1],
     crust: {

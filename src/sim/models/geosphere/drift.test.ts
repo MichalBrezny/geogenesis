@@ -62,6 +62,32 @@ describe('plateDrift', () => {
     return { planet, simulation };
   }
 
+  function collisionWorld(oceanicRight = false) {
+    const planet = createPlanet({ width: 128, height: 64, seed: 31 });
+    planet.globals.year = 4e9;
+    generateTectonicPlanet(planet, { plateCount: 2 });
+    const { width, radius } = planet.grid;
+    for (let cell = 0; cell < planet.grid.cellCount; cell++) {
+      const right = cell % width >= width / 2;
+      planet.fields.plateId[cell] = right ? 1 : 0;
+      planet.fields.crustType[cell] = right && oceanicRight ? 0 : 1;
+      planet.fields.elevation[cell] = right && oceanicRight ? -4000 : 500;
+    }
+    anchorPlates(planet);
+    const speed = 0.08 / radius;
+    planet.plates[0]!.eulerPole = [0, 0, 1];
+    planet.plates[1]!.eulerPole = [0, 0, -1];
+    for (const plate of planet.plates) {
+      plate.targetEulerPole = [...plate.eulerPole];
+      plate.angularSpeed = plate.targetSpeed = speed;
+    }
+    const simulation = createSimulation(
+      [createPlateDrift({ reorganizationInterval: 1e20 })],
+      ['elevation', 'upliftRate', 'plateId', 'crustType'],
+    );
+    return { planet, simulation };
+  }
+
   it('moves plates', () => {
     const { planet, simulation } = driftOnly(3);
     const before = Int32Array.from(planet.fields.plateId);
@@ -129,6 +155,83 @@ describe('plateDrift', () => {
     // Ocean floor still cools and crust still accretes; only the plates stand still.
     createPlateDrift({ speedFactor: 0 }).runOneStep(planet, 1e7, createRng(1));
     expect(planet.fields.plateId).toEqual(before);
+  });
+
+  it('stalls sutured continents after a few hundred kilometres and releases after non-convergence', () => {
+    const { planet, simulation } = collisionWorld();
+    for (let step = 0; step < 30; step++) simulation.step(planet, 1e6);
+
+    expect(planet.geosphere.continentalCollisionCount).toBeGreaterThan(0);
+    expect(planet.geosphere.maxContinentalCollisionPenetration / 1000).toBeGreaterThan(150);
+    expect(planet.geosphere.maxContinentalCollisionPenetration / 1000).toBeLessThan(600);
+    expect(areaWeightedMean(planet.grid, planet.fields.crustType)).toBeGreaterThan(0.95);
+    const stoppedAt = planet.geosphere.maxContinentalCollisionPenetration;
+    for (let step = 0; step < 30; step++) simulation.step(planet, 1e6);
+    expect(planet.geosphere.maxContinentalCollisionPenetration - stoppedAt).toBeLessThan(25_000);
+
+    // A reorganization into common motion removes convergence at the suture.
+    planet.plates[0]!.eulerPole = [0, 0, 1];
+    planet.plates[1]!.eulerPole = [0, 0, 1];
+    planet.plates[0]!.targetEulerPole = [0, 0, 1];
+    planet.plates[1]!.targetEulerPole = [0, 0, 1];
+    for (let step = 0; step < 80; step++) simulation.step(planet, 1e6);
+    expect(planet.geosphere.continentalSutures).toHaveLength(0);
+    expect(
+      Math.min(...planet.plates.map((plate) => plate.angularSpeed / plate.targetSpeed)),
+    ).toBeGreaterThan(0.5);
+  });
+
+  it('does not stall oceanic crust subducting under a continent', () => {
+    const { planet, simulation } = collisionWorld(true);
+    for (let step = 0; step < 20; step++) simulation.step(planet, 1e6);
+    expect(planet.geosphere.continentalCollisionCount).toBe(0);
+    expect(planet.geosphere.continentalSutures).toHaveLength(0);
+    expect(
+      Math.min(...planet.plates.map((plate) => plate.angularSpeed / plate.targetSpeed)),
+    ).toBeGreaterThan(0.99);
+  });
+
+  it('sub-steps a long continental collision identically to one-million-year steps', () => {
+    const oneCall = collisionWorld();
+    const manyCalls = collisionWorld();
+    oneCall.simulation.step(oneCall.planet, 30e6);
+    for (let step = 0; step < 30; step++) manyCalls.simulation.step(manyCalls.planet, 1e6);
+    expect(oneCall.planet.fields.plateId).toEqual(manyCalls.planet.fields.plateId);
+    expect(oneCall.planet.fields.crustType).toEqual(manyCalls.planet.fields.crustType);
+    expect(oneCall.planet.fields.elevation).toEqual(manyCalls.planet.fields.elevation);
+    expect(oneCall.planet.geosphere.continentalSutures).toEqual(
+      manyCalls.planet.geosphere.continentalSutures,
+    );
+  });
+
+  it('reorganizes at most two plates with bounded turns', () => {
+    const planet = createPlanet({ width: 128, height: 64, seed: 37 });
+    planet.globals.year = 4e9;
+    generateTectonicPlanet(planet);
+    const before = planet.plates.map((plate) => [...plate.targetEulerPole]);
+    createPlateDrift({ speedFactor: 0, reorganizationInterval: 1 }).runOneStep(
+      planet,
+      1e6,
+      createRng(1),
+    );
+    const turns = planet.plates
+      .map((plate, id) => {
+        const pole = before[id]!;
+        const cosine = Math.max(
+          -1,
+          Math.min(
+            1,
+            pole[0]! * plate.targetEulerPole[0] +
+              pole[1]! * plate.targetEulerPole[1] +
+              pole[2]! * plate.targetEulerPole[2],
+          ),
+        );
+        return Math.acos(cosine);
+      })
+      .filter((turn) => turn > 1e-6);
+    expect(turns.length).toBeGreaterThanOrEqual(1);
+    expect(turns.length).toBeLessThanOrEqual(2);
+    expect(Math.max(...turns)).toBeLessThanOrEqual((35 * Math.PI) / 180 + 1e-10);
   });
 
   it('transfers a small detached piece between reference rasters without losing crust', () => {

@@ -270,6 +270,8 @@ export interface Plate {
   eulerPole: [number, number, number];
   /** Rotation rate in radians per year (surface speed = rate × radius × sin(angle to pole)). */
   angularSpeed: number;
+  /** Long-term Euler pole restored after a continental suture releases. */
+  targetEulerPole: [number, number, number];
   /**
    * Rotation rate the plate's driving forces aim for (rad/yr). Collisions slow the
    * plate below it; it recovers once free.
@@ -318,6 +320,20 @@ export interface LargeIgneousProvince {
   outgassing: number;
 }
 
+/** Persistent memory of a continental collision between two stable plate ids. */
+export interface ContinentalSuture {
+  plateA: number;
+  plateB: number;
+  /** Unit surface position of the first collision, in the mantle frame. */
+  contact: [number, number, number];
+  /** Unit tangent direction of plate A's motion relative to plate B at first contact. */
+  convergence: [number, number, number];
+  /** Years since the two continental margins were last touching. */
+  quietYears: number;
+  /** Integrated convergent relative travel since first contact, in metres. */
+  penetration: number;
+}
+
 /** Plain-data state owned by plate cleanup and volcanism. */
 export interface GeosphereState {
   /** Plate count at generation; cleanup may use up to twice this many stable slots. */
@@ -336,6 +352,14 @@ export interface GeosphereState {
   plateSpeedMantleFactor: number;
   /** Independent deterministic random stream for step-length-neutral plate events. */
   plateRngState: number;
+  /** Continental contacts that keep convergent plates stalled between overlap samples. */
+  continentalSutures: ContinentalSuture[];
+  /** Cumulative number of distinct continental collision pairs. */
+  continentalCollisionCount: number;
+  /** Stable-id pairs already included in continentalCollisionCount. */
+  continentalCollisionPairs: string[];
+  /** Greatest convergent travel recorded after first continental contact, in metres. */
+  maxContinentalCollisionPenetration: number;
   /** Instantaneous impact heat carried between steps, W/m². */
   impactHeat: number;
   /** Total natural impacts sampled since this planet was created. */
@@ -683,6 +707,10 @@ export function createPlanet(options: PlanetOptions = {}): PlanetState {
       sliverCleanupElapsedYears: 0,
       plateSpeedMantleFactor: 1,
       plateRngState: (seed ^ 0x7f4a7c15) >>> 0,
+      continentalSutures: [],
+      continentalCollisionCount: 0,
+      continentalCollisionPairs: [],
+      maxContinentalCollisionPenetration: 0,
       impactHeat: 0,
       impactCount: 0,
       abiogenesisSuppressedUntil: 0,
