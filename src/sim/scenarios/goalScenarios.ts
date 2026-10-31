@@ -1,6 +1,7 @@
 import { updateSurfacePressure } from '../models/atmosphere/atmosphere';
-import { getTopology } from '../core/grid';
+import { getTopology, NEIGHBOR_COUNT } from '../core/grid';
 import { createRng } from '../core/rng';
+import type { Grid } from '../core/grid';
 import type { PlanetOptions, PlanetState } from '../core/planet';
 import { LIFE_CLASSES, lifeClassIndex, type LifeClassKey } from '../data/lifeClasses';
 import { createGoal, type GoalId } from '../goals/goals';
@@ -25,9 +26,11 @@ const TERRAFORM_ENERGY = 1800;
 const CAMBRIAN_YEAR = 4.0e9;
 /** Oxygen (volume fraction) of the early Cambrian air, about two thirds of today's. */
 const CAMBRIAN_OXYGEN = 0.15;
-/** Island sizes (m²) the stone-age people may start on: from Britain to Greenland. */
-const ISLAND_MIN_AREA = 2e11;
-const ISLAND_MAX_AREA = 2.5e12;
+/** Homeland sizes (m²) from roughly Australia to Asia. */
+const HOMELAND_MIN_AREA = 8e12;
+const HOMELAND_MAX_AREA = 4.5e13;
+/** Radius occupied by the first communities, measured along the grid topology. */
+const STONE_AGE_SETTLEMENT_RADIUS = 2_000_000;
 /** Geological steps that let a new world's climate settle before life is placed. */
 const SETTLING_STEPS = 4;
 const SETTLING_STEP_YEARS = 500e3;
@@ -96,27 +99,67 @@ function terraformWorld(world: World, id: GoalId): World {
   return randomWorldFromPlanet(planet, world.settings);
 }
 
-/** Mammals become sentient on one island of a living planet and must reach Exodus. */
+/** Mammals become sentient on an isolated landmass and must reach Exodus. */
 export function createStoneAge(options: PlanetOptions): World {
   const base = settleClimate(createRandomWorld({ ...options, start: 'quick' }), MODERN_OXYGEN);
   const { planet } = base;
-  seedEstablishedComplexLife(planet);
+  seedEstablishedComplexLife(planet, 'mammals', { population: 1 });
   const mammals = lifeClassIndex('mammals');
-  const home = islandHome(planet, mammals);
+  const home = homelandHome(planet, mammals);
   makeSentient(planet, mammals, home);
   planet.globals.fossilCarbon = STONE_AGE_FOSSIL_CARBON;
-  // A band of neighbouring settlements rather than one cell, so the first people do
-  // not fall below the collapse threshold on fine grids, where cells are small.
-  const { neighbors } = getTopology(planet.grid);
-  const n = planet.grid.cellCount;
-  for (let d = 0; d < 8; d++) {
-    const j = neighbors[home * 8 + d]!;
-    if (j >= 0 && planet.biota.populations[mammals * n + j]! > 0) {
-      planet.fields.civilization[j] = planet.fields.civilization[home]!;
-    }
-  }
+  seedInitialSettlements(planet, mammals, home);
   planet.goal = createGoal('exodus', planet.globals.year);
   return randomWorldFromPlanet(planet, base.settings);
+}
+
+/** Settles suitable cells within a fixed surface distance of the first community. */
+function seedInitialSettlements(planet: PlanetState, species: number, home: number): void {
+  const { grid, biota, fields } = planet;
+  const speciesOffset = species * grid.cellCount;
+  for (const cell of cellsWithinTopologyRadius(
+    grid,
+    home,
+    STONE_AGE_SETTLEMENT_RADIUS,
+    (candidate) => biota.populations[speciesOffset + candidate]! > 0,
+  )) {
+    fields.civilization[cell] = fields.civilization[home]!;
+  }
+}
+
+/** Cells connected through allowed neighbours within a real surface-distance radius. */
+export function cellsWithinTopologyRadius(
+  grid: Grid,
+  home: number,
+  radius: number,
+  canEnter: (cell: number) => boolean,
+): number[] {
+  const { neighbors, rowDistance } = getTopology(grid);
+  const distance = new Float64Array(grid.cellCount).fill(Infinity);
+  const pending = [{ cell: home, distance: 0 }];
+  const cells: number[] = [];
+  distance[home] = 0;
+  while (pending.length > 0) {
+    let nearest = 0;
+    for (let i = 1; i < pending.length; i++) {
+      if (pending[i]!.distance < pending[nearest]!.distance) nearest = i;
+    }
+    const current = pending.splice(nearest, 1)[0]!;
+    if (current.distance !== distance[current.cell]) continue;
+    cells.push(current.cell);
+    const row = Math.floor(current.cell / grid.width);
+    for (let direction = 0; direction < NEIGHBOR_COUNT; direction++) {
+      const nextCell = neighbors[current.cell * NEIGHBOR_COUNT + direction]!;
+      if (nextCell < 0 || !canEnter(nextCell)) continue;
+      const nextDistance = current.distance + rowDistance[row * NEIGHBOR_COUNT + direction]!;
+      if (nextDistance > radius || nextDistance >= distance[nextCell]!) {
+        continue;
+      }
+      distance[nextCell] = nextDistance;
+      pending.push({ cell: nextCell, distance: nextDistance });
+    }
+  }
+  return cells;
 }
 
 /**
@@ -151,29 +194,35 @@ function settleClimate(world: World, oxygen: number): World {
 }
 
 /**
- * Home cell of the first people: the most populated cell of a mid-sized island, so
- * they must learn to sail before they can spread. Falls back to any inhabited
- * landmass when the planet has no island of that size.
+ * Home cell of the first people: the best habitat on the most inhabited qualifying
+ * landmass. Falls back to any inhabited landmass when none matches the target size.
  */
-function islandHome(planet: PlanetState, species: number): number {
+function homelandHome(planet: PlanetState, species: number): number {
   const { grid, fields, globals, biota } = planet;
   const n = grid.cellCount;
   const { neighbors } = getTopology(grid);
   const land = (i: number) => !isOcean(fields.elevation[i]!, globals.seaLevel);
   const visited = new Uint8Array(n);
-  const islands: { area: number; best: number; population: number }[] = [];
+  const landmasses: {
+    area: number;
+    best: number;
+    bestPopulation: number;
+    population: number;
+  }[] = [];
   for (let start = 0; start < n; start++) {
     if (visited[start] || !land(start)) continue;
-    const island = { area: 0, best: -1, population: 0 };
+    const landmass = { area: 0, best: -1, bestPopulation: 0, population: 0 };
     const stack = [start];
     visited[start] = 1;
     while (stack.length > 0) {
       const i = stack.pop()!;
-      island.area += grid.rowCellArea[Math.floor(i / grid.width)]!;
+      const cellArea = grid.rowCellArea[Math.floor(i / grid.width)]!;
+      landmass.area += cellArea;
       const population = biota.populations[species * n + i]!;
-      if (population > island.population) {
-        island.population = population;
-        island.best = i;
+      landmass.population += population * cellArea;
+      if (population > landmass.bestPopulation) {
+        landmass.bestPopulation = population;
+        landmass.best = i;
       }
       for (let d = 0; d < 8; d++) {
         const j = neighbors[i * 8 + d]!;
@@ -182,14 +231,15 @@ function islandHome(planet: PlanetState, species: number): number {
         stack.push(j);
       }
     }
-    if (island.best >= 0) islands.push(island);
+    if (landmass.best >= 0) landmasses.push(landmass);
   }
-  const sized = islands.filter(
-    (island) => island.area >= ISLAND_MIN_AREA && island.area <= ISLAND_MAX_AREA,
+  const sized = landmasses.filter(
+    (landmass) => landmass.area >= HOMELAND_MIN_AREA && landmass.area <= HOMELAND_MAX_AREA,
   );
-  const pool = sized.length > 0 ? sized : islands;
+  const pool = sized.length > 0 ? sized : landmasses;
   if (pool.length === 0) return 0;
-  return pool.reduce((best, island) => (island.population > best.population ? island : best)).best;
+  return pool.reduce((best, landmass) => (landmass.population > best.population ? landmass : best))
+    .best;
 }
 
 export function restoreGoalScenario(
@@ -216,7 +266,7 @@ function brighteningWorld(world: World): World {
 function seedEstablishedComplexLife(
   planet: PlanetState,
   last: LifeClassKey = 'mammals',
-  options: { oxygen?: number; exclude?: readonly LifeClassKey[] } = {},
+  options: { oxygen?: number; exclude?: readonly LifeClassKey[]; population?: number } = {},
 ): void {
   planet.globals.atmosphere.o2 = options.oxygen ?? MODERN_OXYGEN;
   updateSurfacePressure(planet.globals);
@@ -237,7 +287,8 @@ function seedEstablishedComplexLife(
     const suitability = classSuitability(planet, c);
     for (let i = 0; i < n; i++) {
       if (suitability[i]! > 0.01) {
-        planet.biota.populations[c * n + i] = suitability[i]! * SEEDED_POPULATION;
+        planet.biota.populations[c * n + i] =
+          suitability[i]! * (options.population ?? SEEDED_POPULATION);
       }
     }
     planet.biota.appeared[c] = planet.globals.year - (lastClass - c + 1) * 10e6;

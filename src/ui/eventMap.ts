@@ -41,6 +41,7 @@ const CATEGORY: Partial<Record<EventKey, EventCategory>> = {
   energyTransition: 'civilization',
   pollutionCrisis: 'civilization',
   civilizationCollapsed: 'civilization',
+  exodusPopulationTooLow: 'civilization',
   exodus: 'civilization',
   monolith: 'civilization',
   eraReached: 'civilization',

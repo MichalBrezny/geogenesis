@@ -10,6 +10,7 @@ import type { Biome } from '../../data/biomes';
 import {
   ENERGY_SOURCES,
   energySourceUnlocked,
+  EXODUS_MIN_POPULATION,
   PEOPLE_PER_KM2,
   SENTIENCE_POTENTIAL,
   TECH_AGES,
@@ -45,8 +46,8 @@ const PLAGUE_RATE = 2e-4;
 const NUCLEAR_SOOT_TAU = 2;
 /** World population (billions) below which a civilization is gone. */
 const COLLAPSE_POPULATION = 1e-5;
-/** How far (m, along a row or column) a seafaring civilization can settle across water. */
-const SEA_CROSSING = 500_000;
+/** Mature seafaring can connect continents across ocean passages up to 5,000 km. */
+const SEA_CROSSING = 5_000_000;
 /** Atmospheric/industrial pollution residence time. */
 export const POLLUTION_RESIDENCE_TIME = 50;
 /** Reserve at which extraction supplies half of unconstrained fossil demand. */
@@ -74,6 +75,7 @@ declare module '../../core/planet' {
     energyTransitionRecorded?: boolean;
     fossilWarningRecorded?: boolean;
     pollutionCrisisRecorded?: boolean;
+    exodusPopulationWarningRecorded?: boolean;
   }
 }
 
@@ -85,10 +87,10 @@ declare module '../../core/planet' {
  * most, but even mollusks can). The civilization then grows where its species
  * can live and its food allows — farming and industry raise how much of the
  * land's production it can use — spreads at its age's speed (and over
- * narrow seas once seafaring), clears vegetation, and advances through the tech
+ * ocean passages once seafaring), clears vegetation, and advances through the tech
  * ages. Industry burns fossil fuels, warming the planet; plagues and nuclear
- * wars set it back; finishing the Nanotech age means Exodus: the civilization
- * leaves the planet.
+ * wars set it back; finishing the Nanotech age with at least the minimum
+ * population means Exodus: the civilization leaves the planet.
  */
 export function createCivilization(options: CivilizationOptions = {}): SimComponent {
   const sentienceTime = options.sentienceTime ?? SENTIENCE_TIME;
@@ -355,10 +357,7 @@ function emitCarbonAndPollution(
   // environmentally visible, while remaining exactly 7 billion at Earth's calibration.
   const environmentalPopulation = civilizationEnvironmentalScale(population);
   const desiredMicrobar =
-    baselineEmissions *
-    environmentalPopulation *
-    dtYears *
-    (production.mix.fossil / defaultFossil);
+    baselineEmissions * environmentalPopulation * dtYears * (production.mix.fossil / defaultFossil);
   const desiredCarbon = desiredMicrobar * gtCarbonPerMicrobar(state);
   const fossilBurned = burnFossilCarbon(state, desiredCarbon, dtYears);
   state.civilization.fossilSupply = desiredCarbon > 0 ? fossilBurned / desiredCarbon : 1;
@@ -377,21 +376,14 @@ function emitCarbonAndPollution(
     (sum, key) => sum + production.mix[key] * ENERGY_SOURCES[key].pollution,
     0,
   );
-  updatePollution(
-    state,
-    dtYears,
-    environmentalPopulation * pollutionIntensity * POLLUTION_RATE,
-  );
+  updatePollution(state, dtYears, environmentalPopulation * pollutionIntensity * POLLUTION_RATE);
 }
 
 /** Effective population for planet-wide emissions and pollution (billions). */
 export function civilizationEnvironmentalScale(population: number): number {
   if (!(population > 0)) return 0;
   if (population >= EARTH_CIVILIZATION_POPULATION) return population;
-  return (
-    EARTH_CIVILIZATION_POPULATION *
-    (population / EARTH_CIVILIZATION_POPULATION) ** 0.72
-  );
+  return EARTH_CIVILIZATION_POPULATION * (population / EARTH_CIVILIZATION_POPULATION) ** 0.72;
 }
 
 /** Depletes the reserve with extraction becoming progressively harder at low inventory. */
@@ -484,6 +476,7 @@ export function makeSentient(
   civ.energyTransitionRecorded = false;
   civ.fossilWarningRecorded = false;
   civ.pollutionCrisisRecorded = false;
+  civ.exodusPopulationWarningRecorded = false;
   civ.plagueProgress = 0;
   civ.warProgress = 0;
   state.fields.civilization.fill(0);
@@ -641,12 +634,27 @@ function hazardOccurs(
 function advanceTechnology(state: PlanetState, dtYears: number, policyPace = 1): void {
   const civ = state.civilization;
   const age = TECH_AGES[civ.age]!;
-  // Bigger populations invent faster, with strongly diminishing returns, so a small
-  // species is slower but not stuck.
-  const pace = Math.min(2, Math.max(0.5, (civ.population / age.expectedPopulation) ** 0.25));
-  civ.progress += (pace * Math.max(0, policyPace) * dtYears) / age.duration;
+  const completedNanotech =
+    civ.age === TECH_AGES.length - 1 && civ.exodusPopulationWarningRecorded === true;
+  if (completedNanotech) {
+    // Technology stays ready even when a later hazard would otherwise set progress back.
+    civ.progress = 1;
+  } else {
+    // Bigger populations invent faster, with strongly diminishing returns, so a small
+    // species is slower but not stuck.
+    const pace = technologyPopulationPace(civ.population, age.expectedPopulation);
+    civ.progress += (pace * Math.max(0, policyPace) * dtYears) / age.duration;
+  }
   if (civ.progress < 1) return;
   if (civ.age === TECH_AGES.length - 1) {
+    civ.progress = 1;
+    if (civ.population < EXODUS_MIN_POPULATION) {
+      if (!civ.exodusPopulationWarningRecorded) {
+        civ.exodusPopulationWarningRecorded = true;
+        recordEvent(state, 'exodusPopulationTooLow');
+      }
+      return;
+    }
     civ.exodusYear = state.globals.year;
     endCivilization(state, 'exodus');
     return;
@@ -654,6 +662,11 @@ function advanceTechnology(state: PlanetState, dtYears: number, policyPace = 1):
   civ.age += 1;
   civ.progress = 0;
   recordEvent(state, 'ageReached', TECH_AGES[civ.age]!.key);
+}
+
+/** Population contribution to technology speed, bounded for very small and large societies. */
+export function technologyPopulationPace(population: number, expectedPopulation: number): number {
+  return Math.min(2, Math.max(0.25, (population / expectedPopulation) ** 0.35));
 }
 
 function endCivilization(state: PlanetState, event: 'civilizationCollapsed' | 'exodus'): void {

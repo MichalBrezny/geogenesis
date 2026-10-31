@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { createGrid } from '../core/grid';
 import { complexBiomass } from '../models/biosphere/life';
 import { lifeClassIndex } from '../data/lifeClasses';
+import { cellsWithinTopologyRadius } from './goalScenarios';
 import { createScenario } from './index';
 
 describe('goal scenarios', () => {
@@ -56,6 +58,27 @@ describe('terraforming scenarios', () => {
 });
 
 describe('civilization scenarios', () => {
+  it('uses the same physical initial settlement radius at different resolutions', () => {
+    const extents = [createGrid(64, 32), createGrid(128, 64)].map((grid) => {
+      const home = Math.floor(grid.height / 2) * grid.width + Math.floor(grid.width / 2);
+      const cells = cellsWithinTopologyRadius(grid, home, 2_000_000, () => true);
+      const hp = home * 3;
+      return Math.max(
+        ...cells.map((cell) => {
+          const cp = cell * 3;
+          const dot =
+            grid.cellPosition[hp]! * grid.cellPosition[cp]! +
+            grid.cellPosition[hp + 1]! * grid.cellPosition[cp + 1]! +
+            grid.cellPosition[hp + 2]! * grid.cellPosition[cp + 2]!;
+          return grid.radius * Math.acos(Math.max(-1, Math.min(1, dot)));
+        }),
+      );
+    });
+    expect(extents[0]).toBeLessThanOrEqual(2_000_000);
+    expect(extents[1]).toBeLessThanOrEqual(2_000_000);
+    expect(Math.abs(extents[0]! - extents[1]!)).toBeLessThan(200_000);
+  });
+
   it('starts a sentient stone-age people with the Exodus goal', () => {
     const world = createScenario('stoneAge', { seed: 2, width: 64, height: 32, start: 'quick' });
     const { civilization, goal, fields } = world.planet;
