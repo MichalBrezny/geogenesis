@@ -15,7 +15,7 @@ tools that reshape the land, the air and the living world.
 > cues, autosave and an English or Czech interface. Next is the public beta: stability,
 > browser checks, stable saves and playtests. See the [milestones](#milestones).
 
-![A planet 900 million years after the first cells: biomes on the map, tools on the left, history charts on the right](docs/screenshot.jpg)
+![The Exodus scenario: a Bronze Age civilization on its home continent, life and city icons on the terrain map, tools on the left and the goal checklist on the right](docs/screenshot.jpg)
 
 The models are simplified but grounded in real Earth-system science: an energy-balance climate, the
 silicate-weathering carbon thermostat, Whittaker biomes, Daisyworld, Landlab-style erosion. They
