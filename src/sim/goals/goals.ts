@@ -61,8 +61,8 @@ const CRADLE_TIME_LIMIT = 2e9;
 const COMPLEX_LIFE_EPSILON = 1e-8;
 const TERRAFORM_TIME_LIMIT: Partial<Record<GoalId, number>> = {
   terraformMars: 500e6,
-  // A staged science/agriculture strategy reaches Exodus by 68 kyr; default policy misses 70 kyr.
-  exodus: 70e3,
+  // A staged science/agriculture strategy reaches Exodus by 67 kyr; default policy misses 73 kyr.
+  exodus: 73e3,
 };
 const TERRAFORM_HOLD_YEARS = 10e6;
 /** Share of the planet's area that must be open (ice-free) sea. */

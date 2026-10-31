@@ -41,6 +41,12 @@ function mammalWorld(): PlanetState {
 }
 
 describe('civilization', () => {
+  it('grades sea-crossing reach by age in physical metres', () => {
+    expect(TECH_AGES.map((age) => age.seaCrossingReach)).toEqual([
+      0, 300_000, 800_000, 3_000_000, 6_000_000, 10_000_000, 20_000_000,
+    ]);
+  });
+
   it('scales technology pace more steeply while retaining bounded progress', () => {
     expect(technologyPopulationPace(0, 7)).toBe(0.25);
     expect(technologyPopulationPace(0.7, 7)).toBeCloseTo(0.1 ** 0.35);

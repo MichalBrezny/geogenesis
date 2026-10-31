@@ -45,4 +45,29 @@ describe('dispersal', () => {
       expect(Math.abs(area - reference) / reference).toBeLessThan(0.3);
     }
   });
+
+  it('crosses the same physical sea gap at coarse and fine resolutions', () => {
+    for (const [width, height, targetOffset] of [
+      [64, 32, 2],
+      [128, 64, 3],
+    ] as const) {
+      const grid = createGrid(width, height);
+      const source = cellIndex(grid, width / 2, height / 2);
+      const target = cellIndex(grid, width / 2 + targetOffset, height / 2);
+      const settled = new Uint8Array(grid.cellCount);
+      settled[source] = 1;
+      disperse(grid, {
+        dtYears: 10_000,
+        speed: 80,
+        reach: 700_000,
+        rng: createRng(1),
+        isSource: (i) => settled[i] === 1,
+        canEnter: (i) => i === target,
+        settle: (i) => {
+          settled[i] = 1;
+        },
+      });
+      expect(settled[target]).toBe(1);
+    }
+  });
 });

@@ -42,8 +42,8 @@ export interface TechAge {
   emissions: number;
   /** Yearly chance of nuclear war per civilization, once weapons exist. */
   warRisk: number;
-  /** Can cross ocean passages (boats). */
-  seafaring: boolean;
+  /** Farthest ocean passage settlers can cross in one voyage, in metres. */
+  seaCrossingReach: number;
   /** Speed at which settlement spreads into new land, m/yr (walking, then roads, then rail). */
   spreadSpeed: number;
 }
@@ -59,7 +59,7 @@ export const TECH_AGES: readonly TechAge[] = [
     landUse: 0.02,
     emissions: 0,
     warRisk: 0,
-    seafaring: false,
+    seaCrossingReach: 0,
     spreadSpeed: 80,
   },
   {
@@ -72,7 +72,8 @@ export const TECH_AGES: readonly TechAge[] = [
     landUse: 0.1,
     emissions: 0,
     warRisk: 0,
-    seafaring: false,
+    // Early sail supports coastal travel and short island hops, not open oceans.
+    seaCrossingReach: 300_000,
     spreadSpeed: 800,
   },
   {
@@ -85,7 +86,8 @@ export const TECH_AGES: readonly TechAge[] = [
     landUse: 0.2,
     emissions: 0,
     warRisk: 0,
-    seafaring: true,
+    // Established navigation connects regional seas and island chains.
+    seaCrossingReach: 800_000,
     spreadSpeed: 800,
   },
   {
@@ -98,7 +100,8 @@ export const TECH_AGES: readonly TechAge[] = [
     landUse: 0.4,
     emissions: 0.3,
     warRisk: 0,
-    seafaring: true,
+    // Steamships can sustain multi-week crossings such as the North Atlantic.
+    seaCrossingReach: 3_000_000,
     spreadSpeed: 15000,
   },
   {
@@ -111,7 +114,8 @@ export const TECH_AGES: readonly TechAge[] = [
     landUse: 0.5,
     emissions: 0.35,
     warRisk: 0.004,
-    seafaring: true,
+    // Modern ocean-going fleets make most intercontinental passages routine.
+    seaCrossingReach: 6_000_000,
     spreadSpeed: 30000,
   },
   {
@@ -124,7 +128,7 @@ export const TECH_AGES: readonly TechAge[] = [
     landUse: 0.5,
     emissions: 0.25,
     warRisk: 0.002,
-    seafaring: true,
+    seaCrossingReach: 10_000_000,
     spreadSpeed: 30000,
   },
   {
@@ -137,7 +141,7 @@ export const TECH_AGES: readonly TechAge[] = [
     landUse: 0.4,
     emissions: 0.05,
     warRisk: 0.001,
-    seafaring: true,
+    seaCrossingReach: 20_000_000,
     spreadSpeed: 30000,
   },
 ];

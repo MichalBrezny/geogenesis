@@ -47,8 +47,6 @@ const PLAGUE_RATE = 2e-4;
 const NUCLEAR_SOOT_TAU = 2;
 /** World population (billions) below which a civilization is gone. */
 const COLLAPSE_POPULATION = 1e-5;
-/** Mature seafaring can connect continents across ocean passages up to 5,000 km. */
-const SEA_CROSSING = 5_000_000;
 /** Atmospheric/industrial pollution residence time. */
 export const POLLUTION_RESIDENCE_TIME = 50;
 /** Reserve at which extraction supplies half of unconstrained fossil demand. */
@@ -87,9 +85,9 @@ declare module '../../core/planet' {
  * chance to become sentient, weighted by their potential (mammals and birds
  * most, but even mollusks can). The civilization then grows where its species
  * can live and its food allows — farming and industry raise how much of the
- * land's production it can use — spreads at its age's speed (and over
- * ocean passages once seafaring), clears vegetation, and advances through the tech
- * ages. Industry burns fossil fuels, warming the planet; plagues and nuclear
+ * land's production it can use — spreads at its age's speed (and over ocean
+ * passages within that age's sailing range), clears vegetation, and advances
+ * through the tech ages. Industry burns fossil fuels, warming the planet; plagues and nuclear
  * wars set it back; finishing the Nanotech age with at least the minimum
  * population means Exodus: the civilization leaves the planet.
  */
@@ -525,7 +523,7 @@ function settle(
   disperse(state.grid, {
     dtYears,
     speed: age.spreadSpeed,
-    reach: age.seafaring ? SEA_CROSSING : 0,
+    reach: age.seaCrossingReach,
     rng,
     isSource: (i) => density[i]! > MIN_DENSITY,
     canEnter: (i) => density[i]! <= MIN_DENSITY && capacity[i]! > 0,
