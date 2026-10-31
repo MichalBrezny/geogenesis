@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { areaWeightedMean } from './core/grid';
 import { lifeClassIndex } from './data/lifeClasses';
 import { continentalCrustTarget } from './models/geosphere/drift';
-import { equilibriumSeaLevel } from './models/geosphere/seaLevel';
+import { equilibriumSeaLevel, seaLevelForWaterGel } from './models/geosphere/seaLevel';
 import { updateSurfacePressure } from './models/atmosphere/atmosphere';
-import { createRandomWorld, PLANET_START_AGES } from './world';
+import { createPlanetPreset, createRandomWorld, PLANET_START_AGES } from './world';
 import { createScenario, restoreScenario } from './scenarios';
 import { deserializeGame, serializeGame } from './serialize';
 
@@ -71,6 +71,12 @@ describe('planet presets', () => {
   for (const scenario of ['mars', 'venus'] as const) {
     it(`creates, steps, saves and restores ${scenario} without non-finite state`, () => {
       const world = createScenario(scenario, { seed: 9, width: 32, height: 16 });
+      if (scenario === 'mars') {
+        expect(world.planet.globals.meanTemperature).toBeGreaterThan(-80);
+        expect(world.planet.globals.meanTemperature).toBeLessThan(-50);
+      } else {
+        expect(world.planet.globals.meanTemperature).toBeGreaterThan(400);
+      }
       world.simulation.step(world.planet, 10e6);
       const loaded = deserializeGame(serializeGame({ scenario, planet: world.planet }));
       const restored = restoreScenario(scenario, loaded.planet, loaded.settings);
@@ -90,4 +96,82 @@ describe('planet presets', () => {
       }
     });
   }
+
+  it('retains the major Mars relief over a 10 Myr preset step', () => {
+    const world = createPlanetPreset('mars', { seed: 9, width: 128, height: 64 });
+    const { planet } = world;
+    planet.disasters.impacts = false;
+    planet.disasters.supervolcanoes = false;
+
+    world.simulation.step(planet, 10e6);
+
+    expect(neighborhoodExtreme(planet, 18.6, 226, 1, 'highest')).toBeGreaterThan(15_000);
+    expect(neighborhoodExtreme(planet, -42, 70, 6, 'lowest')).toBeLessThan(-6_500);
+    expect(planet.fields.upliftRate.every((value) => value === 0)).toBe(true);
+  });
+
+  it('fills Hellas and the northern lowlands before the southern highlands', () => {
+    const world = createPlanetPreset('mars', { seed: 9, width: 128, height: 64 });
+    const { planet } = world;
+    const lowest = extremeCell(planet.fields.elevation, 'lowest');
+    const lowestLatitude =
+      90 - ((Math.floor(lowest / planet.grid.width) + 0.5) * 180) / planet.grid.height;
+    const lowestLongitude = ((lowest % planet.grid.width) + 0.5) * (360 / planet.grid.width);
+
+    expect(planet.globals.seaLevel).toBeLessThan(-6_500);
+    expect(lowestLatitude).toBeGreaterThan(-55);
+    expect(lowestLatitude).toBeLessThan(-25);
+    expect(lowestLongitude).toBeGreaterThan(40);
+    expect(lowestLongitude).toBeLessThan(100);
+
+    const terraformedSeaLevel = seaLevelForWaterGel(planet.grid, planet.fields.elevation, 300);
+    expect(neighborhoodExtreme(planet, -42, 70, 2, 'lowest')).toBeLessThan(terraformedSeaLevel);
+    expect(neighborhoodExtreme(planet, 50, 150, 2, 'highest')).toBeLessThan(terraformedSeaLevel);
+    expect(neighborhoodExtreme(planet, -30, 150, 2, 'lowest')).toBeGreaterThan(terraformedSeaLevel);
+  });
 });
+
+type PresetPlanet = ReturnType<typeof createPlanetPreset>['planet'];
+
+function coordinateCell(planet: PresetPlanet, latitude: number, longitude: number): number {
+  const { width, height } = planet.grid;
+  const x = Math.floor(((((longitude % 360) + 360) % 360) / 360) * width);
+  const y = Math.min(height - 1, Math.floor(((90 - latitude) / 180) * height));
+  return y * width + x;
+}
+
+function neighborhoodExtreme(
+  planet: PresetPlanet,
+  latitude: number,
+  longitude: number,
+  radius: number,
+  which: 'highest' | 'lowest',
+): number {
+  const { width, height } = planet.grid;
+  const center = coordinateCell(planet, latitude, longitude);
+  const centerX = center % width;
+  const centerY = Math.floor(center / width);
+  let result = which === 'highest' ? -Infinity : Infinity;
+  for (let dy = -radius; dy <= radius; dy++) {
+    const y = Math.max(0, Math.min(height - 1, centerY + dy));
+    for (let dx = -radius; dx <= radius; dx++) {
+      const x = (centerX + dx + width) % width;
+      const value = planet.fields.elevation[y * width + x]!;
+      result = which === 'highest' ? Math.max(result, value) : Math.min(result, value);
+    }
+  }
+  return result;
+}
+
+function extremeCell(elevation: Float32Array, which: 'highest' | 'lowest'): number {
+  let result = 0;
+  for (let i = 1; i < elevation.length; i++) {
+    if (
+      (which === 'highest' && elevation[i]! > elevation[result]!) ||
+      (which === 'lowest' && elevation[i]! < elevation[result]!)
+    ) {
+      result = i;
+    }
+  }
+  return result;
+}

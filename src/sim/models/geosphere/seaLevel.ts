@@ -40,11 +40,7 @@ export function landSurfaceFraction(
 }
 
 /** Ocean-basin volume below a sea surface, expressed as metres GEL. */
-export function basinWaterGel(
-  grid: Grid,
-  elevation: ArrayLike<number>,
-  seaLevel: number,
-): number {
+export function basinWaterGel(grid: Grid, elevation: ArrayLike<number>, seaLevel: number): number {
   let volume = 0;
   let area = 0;
   for (let y = 0; y < grid.height; y++) {
@@ -152,6 +148,10 @@ export const seaLevelDatumModel: SimComponent = {
   inputs: ['elevation'],
   outputs: ['elevation'],
   runOneStep(state) {
+    // Stagnant-lid terrain is never resampled through moving plate rasters. Its
+    // elevation datum may also be physically defined, as for the Mars and Venus
+    // presets, so there is neither drift to correct nor an arbitrary zero to move.
+    if (state.globals.tectonicRegime === 'stagnant') return;
     const referenceVapor = 0.0025 * waterGelPerBar(state.planetParams.surfaceGravity);
     const referenceLiquid = Math.max(0, state.globals.initialWater - referenceVapor);
     if (referenceLiquid <= 0) return;
