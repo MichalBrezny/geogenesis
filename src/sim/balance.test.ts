@@ -88,11 +88,11 @@ describe('untouched goal regressions', () => {
       hydroGeothermal: 0,
     };
     world.planet.civPolicy.investment = {
-      science: 70,
+      science: 75,
       agriculture: 20,
       medicine: 0,
-      philosophy: 5,
-      culture: 5,
+      philosophy: 2.5,
+      culture: 2.5,
     };
     while (world.planet.goal?.status === 'active') {
       const age = world.planet.civilization.age;

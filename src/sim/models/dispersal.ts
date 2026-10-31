@@ -6,8 +6,9 @@ export interface DispersalOptions {
   /** Speed of the colonisation front, m/yr. */
   speed: number;
   /**
-   * Farthest a settler can jump in one go, in metres, along a row or a column
-   * (e.g. across a narrow sea). 0 means only to the four adjacent cells.
+   * Farthest gap a settler can cross in one go, in metres, along a row or a
+   * column (e.g. the water between two shores). 0 means only to the four
+   * adjacent cells.
    */
   reach?: number;
   rng: Rng;
@@ -100,8 +101,11 @@ function forEachTarget(
   const y = (i - x) / width;
   const dx = rowDx[y]!;
   // Near the poles east-west cells get tiny; limit the row steps to a full turn.
-  const across = Math.min(Math.floor(width / 2), Math.max(1, Math.floor(reach / dx)));
-  const along = Math.max(1, Math.floor(reach / dy));
+  // Cell centres on opposite shores are one cell spacing farther apart than
+  // the represented gap. Including that endpoint keeps a physical passage
+  // reachable at coarse and fine resolutions alike.
+  const across = Math.min(Math.floor(width / 2), 1 + Math.floor(reach / dx));
+  const along = 1 + Math.floor(reach / dy);
   for (let k = 1; k <= across; k++) {
     visit(y * width + ((x + k) % width), k * dx);
     visit(y * width + ((x - k + width * k) % width), k * dx);
