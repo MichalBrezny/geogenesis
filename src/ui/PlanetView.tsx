@@ -578,7 +578,7 @@ export function PlanetView({
         project,
         projectedLonSpan: view === 'globe' ? 180 : bounds.lonSpan,
       });
-      visible = drawLifeAndCityIcons(ctx, frame, samples);
+      visible = drawLifeAndCityIcons(ctx, frame, samples, paletteMode);
       visible.cityAge = drawCityIcons(
         ctx,
         frame.civilization.cities,
@@ -586,13 +586,14 @@ export function PlanetView({
         frame.grid.height,
         project,
         view === 'map' ? mapView.zoom : Math.max(1.4, w / 512),
+        paletteMode,
       );
     }
     onVisibleIconsChange?.(visible);
-    drawDeviceIcons(ctx, frame.devices, frame.grid.width, frame.grid.height, project);
-    drawEventMarkers(ctx, frame.events, frame.grid.width, frame.grid.height, project);
+    drawDeviceIcons(ctx, frame.devices, frame.grid.width, frame.grid.height, project, paletteMode);
+    drawEventMarkers(ctx, frame.events, frame.grid.width, frame.grid.height, project, paletteMode);
     if (overlays.includes('events')) {
-      drawEventMarkers(ctx, mapEvents, frame.grid.width, frame.grid.height, project, {
+      drawEventMarkers(ctx, mapEvents, frame.grid.width, frame.grid.height, project, paletteMode, {
         limit: mapEvents.length,
         fade: false,
       });
@@ -607,6 +608,7 @@ export function PlanetView({
     onVisibleIconsChange,
     mantleField,
     mapEvents,
+    paletteMode,
   ]);
 
   // Animate the particles; with reduced motion, draw still arrows instead.
